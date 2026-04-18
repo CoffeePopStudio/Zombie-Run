@@ -24,138 +24,23 @@ spawn:
 # 每扇门用唯一名称标识，如 door_1, door_2 等
 # 坐标采用两点定义 (x1,y1,z1) 和 (x2,y2,z2) 表示立方体区域
 doors:
-  door_1:                             # 门1（起始门）
-    x1: 19
-    y1: 26
-    z1: 14
-    x2: 25
-    y2: 29
-    z2: 14
-    delay: 10                          # 点击后延迟开启时间（秒）
-    duration: 10                       # 门保持开启时间（秒）
-    door-number: 1                      # 门编号（用于逻辑判断）
-    open-time: 10                       # 开门动画时间（暂未使用）
-    close-time: 15                      # 关门倒计时（秒）
-    material: "IRON_BLOCK"               # 关门时填充的方块材质
-    mode: "start"                        # 模式：start（游戏开始时自动开启）或 normal（需点击）
-  door_2:
-    x1: 4
-    y1: 32
-    z1: 23
-    x2: 6
-    y2: 34
-    z2: 23
-    delay: 10
-    duration: 10
-    door-number: 2
-    open-time: 10
-    close-time: 15
-    material: "IRON_BLOCK"
-    mode: "normal"
 
 # ---------- 门按钮 ----------
 # 每个按钮对应一个红石灯或拉杆，通过坐标定位
 doorButtons:
-  button_1:
-    x: 26
-    y: 27
-    z: 12
-  button_2:
-    x: 5
-    y: 33
-    z: 23
-  # ... 其他按钮
-  helicopter_button:                   # 直升机撤离按钮（特殊）
-    x: 125
-    y: 69
-    z: 125
-    escape: true                        # 标记为撤离按钮，点击后启动撤离倒计时
 
 # ---------- 区域定义 ----------
 # 区域用于检测玩家进入并更新房间号（room-number）
 # 每个区域需要定义两点坐标和类型
 regions:
-  region_1:                             # 区域名称（可自定义）
-    x1: ?                                # 请替换为实际坐标
-    y1: ?
-    z1: ?
-    x2: ?
-    y2: ?
-    z2: ?
-    type: "safe"                         # 区域类型：safe/danger/spawn/end（主要用于提示，暂未完全利用）
-    room-number: 0                        # 进入此区域后玩家当前房间号设为0（表示第0关前）
-  region_1b:
-    x1: ?
-    y1: ?
-    z1: ?
-    x2: ?
-    y2: ?
-    z2: ?
-    type: "safe"
-    room-number: 1                        # 进入后房间号设为1
-
 
 # ---------- 重生点配置 ----------
 # 各种类型的重生点，用于玩家传送
 respawns:
-  wait_spawn:                            # 等待大厅出生点
-    x: -10
-    y: 25
-    z: -3
-    yaw: 0
-    pitch: 0
-    type: "WAIT"                          # 类型：WAIT（等待大厅）
-  player_spawn:                           # 人类初始出生点
-    x: -10
-    y: 25
-    z: -3
-    yaw: 0
-    pitch: 0
-    type: "PLAYER"
-  zombie_spawn:                           # 普通僵尸出生点
-    x: -26
-    y: 25
-    z: 9
-    yaw: 0
-    pitch: 0
-    type: "ZOMBIE"
-  zombie_main_spawn:                       # 母体僵尸出生点
-    x: -25
-    y: 25
-    z: 9
-    yaw: 0
-    pitch: 0
-    type: "ZOMBIE_MAIN"
-  door_1_player:                           # 门1关闭后人类传送点（作为僵尸重生点）
-    x: 22
-    y: 26
-    z: 16
-    type: "DOOR_PLAYER"
-    door-number: 1                          # 关联门号
-  door_2_player:
-    x: 5
-    y: 32
-    z: 21
-    type: "DOOR_PLAYER"
-    door-number: 2
-  # ... 其他门同理
 
 # ---------- 开场效果 ----------
 # 游戏开始时执行的一系列命令，可设置延迟（tick，20 tick = 1秒）
 start-effects:
-  effect_1:
-    type: "command"
-    command: "particle minecraft:cloud -10.5 25.5 3.5 4.5 1 0.5 0.1 1000"
-    delay: 0                               # 立刻执行
-  effect_2:
-    type: "command"
-    command: "fill -6 25 3 -16 29 3 air"
-    delay: 3                               # 3 tick 后执行（相对上一个）
-  effect_3:
-    type: "command"
-    command: "clone -6 34 4 -16 38 4 -16 26 3"
-    delay: 3
-  # 可根据需要添加更多效果，delay 是相对上一个效果的延迟
 
 # ---------- 僵尸属性 ----------
 zombie:
