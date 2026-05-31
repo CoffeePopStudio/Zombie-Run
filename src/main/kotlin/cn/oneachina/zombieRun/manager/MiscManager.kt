@@ -1,7 +1,6 @@
 package cn.oneachina.zombieRun.manager
 
 import cn.oneachina.zombieRun.ZombieRun
-import me.deecaad.weaponmechanics.WeaponMechanics
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.Bukkit
@@ -25,6 +24,7 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
     private val lastHealth = ConcurrentHashMap<Player, Double>()
 
     fun getSelectableWeapons(): List<String> {
+        if (!plugin.weaponMechanicsAvailable) return emptyList()
         return loadWeaponTitlesFromWeaponMechanics()
     }
 
@@ -52,10 +52,16 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
     }
 
     fun giveRandomGun(player: Player) {
+        if (!plugin.weaponMechanicsAvailable) {
+            player.sendMessage("§c武器系统不可用（未安装WeaponMechanics）")
+            giveFallbackSword(player)
+            return
+        }
         player.inventory.clear()
         val weapons = getSelectableWeapons()
         if (weapons.isEmpty()) {
             player.sendMessage("§c未找到可用枪械配置。")
+            giveFallbackSword(player)
             return
         }
 
@@ -75,37 +81,28 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
 
         if (!giveWeaponDirectly(player, weaponTitle)) {
             player.sendMessage("§c发放枪械失败：$weaponTitle")
+            giveFallbackSword(player)
             return
         }
 
+        giveFallbackSword(player)
+        giveWeaponAmmo(player, weaponTitle)
+    }
+
+    private fun giveFallbackSword(player: Player) {
         val sword = ItemStack(Material.IRON_SWORD)
         val meta = sword.itemMeta
         meta?.addEnchant(Enchantment.KNOCKBACK, 1, true)
         meta?.displayName(Component.text("§c匕首"))
         sword.itemMeta = meta
         player.inventory.addItem(sword)
-
-        if (weaponTitle.equals("blaze", true)) {
-            player.inventory.setItem(9, ItemStack(Material.ARROW, 64))
-            player.inventory.setItem(10, ItemStack(Material.ARROW, 64))
-            player.inventory.setItem(11, ItemStack(Material.ARROW, 64))
-            player.inventory.setItem(12, ItemStack(Material.ARROW, 64))
-            player.inventory.setItem(13, ItemStack(Material.ARROW, 64))
-        } else {
-            player.inventory.setItem(9, ItemStack(Material.GUNPOWDER, 64))
-            player.inventory.setItem(10, ItemStack(Material.GUNPOWDER, 64))
-            player.inventory.setItem(11, ItemStack(Material.GUNPOWDER, 64))
-            player.inventory.setItem(12, ItemStack(Material.GUNPOWDER, 64))
-            player.inventory.setItem(13, ItemStack(Material.GUNPOWDER, 64))
-        }
     }
 
     private fun getWeaponPrice(weaponTitle: String): Int {
         val config = plugin.configManager.getConfig()
         val defaultPrice = config.getInt("weapons.default-price", 600)
         val prices = config.getConfigurationSection("weapons.prices")?.getValues(false) ?: emptyMap()
-        val value = prices[weaponTitle]
-        val price = when (value) {
+        val price = when (val value = prices[weaponTitle]) {
             is Number -> value.toInt()
             is String -> value.toIntOrNull()
             else -> null
@@ -114,22 +111,66 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
     }
 
     private fun loadWeaponTitlesFromWeaponMechanics(): List<String> {
-        return runCatching {
-            WeaponMechanics.getInstance()
-                .weaponHandler
-                .infoHandler
-                .sortedWeaponList
-                .filter { it.isNotBlank() }
-        }.getOrElse { emptyList() }
+        return WeaponHelper.getInstance().loadWeaponTitles()
     }
 
     private fun giveWeaponDirectly(player: Player, weaponTitle: String): Boolean {
-        return runCatching {
-            WeaponMechanics.getInstance()
-                .weaponHandler
-                .infoHandler
-                .giveOrDropWeapon(weaponTitle, player, 1)
-        }.getOrDefault(false)
+        return WeaponHelper.getInstance().giveOrDropWeapon(weaponTitle, player)
+    }
+
+    private fun giveWeaponAmmo(player: Player, weaponTitle: String) {
+        val helper = WeaponHelper.getInstance()
+        if (!helper.isAvailable()) return
+        runCatching {
+            val inv = player.inventory
+            val weaponStack = inv.contents
+                .asSequence()
+                .filterNotNull()
+                .firstOrNull { helper.getWeaponTitle(it) == weaponTitle }
+                ?: return
+
+            val ammoData = helper.getCurrentAmmo(weaponStack) ?: return
+            val ammoTitle = ammoData.ammoTitle
+
+            val magazineItem = helper.generateAmmo(ammoTitle, true)
+            val bulletItem = helper.generateAmmo(ammoTitle, false)
+
+            when {
+                magazineItem != null -> {
+                    setOrAddStacks(inv, magazineItem, amount = 3, preferredSlots = 9..13)
+                }
+                bulletItem != null -> {
+                    val stacks = 5
+                    val stackSize = bulletItem.maxStackSize.coerceAtLeast(1)
+                    setOrAddStacks(inv, bulletItem, amount = stacks * stackSize, preferredSlots = 9..13)
+                }
+                else -> Unit
+            }
+        }
+    }
+
+    private fun setOrAddStacks(
+        inv: org.bukkit.inventory.PlayerInventory,
+        template: ItemStack,
+        amount: Int,
+        preferredSlots: IntRange
+    ) {
+        var remaining = amount
+        val maxStack = template.maxStackSize.coerceAtLeast(1)
+
+        for (slot in preferredSlots) {
+            if (remaining <= 0) break
+            if (inv.getItem(slot) != null) continue
+            val give = minOf(remaining, maxStack)
+            inv.setItem(slot, template.clone().apply { this.amount = give })
+            remaining -= give
+        }
+
+        while (remaining > 0) {
+            val give = minOf(remaining, maxStack)
+            inv.addItem(template.clone().apply { this.amount = give })
+            remaining -= give
+        }
     }
 
     fun giveStarterKit(player: Player) {

@@ -18,10 +18,16 @@ class ZombieRun : JavaPlugin() {
     lateinit var staminaManager: StaminaManager
     lateinit var miscManager: MiscManager
     lateinit var startEffectManager: StartEffectManager
+    var weaponMechanicsAvailable = false
 
     override fun onEnable() {
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
             ZombieRunExpansion(this).register()
+        }
+
+        weaponMechanicsAvailable = Bukkit.getPluginManager().getPlugin("WeaponMechanics") != null
+        if (!weaponMechanicsAvailable) {
+            logger.warning("WeaponMechanics 未安装，枪械功能将被禁用")
         }
 
         configManager = ConfigManager(this).apply { loadConfig() }
@@ -32,7 +38,7 @@ class ZombieRun : JavaPlugin() {
         gameManager = GameManager(this)
         staminaManager = StaminaManager(this).apply { init() }
         miscManager = MiscManager(this)
-        startEffectManager = StartEffectManager(this)
+        startEffectManager = StartEffectManager(this).apply { loadEffects() }
 
         Bukkit.getScheduler().runTaskLater(this, Runnable {
             doorManager.reset()
@@ -42,7 +48,9 @@ class ZombieRun : JavaPlugin() {
         pm.registerEvents(GameListener(this), this)
         pm.registerEvents(miscManager, this)
 
-        getCommand("zr")?.setExecutor(ZombieRunCommand(this))
+        val zrCommand = ZombieRunCommand(this)
+        getCommand("zr")?.setExecutor(zrCommand)
+        getCommand("zr")?.tabCompleter = zrCommand
         getCommand("doorperf")?.setExecutor(DoorPerformanceCommand(this))
 
         logger.info("ZombieRun 核心已启用")
