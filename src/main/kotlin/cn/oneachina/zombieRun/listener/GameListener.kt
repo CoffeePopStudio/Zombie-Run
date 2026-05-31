@@ -31,7 +31,7 @@ class GameListener(private val plugin: ZombieRun) : Listener {
 
     private val playerTasks = ConcurrentHashMap<UUID, MutableList<Int>>()
     private val playerCurrentDoorZones = ConcurrentHashMap<UUID, Int>()
-    private val playerDoorEntryPoints = ConcurrentHashMap<UUID, Pair<Int, Double>>() // 玩家进入门区域的位置
+    private val playerDoorEntryPoints = ConcurrentHashMap<UUID, Pair<Int, Double>>()
 
     private fun registerTask(taskId: Int, player: Player) {
         playerTasks.computeIfAbsent(player.uniqueId) { mutableListOf() }.add(taskId)
@@ -89,12 +89,6 @@ class GameListener(private val plugin: ZombieRun) : Listener {
         plugin.gameManager.removePlayer(player)
     }
 
-    /**
-     * 处理玩家移动事件，主要负责：
-     * 1. 检测玩家是否进入/离开门区域
-     * 2. 更新玩家所在的房间号
-     * 3. 处理玩家踩在黑色羊毛上的情况
-     */
     @EventHandler(ignoreCancelled = true)
     fun onPlayerMove(event: PlayerMoveEvent) {
         val to = event.to
@@ -124,27 +118,19 @@ class GameListener(private val plugin: ZombieRun) : Listener {
         handleBlackWoolDamage(player)
     }
 
-    /**
-     * 检测玩家当前所在的门区域编号
-     * @param player 玩家对象
-     * @return 当前门区域编号，-1表示不在任何门区域内
-     */
     private fun detectCurrentDoorNumber(player: Player): Int {
         val location = player.location
         val x = location.x
         val y = location.y
         val z = location.z
-        
-        // 获取玩家周围多个区域的所有已开门，确保不会漏掉跨区域的门
+
         val minX = (x - 2).toInt()
         val minZ = (z - 2).toInt()
         val maxX = (x + 2).toInt()
         val maxZ = (z + 2).toInt()
         val doors = plugin.doorZoneManager.getDoorsInArea(minX, minZ, maxX, maxZ).filter { it.doorNumber >= 1 && it.isOpen }
-        
-        // 遍历门区域，检查玩家是否在其中
+
         for (door in doors) {
-            // 使用更精确的位置检查，考虑玩家的实际位置
             if (x >= door.minX - 0.5 && x <= door.maxX + 0.5 &&
                 y >= door.minY - 1.0 && y <= door.maxY + 1.0 &&
                 z >= door.minZ - 0.5 && z <= door.maxZ + 0.5) {
@@ -154,23 +140,15 @@ class GameListener(private val plugin: ZombieRun) : Listener {
         return -1
     }
 
-    /**
-     * 处理门区域进入/离开事件
-     * @param player 玩家对象
-     * @param currentDoorNumber 当前门区域编号
-     */
     private fun handleDoorZoneEvents(player: Player, currentDoorNumber: Int) {
         val playerId = player.uniqueId
         val previousDoorNumber = playerCurrentDoorZones[playerId]
-        
-        // 处理离开门区域事件
+
         if (previousDoorNumber != null && previousDoorNumber != currentDoorNumber) {
             plugin.doorManager.onPlayerLeaveDoor(player, previousDoorNumber)
-            
-            // 检查玩家是否完全通过了门区域
+
             val entryPoint = playerDoorEntryPoints[playerId]
             if (entryPoint != null && entryPoint.first == previousDoorNumber) {
-                // 因为地图只能单向通过，所以只要玩家离开门区域就视为通过
                 val currentRoom = plugin.gameManager.getPlayerRoom(player)
                 if (previousDoorNumber > currentRoom) {
                     plugin.gameManager.setPlayerRoom(player, previousDoorNumber)
@@ -179,25 +157,22 @@ class GameListener(private val plugin: ZombieRun) : Listener {
                 playerDoorEntryPoints.remove(playerId)
             }
         }
-        
-        // 处理进入门区域事件
+
         if (currentDoorNumber != -1 && previousDoorNumber != currentDoorNumber) {
             plugin.doorManager.onPlayerEnterDoor(player, currentDoorNumber)
-            
-            // 记录玩家进入门区域的位置
+
             val location = player.location
             val door = plugin.doorManager.getDoorByNumber(currentDoorNumber)
             if (door != null) {
                 val entryPosition = if (door.maxX - door.minX > door.maxZ - door.minZ) {
-                    location.x // 水平门（X轴方向）
+                    location.x
                 } else {
-                    location.z // 垂直门（Z轴方向）
+                    location.z
                 }
                 playerDoorEntryPoints[playerId] = Pair(currentDoorNumber, entryPosition)
             }
         }
-        
-        // 更新玩家当前所在的门区域
+
         if (currentDoorNumber == -1) {
             playerCurrentDoorZones.remove(playerId)
         } else {
@@ -205,10 +180,6 @@ class GameListener(private val plugin: ZombieRun) : Listener {
         }
     }
 
-    /**
-     * 处理玩家踩在黑色羊毛上的伤害
-     * @param player 玩家对象
-     */
     private fun handleBlackWoolDamage(player: Player) {
         val block = player.location.block
         if (block.type == Material.BLACK_WOOL) {
@@ -228,7 +199,7 @@ class GameListener(private val plugin: ZombieRun) : Listener {
             if (button != null) {
                 val player = event.player
                 val team = plugin.gameManager.getPlayerTeam(player)
-                
+
                 when {
                     button.isNormal() -> {
                         if (team != GameManager.Team.HUMAN) {
@@ -252,7 +223,7 @@ class GameListener(private val plugin: ZombieRun) : Listener {
                         val (tx, ty, tz) = target
                         val world = player.world
                         val loc = org.bukkit.Location(world, tx + 0.5, ty.toDouble(), tz + 0.5)
-                        
+
                         val title = Title.title(
                             Component.empty(),
                             Component.text("传送将在10秒后执行...", NamedTextColor.YELLOW),
@@ -442,13 +413,6 @@ class GameListener(private val plugin: ZombieRun) : Listener {
         if (event.cause == EntityDamageEvent.DamageCause.FALL) {
             event.isCancelled = true
             return
-        }
-
-        if (event.cause == EntityDamageEvent.DamageCause.ENTITY_EXPLOSION ||
-            event.cause == EntityDamageEvent.DamageCause.BLOCK_EXPLOSION) {
-            if (plugin.gameManager.getPlayerTeam(entity) == GameManager.Team.HUMAN) {
-                event.damage = 0.05
-            }
         }
     }
 
