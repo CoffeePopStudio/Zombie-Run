@@ -1,71 +1,43 @@
-# ============================================
-# 僵尸快跑插件配置文件示例
-# 请根据你的地图实际情况修改以下所有坐标和数值
-# 使用 /zr reload 重载配置
-# ============================================
-
-# ---------- 游戏基本设置 ----------
 game:
-  mode: "zombie_run"                # 游戏模式（保留，暂未使用）
-  start-delay: 30                    # 开始倒计时（秒），准备阶段持续时间
-  max-duration: 1800                  # 游戏最长持续时间（秒），超过后强制结束
-  min-players: 2                      # 最少玩家数，达到后自动开始倒计时
-  max-players: 32                     # 最大玩家数
+  mode: zombie_run
+  world: world
+  start-delay: 30
+  min-players: 8
+  max-players: 32
+  max-duration: 1800
 
-# ---------- 默认出生点（用于意外情况） ----------
 spawn:
-  x: -10
-  y: 25
-  z: -3
+  x: 0
+  y: 64
+  z: 0
   yaw: 0.0
   pitch: 0.0
 
-# ---------- 门定义 ----------
-# 每扇门用唯一名称标识，如 door_1, door_2 等
-# 坐标采用两点定义 (x1,y1,z1) 和 (x2,y2,z2) 表示立方体区域
-doors:
+end:
+  x: 100
+  y: 64
+  z: 100
 
-# ---------- 门按钮 ----------
-# 每个按钮对应一个红石灯或拉杆，通过坐标定位
-doorButtons:
-
-# ---------- 区域定义 ----------
-# 区域用于检测玩家进入并更新房间号（room-number）
-# 每个区域需要定义两点坐标和类型
-regions:
-
-# ---------- 重生点配置 ----------
-# 各种类型的重生点，用于玩家传送
-respawns:
-
-# ---------- 开场效果 ----------
-# 游戏开始时执行的一系列命令，可设置延迟（tick，20 tick = 1秒）
-start-effects:
-
-# ---------- 僵尸属性 ----------
 zombie:
-  health-multiplier: 2.0                   # 生命倍率（暂未使用，直接设置固定值）
-  speed-multiplier: 1.2                    # 速度倍率（暂未使用）
-  damage-multiplier: 1.5                    # 伤害倍率（暂未使用）
+  health-multiplier: 2.0
+  speed-multiplier: 1.2
+  damage-multiplier: 1.5
 
-# ---------- 人类属性 ----------
 human:
   speed-multiplier: 1.0
   jump-multiplier: 1.0
-  stamina-regen: 0.1                        # 体力自然恢复速度（暂未使用）
+  stamina-regen: 0.1
 
-# ---------- 体力系统 ----------
 stamina:
-  sprint-cost: 0.5                           # 每 sprint 消耗的体力（每 tick）
-  standing-regen: 0.2                         # 站立时恢复速度（每 tick）
-  max: 100.0                                  # 最大体力值
-
-# ---------- 杂项 ----------
-misc:
-  explosion-damage-reduction: 0.5             # 人类爆炸伤害减免系数
-  knockback-reduction: 0.3                    # 击退减免系数
-  zombie-knockback-force: 0.8                  # 僵尸击退力度（暂未使用）
+  max: 100.0
+  sprint-cost: 0.5
+  standing-regen: 0.2
 
 weapons:
   default-price: 600
   prices: {}
+
+misc:
+  explosion-damage-reduction: 0.5
+  knockback-reduction: 0.3
+  zombie-knockback-force: 0.8
