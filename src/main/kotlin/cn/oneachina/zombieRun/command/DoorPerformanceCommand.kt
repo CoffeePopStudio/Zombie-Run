@@ -14,8 +14,8 @@ class DoorPerformanceCommand(private val plugin: ZombieRun) : CommandExecutor {
     }
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
-        if (!sender.isOp) {
-            sender.sendMessage("你没有权限执行此命令！")
+        if (!sender.hasPermission("zombie.run.admin")) {
+            sender.sendMessage("§c你没有权限执行此命令！")
             return true
         }
 
