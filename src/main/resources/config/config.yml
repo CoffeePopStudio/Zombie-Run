@@ -1,11 +1,21 @@
+# ============================================
+# ZombieRun 插件配置文件
+# ============================================
+# 修改后使用 /zr reload 热重载，或重启服务器
+# ============================================
+
+# ---------- 全局游戏参数 ----------
 game:
   mode: zombie_run
-  world: world
-  start-delay: 30
-  min-players: 8
-  max-players: 32
-  max-duration: 1800
+  world: world                # 游戏地图所在的世界名
+  start-delay: 30             # 达到最小人数后，等待多少秒自动开局
+  min-players: 8              # 自动开局所需的最小在线玩家数
+  max-players: 32             # 最大玩家数（用于占位符/提示）
+  max-duration: 1800          # 单局最大秒数（1800秒 = 30分钟），超时自动结束
 
+# ---------- 默认出生点（兜底） ----------
+# 当玩家加入时没有配置 RESPAWN_WAIT 类型的重生点时，
+# 会传送至此坐标
 spawn:
   x: 0
   y: 64
@@ -13,31 +23,182 @@ spawn:
   yaw: 0.0
   pitch: 0.0
 
-end:
-  x: 100
-  y: 64
-  z: 100
+# ---------- 门区域定义 ----------
+# 每扇门需要单独配置一个条目，键名可自定义（如 door_1）
+# 参数说明：
+#   x1/y1/z1, x2/y2/z2: 门的对角方块坐标（插件会自动计算 min/max）
+#   delay:      从按下按钮到开门所需的秒数（倒计时）
+#   duration:   门保持开启的秒数后自动关闭
+#   door-number: 门的编号（房间号判定/传送逻辑的核心标识）
+#   mode:       门模式
+#     - normal: 普通门，由玩家通过按钮触发（人类专用）
+#     - start:  起始门，游戏开始时自动开启
+#     - player: 开局时自动对玩家开启
+#     - zombie: 开局后延迟对僵尸开启
+#   material:   关门后恢复的方块材质（必须是 Bukkit Material 名）
+#   open-time:  开启倒计时秒数（已废弃，使用 delay 替代）
+#   close-time: 关门倒计时秒数
+#   use-scan-data / blocks: 启用后会在添加门时自动扫描方块并保存，
+#                           关门时恢复原始方块（而非统一 Material）
+#
+# 示例 - 普通门（编号1，延迟5秒开启，持续10秒后15秒内关闭）：
+# door_1:
+#   x1: 10
+#   y1: 64
+#   z1: 10
+#   x2: 10
+#   y2: 66
+#   z2: 20
+#   delay: 5
+#   duration: 10
+#   door-number: 1
+#   mode: normal
+#   material: STONE
+#   open-time: 10
+#   close-time: 15
+#
+# 示例 - 使用扫描数据（自动保存原始方块）：
+# door_scan:
+#   x1: 10
+#   y1: 64
+#   z1: 10
+#   x2: 10
+#   y2: 66
+#   z2: 20
+#   delay: 5
+#   duration: 10
+#   door-number: 2
+#   mode: normal
+#   material: ""
+#   open-time: 10
+#   close-time: 15
+#   use-scan-data: true
+#   blocks:
+#     "10,64,10": STONE
+#     "10,64,11": AIR
+doors: {}
 
+# ---------- 按钮定义 ----------
+# 按钮有三种模式：normal / tp / escape
+# 键名可自定义，但建议包含坐标以便识别
+#
+# === normal 模式（普通开门按钮） ===
+# 人类玩家右键后触发指定门号的开门倒计时
+# 参数：
+#   x/y/z: 按钮方块坐标（必须是 REDSTONE_LAMP 或 LEVER）
+#   mode: normal
+#   door-number: 要触发的门编号
+#
+# 示例：
+# button_open_1:
+#   x: 5
+#   y: 64
+#   z: 5
+#   mode: normal
+#   door-number: 1
+#
+# === tp 模式（传送按钮） ===
+# 右键后10秒将玩家传送到指定坐标，
+# 人类/僵尸分别有不同目标点，还会触发关门和更新房间号
+# 参数：
+#   x/y/z:           按钮方块坐标
+#   mode: tp
+#   playerTargetX/Y/Z:  人类玩家的传送目标坐标
+#   zombieTargetX/Y/Z:  僵尸玩家的传送目标坐标
+#   door-numbers:    传送完成后要关闭的门编号列表
+#   door-number:     该按钮关联的区域门编号（用于更新房间号）
+#
+# 示例：
+# button_tp_1:
+#   x: 30
+#   y: 64
+#   z: 30
+#   mode: tp
+#   playerTargetX: 50
+#   playerTargetY: 64
+#   playerTargetZ: 50
+#   zombieTargetX: 40
+#   zombieTargetY: 64
+#   zombieTargetZ: 40
+#   door-numbers:
+#   - 1
+#   - 2
+#
+# === escape 模式（撤离按钮） ===
+# 人类玩家右键后启动直升机撤离倒计时（30秒），
+# 倒计时结束后人类获胜
+# 参数：只需 x/y/z 和 mode
+#
+# 示例：
+# button_escape:
+#   x: 100
+#   y: 64
+#   z: 100
+#   mode: escape
+buttons: {}
+
+# ---------- 重生点定义 ----------
+# 键名可自定义，type 决定了重生点的用途
+# 可用类型：
+#   RESPAWN_WAIT:    等待大厅（玩家加入/游戏结束时的传送点）
+#   RESPAWN_PLAYER:  人类重生点
+#   RESPAWN_ZOMBIE:  僵尸重生点
+#   RESPAWN_ALPHA:   母体僵尸重生点
+#   RESPAWN_DOOR_PLAYER: 关在门外的玩家被传送的落点
+#   RESPAWN_DOOR_ZOMBIE: 关在门外的僵尸被传送的落点
+# 参数：
+#   x/y/z:           重生点坐标（方块坐标）
+#   yaw/pitch:       传送后的视角朝向（可省略，默认为0）
+#   type:            重生点类型
+#   door-number:     可选，仅对 DOOR_xxx 类型有效，指定对应哪扇门
+#   room-number:     可选，指定该重生点对应的房间号
+#
+# 示例：
+# wait_lobby:
+#   x: 0
+#   y: 64
+#   z: 0
+#   yaw: 0.0
+#   pitch: 0.0
+#   type: RESPAWN_WAIT
+respawns: {}
+
+# ---------- 僵尸属性 ----------
 zombie:
-  health-multiplier: 2.0
-  speed-multiplier: 1.2
-  damage-multiplier: 1.5
+  health-multiplier: 2.0     # 僵尸生命值倍率
+  speed-multiplier: 1.2     # 僵尸速度倍率
+  damage-multiplier: 1.5    # 僵尸伤害倍率
 
+# ---------- 人类属性 ----------
 human:
-  speed-multiplier: 1.0
-  jump-multiplier: 1.0
-  stamina-regen: 0.1
+  speed-multiplier: 1.0     # 人类速度倍率
+  jump-multiplier: 1.0      # 人类跳跃倍率
+  stamina-regen: 0.1        # 人类体力恢复速度
 
+# ---------- 体力系统 ----------
 stamina:
-  max: 100.0
-  sprint-cost: 0.5
-  standing-regen: 0.2
+  max: 100.0                 # 最大体力值
+  sprint-cost: 0.5           # 疾跑每 tick 消耗的体力
+  standing-regen: 0.2        # 站立不动时的体力恢复速度
 
+# ---------- 枪械价格 ----------
+# default-price: 所有枪械的默认价格（未在 prices 中单独配置的武器使用此价格）
+# prices:       按武器名覆写价格，键名是 WeaponMechanics 中的 weapon title
+#
+# 示例 - 不同枪械设置不同价格：
+# prices:
+#   Pistol: 300
+#   Shotgun: 800
+#   Rifle: 1000
+#   Sniper: 1500
+#
+# 武器名确认方式：在服务器使用 WM 指令查看已加载的武器列表
 weapons:
   default-price: 600
   prices: {}
 
+# ---------- 杂项 ----------
 misc:
-  explosion-damage-reduction: 0.5
-  knockback-reduction: 0.3
-  zombie-knockback-force: 0.8
+  explosion-damage-reduction: 0.5   # 爆炸伤害减免倍率（0.5 = 减半）
+  knockback-reduction: 0.3          # 击退效果减免
+  zombie-knockback-force: 0.8       # 僵尸被人类击退时的力度
