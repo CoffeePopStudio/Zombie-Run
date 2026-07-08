@@ -521,13 +521,13 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
             sender.sendMessage("§c金额必须是正整数！")
             return
         }
-        val current = plugin.miscManager.getCoins(sender)
+        val current = plugin.coinManager.getCoins(sender.uniqueId)
         if (current < amount) {
             sender.sendMessage("§c你的硬币不足！")
             return
         }
-        plugin.miscManager.takeCoins(sender, amount)
-        plugin.miscManager.addCoins(target, amount)
+        plugin.coinManager.takeCoins(sender.uniqueId, amount)
+        plugin.coinManager.addCoins(target.uniqueId, amount)
         sender.sendMessage("§a成功转账 $amount 硬币给 ${target.name}")
         target.sendMessage("§a你收到了来自 ${sender.name} 的 $amount 硬币")
     }

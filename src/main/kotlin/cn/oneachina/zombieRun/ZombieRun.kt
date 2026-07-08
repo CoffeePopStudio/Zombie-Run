@@ -22,7 +22,7 @@ class ZombieRun : JavaPlugin() {
     lateinit var miscManager: MiscManager
     lateinit var startEffectManager: StartEffectManager
     lateinit var weaponManager: WeaponManager
-    var weaponMechanicsAvailable = false
+    lateinit var coinManager: CoinManager
 
     override fun onEnable() {
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
@@ -39,6 +39,7 @@ class ZombieRun : JavaPlugin() {
         miscManager = MiscManager(this)
         startEffectManager = StartEffectManager(this).apply { loadEffects() }
         weaponManager = WeaponManager(this).apply { loadWeapons() }
+        coinManager = CoinManager(this).apply { init() }
 
         Bukkit.getScheduler().runTaskLater(this, Runnable {
             doorManager.reset()
@@ -60,6 +61,7 @@ class ZombieRun : JavaPlugin() {
     }
 
     override fun onDisable() {
+        coinManager.close()
         doorManager.reset()
         respawnManager.clear()
         gameManager.clear()

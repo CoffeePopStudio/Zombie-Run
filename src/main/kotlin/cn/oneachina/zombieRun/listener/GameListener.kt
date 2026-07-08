@@ -45,6 +45,7 @@ class GameListener(
     fun onPlayerJoin(event: PlayerJoinEvent) {
         val player = event.player
         plugin.gameManager.addPlayer(player)
+        plugin.coinManager.loadPlayer(player.uniqueId, player.name)
         plugin.staminaManager.addPlayer(player)
 
         when (plugin.gameManager.getGameStatus()) {
@@ -77,6 +78,7 @@ class GameListener(
         playerCurrentDoorZones.remove(player.uniqueId)
         playerDoorEntryPoints.remove(player.uniqueId)
         plugin.staminaManager.removePlayer(player)
+        plugin.coinManager.savePlayer(player.uniqueId, player.name)
         plugin.gameManager.removePlayer(player)
     }
 

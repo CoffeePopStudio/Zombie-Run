@@ -333,14 +333,14 @@ class GameManager(private val plugin: ZombieRun) {
         val killRewards = mapOf(0 to 200, 1 to 150, 2 to 100)
         killList.forEachIndexed { index, (player, _) ->
             val reward = killRewards[index] ?: 0
-            plugin.miscManager.addCoins(player, reward)
+            plugin.coinManager.addCoins(player.uniqueId, reward)
             player.sendMessage("§6+ $reward 硬币! (击杀第 ${index+1} 名)")
         }
 
         val infectRewards = mapOf(0 to 200, 1 to 150, 2 to 100)
         infectList.forEachIndexed { index, (player, _) ->
             val reward = infectRewards[index] ?: 0
-            plugin.miscManager.addCoins(player, reward)
+            plugin.coinManager.addCoins(player.uniqueId, reward)
             player.sendMessage("§6+ $reward 硬币! (感染第 ${index+1} 名)")
         }
     }

@@ -17,15 +17,13 @@ import java.util.concurrent.ConcurrentHashMap
 
 class MiscManager(private val plugin: ZombieRun) : Listener {
 
-    private val playerCoins = ConcurrentHashMap<Player, Int>()
     private val playerKills = ConcurrentHashMap<Player, Int>()
     private val playerInfections = ConcurrentHashMap<Player, Int>()
     private val selectedWeapon = ConcurrentHashMap<Player, String>()
     private val lastHealth = ConcurrentHashMap<Player, Double>()
 
     fun getSelectableWeapons(): List<String> {
-        if (!plugin.weaponMechanicsAvailable) return emptyList()
-        return loadWeaponTitlesFromWeaponMechanics()
+        return plugin.weaponManager.getWeaponIds()
     }
 
     fun setSelectedWeapon(player: Player, weaponIndex: Int): Boolean {
@@ -52,41 +50,48 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
     }
 
     fun giveRandomGun(player: Player) {
-        if (!plugin.weaponMechanicsAvailable) {
-            player.sendMessage("§c武器系统不可用（未安装WeaponMechanics）")
-            giveFallbackSword(player)
-            return
-        }
-        player.inventory.clear()
-        val weapons = getSelectableWeapons()
-        if (weapons.isEmpty()) {
+        val weaponIds = plugin.weaponManager.getWeaponIds()
+        if (weaponIds.isEmpty()) {
             player.sendMessage("§c未找到可用枪械配置。")
             giveFallbackSword(player)
             return
         }
+        player.inventory.clear()
 
         val selected = selectedWeapon[player]
-        val weaponTitle = if (selected != null && weapons.contains(selected)) {
-            val price = getWeaponPrice(selected)
-            if (takeCoins(player, price)) {
-                player.sendMessage("§a购买成功！花费硬币: $price，剩余: ${getCoins(player)}")
+        val weaponId = if (selected != null && weaponIds.contains(selected)) {
+            val config = plugin.weaponManager.getWeaponConfig(selected)
+            val price = config?.price ?: 600
+            if (plugin.coinManager.takeCoins(player.uniqueId, price)) {
+                val remaining = plugin.coinManager.getCoins(player.uniqueId)
+                player.sendMessage("§a购买成功！花费硬币: $price，剩余: $remaining")
                 selected
             } else {
                 player.sendMessage("§c硬币不足，已改为随机枪械。")
-                weapons.random()
+                weaponIds.random()
             }
         } else {
-            weapons.random()
+            weaponIds.random()
         }
 
-        if (!giveWeaponDirectly(player, weaponTitle)) {
-            player.sendMessage("§c发放枪械失败：$weaponTitle")
+        if (!plugin.weaponManager.giveWeapon(player, weaponId)) {
+            player.sendMessage("§c发放枪械失败：$weaponId")
             giveFallbackSword(player)
             return
         }
 
         giveFallbackSword(player)
-        giveWeaponAmmo(player, weaponTitle)
+        giveAmmoForWeapon(player, weaponId)
+    }
+
+    private fun giveAmmoForWeapon(player: Player, weaponId: String) {
+        val config = plugin.weaponManager.getWeaponConfig(weaponId) ?: return
+        val ammoItem = plugin.weaponManager.buildAmmoItem(config.ammoType, 64)
+        if (ammoItem != null) {
+            player.inventory.addItem(ammoItem.clone().apply { amount = 64 })
+            player.inventory.addItem(ammoItem.clone().apply { amount = 64 })
+            player.inventory.addItem(ammoItem.clone().apply { amount = 64 })
+        }
     }
 
     private fun giveFallbackSword(player: Player) {
@@ -98,98 +103,8 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
         player.inventory.addItem(sword)
     }
 
-    private fun getWeaponPrice(weaponTitle: String): Int {
-        val config = plugin.configManager.getConfig()
-        val defaultPrice = config.getInt("weapons.default-price", 600)
-        val prices = config.getConfigurationSection("weapons.prices")?.getValues(false) ?: emptyMap()
-        val price = when (val value = prices[weaponTitle]) {
-            is Number -> value.toInt()
-            is String -> value.toIntOrNull()
-            else -> null
-        }
-        return price ?: defaultPrice
-    }
-
-    private fun loadWeaponTitlesFromWeaponMechanics(): List<String> {
-        return WeaponHelper.getInstance().loadWeaponTitles()
-    }
-
-    private fun giveWeaponDirectly(player: Player, weaponTitle: String): Boolean {
-        return WeaponHelper.getInstance().giveOrDropWeapon(weaponTitle, player)
-    }
-
-    private fun giveWeaponAmmo(player: Player, weaponTitle: String) {
-        val helper = WeaponHelper.getInstance()
-        if (!helper.isAvailable()) return
-        runCatching {
-            val inv = player.inventory
-            val weaponStack = inv.contents
-                .asSequence()
-                .filterNotNull()
-                .firstOrNull { helper.getWeaponTitle(it) == weaponTitle }
-                ?: return
-
-            val ammoData = helper.getCurrentAmmo(weaponStack) ?: return
-            val ammoTitle = ammoData.ammoTitle
-
-            val magazineItem = helper.generateAmmo(ammoTitle, true)
-            val bulletItem = helper.generateAmmo(ammoTitle, false)
-
-            when {
-                magazineItem != null -> {
-                    setOrAddStacks(inv, magazineItem, amount = 3, preferredSlots = 9..13)
-                }
-                bulletItem != null -> {
-                    val stacks = 5
-                    val stackSize = bulletItem.maxStackSize.coerceAtLeast(1)
-                    setOrAddStacks(inv, bulletItem, amount = stacks * stackSize, preferredSlots = 9..13)
-                }
-                else -> Unit
-            }
-        }
-    }
-
-    private fun setOrAddStacks(
-        inv: org.bukkit.inventory.PlayerInventory,
-        template: ItemStack,
-        amount: Int,
-        preferredSlots: IntRange
-    ) {
-        var remaining = amount
-        val maxStack = template.maxStackSize.coerceAtLeast(1)
-
-        for (slot in preferredSlots) {
-            if (remaining <= 0) break
-            if (inv.getItem(slot) != null) continue
-            val give = minOf(remaining, maxStack)
-            inv.setItem(slot, template.clone().apply { this.amount = give })
-            remaining -= give
-        }
-
-        while (remaining > 0) {
-            val give = minOf(remaining, maxStack)
-            inv.addItem(template.clone().apply { this.amount = give })
-            remaining -= give
-        }
-    }
-
     fun giveStarterKit(player: Player) {
         giveRandomGun(player)
-    }
-
-    fun addCoins(player: Player, amount: Int) {
-        val current = playerCoins.getOrDefault(player, 0)
-        playerCoins[player] = current + amount
-        player.sendMessage(Component.text("+ $amount 硬币!").color(NamedTextColor.GOLD))
-    }
-
-    fun getCoins(player: Player): Int = playerCoins.getOrDefault(player, 0)
-
-    fun takeCoins(player: Player, amount: Int): Boolean {
-        val current = getCoins(player)
-        if (current < amount) return false
-        playerCoins[player] = current - amount
-        return true
     }
 
     fun addKill(player: Player) {
@@ -257,7 +172,6 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
     }
 
     fun clear() {
-        playerCoins.clear()
         playerKills.clear()
         playerInfections.clear()
         selectedWeapon.clear()

@@ -72,7 +72,8 @@ class CombatListener(
                 if (killer != null && plugin.gameManager.getPlayerTeam(killer) == GameManager.Team.HUMAN) {
                     plugin.miscManager.addKill(killer)
                     val reward = if (victimTeam == GameManager.Team.ZOMBIE_MAIN) 150 else 50
-                    plugin.miscManager.addCoins(killer, reward)
+                    plugin.coinManager.addCoins(killer.uniqueId, reward)
+                    killer.sendMessage("§6+ $reward 硬币!")
                     val teamColor = if (victimTeam == GameManager.Team.ZOMBIE_MAIN) "§5" else "§2"
                     Bukkit.broadcast(Component.text("§b${killer.name} §f击杀了 $teamColor${victim.name}"))
                 } else {
@@ -112,7 +113,7 @@ class CombatListener(
 
     private fun infectPlayer(attacker: Player, victim: Player) {
         plugin.miscManager.addInfection(attacker)
-        plugin.miscManager.addCoins(attacker, 50)
+        plugin.coinManager.addCoins(attacker.uniqueId, 50)
 
         val attackerName = if (plugin.gameManager.getPlayerTeam(attacker) == GameManager.Team.ZOMBIE_MAIN) "§5${attacker.name}" else "§2${attacker.name}"
         Bukkit.broadcast(Component.text("$attackerName §c感染了 §b${victim.name}"))

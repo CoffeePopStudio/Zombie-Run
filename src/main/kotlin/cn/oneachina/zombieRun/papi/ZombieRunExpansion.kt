@@ -80,7 +80,7 @@ class ZombieRunExpansion(private val plugin: ZombieRun) : PlaceholderExpansion()
                 if (player == null || player.player == null) return ""
                 val p = player.player!!
                 when (params.lowercase()) {
-                    "coins" -> plugin.miscManager.getCoins(p).toString()
+                    "coins" -> plugin.coinManager.getCoins(p.uniqueId).toString()
                     "kills" -> plugin.miscManager.getKills(p).toString()
                     "infections" -> plugin.miscManager.getInfections(p).toString()
                     "selected_weapon" -> plugin.miscManager.getSelectedWeapon(p)?.toString() ?: "0"

@@ -364,7 +364,7 @@ class DoorManager(private val plugin: ZombieRun) {
                             Component.text("§b人类 §a成功逃离！")
                         ))
                         if (plugin.gameManager.getPlayerTeam(player) == GameManager.Team.HUMAN) {
-                            plugin.miscManager.addCoins(player, 200)
+                            plugin.coinManager.addCoins(player.uniqueId, 200)
                             player.sendMessage(Component.text("§6+ 200 硬币！ (作为人类活到最后)"))
                         }
                     }
