@@ -1,9 +1,11 @@
 package cn.oneachina.zombieRun.manager
 
 import cn.oneachina.zombieRun.ZombieRun
+import cn.oneachina.zombieRun.model.AmmoConfig
 import cn.oneachina.zombieRun.model.Door
 import cn.oneachina.zombieRun.model.Button
 import cn.oneachina.zombieRun.model.Respawn
+import cn.oneachina.zombieRun.model.WeaponConfig
 import org.bukkit.configuration.file.YamlConfiguration
 import java.io.File
 import java.io.IOException
@@ -317,6 +319,50 @@ class ConfigManager(private val plugin: ZombieRun) {
 
     fun getTpButtonForceDelay(): Int {
         return config.getInt("tp-button.force-delay", 5)
+    }
+
+    fun loadWeaponConfigs(): Map<String, WeaponConfig> {
+        val weapons = mutableMapOf<String, WeaponConfig>()
+        val section = config.getConfigurationSection("custom-weapons") ?: return weapons
+        for (id in section.getKeys(false)) {
+            val ws = section.getConfigurationSection(id) ?: continue
+            val cfg = WeaponConfig(
+                id = id,
+                material = ws.getString("material") ?: "WOODEN_HOE",
+                customModelData = ws.getInt("custom-model-data", 0),
+                name = ws.getString("name") ?: id,
+                lore = ws.getStringList("lore") ?: emptyList(),
+                damage = ws.getDouble("damage", 5.0),
+                ammoType = ws.getString("ammo-type") ?: "pistol_ammo",
+                maxAmmo = ws.getInt("max-ammo", 12),
+                price = ws.getInt("price", 300),
+                cooldownTicks = ws.getInt("cooldown-ticks", 10),
+                sound = ws.getString("sound"),
+                knockback = ws.getDouble("knockback", 0.0),
+                range = ws.getInt("range", 30),
+                pellets = ws.getInt("pellets", 1),
+                automatic = ws.getBoolean("automatic", false)
+            )
+            weapons[id] = cfg
+        }
+        return weapons
+    }
+
+    fun loadAmmoConfigs(): Map<String, AmmoConfig> {
+        val ammos = mutableMapOf<String, AmmoConfig>()
+        val section = config.getConfigurationSection("ammo-items") ?: return ammos
+        for (id in section.getKeys(false)) {
+            val as_ = section.getConfigurationSection(id) ?: continue
+            val cfg = AmmoConfig(
+                id = id,
+                material = as_.getString("material") ?: "PAPER",
+                customModelData = as_.getInt("custom-model-data", 0),
+                name = as_.getString("name") ?: id,
+                lore = as_.getStringList("lore") ?: emptyList()
+            )
+            ammos[id] = cfg
+        }
+        return ammos
     }
 
     fun addDoorFull(door: Door) {
