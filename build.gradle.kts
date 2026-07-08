@@ -18,7 +18,6 @@ repositories {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     compileOnly("me.clip:placeholderapi:2.12.2")
-    compileOnly("com.cjcrafter:weaponmechanics:4.1.0")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation("com.zaxxer:HikariCP:7.0.2")
 }

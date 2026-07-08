@@ -204,6 +204,65 @@ weapons:
   default-price: 600
   prices: {}
 
+# ---------- 自定义枪械 ----------
+# 每把枪定义在 custom-weapons 下，键为武器 ID
+# 玩家右键 = 射击，潜行+右键 = 换弹
+# 弹药在 ammo-items 下定义，ammo-type 用于匹配弹药
+custom-weapons:
+  pistol:
+    material: WOODEN_HOE
+    custom-model-data: 10001
+    name: "&a手枪"
+    lore:
+      - "&7一把可靠的基础手枪"
+    damage: 5.0
+    ammo-type: pistol_ammo
+    max-ammo: 12
+    price: 300
+    cooldown-ticks: 10
+    sound: ENTITY_GENERIC_EXPLODE
+    knockback: 0.3
+    range: 30
+  shotgun:
+    material: WOODEN_HOE
+    custom-model-data: 10002
+    name: "&6霰弹枪"
+    damage: 3.0
+    ammo-type: shotgun_ammo
+    max-ammo: 8
+    price: 800
+    cooldown-ticks: 30
+    range: 15
+    pellets: 5
+  rifle:
+    material: WOODEN_HOE
+    custom-model-data: 10003
+    name: "&c步枪"
+    damage: 8.0
+    ammo-type: rifle_ammo
+    max-ammo: 30
+    price: 1500
+    cooldown-ticks: 4
+    range: 50
+    automatic: true
+
+# ---------- 弹药物品 ----------
+ammo-items:
+  pistol_ammo:
+    material: PAPER
+    custom-model-data: 20001
+    name: "&e手枪弹药"
+    lore:
+      - "&7装填手枪用"
+  shotgun_ammo:
+    material: PAPER
+    custom-model-data: 20002
+    name: "&6霰弹弹药"
+  rifle_ammo:
+    material: PAPER
+    custom-model-data: 20003
+    name: "&c步枪弹药"
+
 # ---------- 杂项 ----------
 misc:
   explosion-damage-reduction: 0.5   # 爆炸伤害减免倍率（0.5 = 减半）

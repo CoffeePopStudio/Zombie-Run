@@ -47,6 +47,7 @@ class GameListener(
         plugin.gameManager.addPlayer(player)
         plugin.coinManager.loadPlayer(player.uniqueId, player.name)
         plugin.staminaManager.addPlayer(player)
+        plugin.shopGUI.onAutoOpen(player)
 
         when (plugin.gameManager.getGameStatus()) {
             GameManager.GameStatus.WAITING, GameManager.GameStatus.ENDED -> {

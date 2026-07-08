@@ -2,6 +2,7 @@ package cn.oneachina.zombieRun
 
 import cn.oneachina.zombieRun.command.DoorPerformanceCommand
 import cn.oneachina.zombieRun.command.ZombieRunCommand
+import cn.oneachina.zombieRun.gui.ShopGUI
 import cn.oneachina.zombieRun.listener.CombatListener
 import cn.oneachina.zombieRun.listener.GameListener
 import cn.oneachina.zombieRun.listener.PlayerTaskTracker
@@ -23,6 +24,7 @@ class ZombieRun : JavaPlugin() {
     lateinit var startEffectManager: StartEffectManager
     lateinit var weaponManager: WeaponManager
     lateinit var coinManager: CoinManager
+    lateinit var shopGUI: ShopGUI
 
     override fun onEnable() {
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
@@ -40,6 +42,7 @@ class ZombieRun : JavaPlugin() {
         startEffectManager = StartEffectManager(this).apply { loadEffects() }
         weaponManager = WeaponManager(this).apply { loadWeapons() }
         coinManager = CoinManager(this).apply { init() }
+        shopGUI = ShopGUI(this)
 
         Bukkit.getScheduler().runTaskLater(this, Runnable {
             doorManager.reset()
@@ -50,6 +53,7 @@ class ZombieRun : JavaPlugin() {
         pm.registerEvents(GameListener(this, taskTracker), this)
         pm.registerEvents(CombatListener(this, taskTracker), this)
         pm.registerEvents(WeaponListener(this), this)
+        pm.registerEvents(shopGUI, this)
         pm.registerEvents(miscManager, this)
 
         val zrCommand = ZombieRunCommand(this)
