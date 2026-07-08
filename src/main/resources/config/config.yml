@@ -137,6 +137,13 @@ doors: {}
 #   mode: escape
 buttons: {}
 
+# ---------- TP 按钮传送参数 ----------
+# countdown:  点击按钮后倒计时秒数，期间任何人踏入 areaDoorNumber 门区域立即传送
+# force-delay: 倒计时结束后再等多少秒强制传送未到的人
+tp-button:
+  countdown: 10
+  force-delay: 5
+
 # ---------- 重生点定义 ----------
 # 键名可自定义，type 决定了重生点的用途
 # 可用类型：

@@ -311,6 +311,14 @@ class ConfigManager(private val plugin: ZombieRun) {
         return config.getDouble("misc.zombie-knockback-force", 0.8)
     }
 
+    fun getTpButtonCountdown(): Int {
+        return config.getInt("tp-button.countdown", 10)
+    }
+
+    fun getTpButtonForceDelay(): Int {
+        return config.getInt("tp-button.force-delay", 5)
+    }
+
     fun addDoorFull(door: Door) {
         val doorSection = config.createSection("doors.${door.name}")
         doorSection.set("x1", door.minX)

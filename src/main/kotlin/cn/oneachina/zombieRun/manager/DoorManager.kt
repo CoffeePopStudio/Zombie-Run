@@ -58,15 +58,8 @@ class DoorManager(private val plugin: ZombieRun) {
         openDoor(door, broadcast)
     }
 
-    fun triggerDoor(doorNumber: Int, player: Player? = null, isTpButton: Boolean = false) {
+    fun triggerDoor(doorNumber: Int, player: Player? = null) {
         val door = getDoorByNumber(doorNumber) ?: return
-
-        if (isTpButton) {
-            val world = Bukkit.getWorlds().first()
-            door.close(world)
-            player?.sendMessage(Component.text("§a门已关闭！"))
-            return
-        }
 
         if (door.mode == Door.DoorMode.START) {
             openDoorImmediately(doorNumber)
