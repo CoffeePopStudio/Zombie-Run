@@ -2,6 +2,7 @@ package cn.oneachina.zombieRun.listener
 
 import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.manager.GameManager
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.title.Title
@@ -14,7 +15,6 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent
 import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.entity.EntityPickupItemEvent
 import org.bukkit.event.entity.PlayerDeathEvent
-import org.bukkit.scheduler.BukkitRunnable
 import java.time.Duration
 
 class CombatListener(
@@ -123,51 +123,45 @@ class CombatListener(
         victim.gameMode = GameMode.SPECTATOR
 
         var countdown = 5
-        var taskId = -1
-        val task = object : BukkitRunnable() {
-            override fun run() {
-                if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
-                    taskTracker.unregister(taskId, victim.uniqueId)
-                    cancel()
-                    return
-                }
-                if (countdown > 0) {
-                    val title = Title.title(
-                        Component.text("§c$countdown"),
-                        Component.text("§2你已死亡，等待部署"),
-                        Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ZERO)
-                    )
-                    victim.showTitle(title)
-                    countdown--
-                } else {
-                    victim.gameMode = GameMode.ADVENTURE
-                    plugin.staminaManager.applyZombieEffects(victim)
-                    plugin.respawnManager.teleportToZombieRespawn(victim)
-                    victim.sendMessage(Component.text("你现在是僵尸！阻止人类前进！", NamedTextColor.DARK_GREEN))
-                    taskTracker.unregister(taskId, victim.uniqueId)
-                    cancel()
-                }
+        var scheduledTask: ScheduledTask? = null
+        scheduledTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { task ->
+            if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
+                taskTracker.unregister(task, victim.uniqueId)
+                task.cancel()
+                return@runAtFixedRate
             }
-        }
-        taskId = task.runTaskTimer(plugin, 0L, 20L).taskId
-        taskTracker.register(taskId, victim)
-    }
-
-    private fun scheduleZombieRespawn(victim: Player, message: Component) {
-        var taskId = -1
-        val task = object : BukkitRunnable() {
-            override fun run() {
-                taskTracker.unregister(taskId, victim.uniqueId)
-                if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
-                    return
-                }
+            if (countdown > 0) {
+                val title = Title.title(
+                    Component.text("§c$countdown"),
+                    Component.text("§2你已死亡，等待部署"),
+                    Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ZERO)
+                )
+                victim.showTitle(title)
+                countdown--
+            } else {
                 victim.gameMode = GameMode.ADVENTURE
                 plugin.staminaManager.applyZombieEffects(victim)
                 plugin.respawnManager.teleportToZombieRespawn(victim)
-                victim.sendMessage(message)
+                victim.sendMessage(Component.text("你现在是僵尸！阻止人类前进！", NamedTextColor.DARK_GREEN))
+                taskTracker.unregister(task, victim.uniqueId)
+                task.cancel()
             }
-        }
-        taskId = task.runTaskLater(plugin, 100L).taskId
-        taskTracker.register(taskId, victim)
+        }, 0L, 20L)
+        if (scheduledTask != null) taskTracker.register(scheduledTask, victim)
+    }
+
+    private fun scheduleZombieRespawn(victim: Player, message: Component) {
+        var scheduledTask: ScheduledTask? = null
+        scheduledTask = Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { task ->
+            taskTracker.unregister(task, victim.uniqueId)
+            if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
+                return@runDelayed
+            }
+            victim.gameMode = GameMode.ADVENTURE
+            plugin.staminaManager.applyZombieEffects(victim)
+            plugin.respawnManager.teleportToZombieRespawn(victim)
+            victim.sendMessage(message)
+        }, 100L)
+        if (scheduledTask != null) taskTracker.register(scheduledTask, victim)
     }
 }

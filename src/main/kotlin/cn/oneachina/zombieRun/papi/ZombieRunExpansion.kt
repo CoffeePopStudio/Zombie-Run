@@ -64,7 +64,7 @@ class ZombieRunExpansion(private val plugin: ZombieRun) : PlaceholderExpansion()
                         "<white>等待玩家... (<yellow>$online<white>/<yellow>$min<white>)"
                     }
                     GameManager.GameStatus.STARTING -> {
-                        val remaining = plugin.gameManager.countdownTask?.getCountdown ?: 0
+                        val remaining = plugin.gameManager.startCountdownTaskInstance?.getCountdown ?: 0
                         "<green>准备阶段 <gray>- <red>${remaining}s"
                     }
                     GameManager.GameStatus.RUNNING -> {

@@ -2,6 +2,7 @@ package cn.oneachina.zombieRun.manager
 
 import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.model.Door
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.title.Title
@@ -11,7 +12,6 @@ import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.Sound
 import org.bukkit.entity.Player
-import org.bukkit.scheduler.BukkitRunnable
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
@@ -32,8 +32,8 @@ class DoorManager(private val plugin: ZombieRun) {
         private set
 
     private var currentDoorNumber: Int = 0
-    private val doorTasks = CopyOnWriteArrayList<Int>()
-    private val transferTasks = ConcurrentHashMap<Player, Int>()
+    private val doorTasks = CopyOnWriteArrayList<ScheduledTask>()
+    private val transferTasks = ConcurrentHashMap<Player, ScheduledTask>()
 
     fun loadDoors() {
         doors.clear()
@@ -96,113 +96,109 @@ class DoorManager(private val plugin: ZombieRun) {
     }
 
     private fun startOpenCountdown(door: Door) {
-        val task = object : BukkitRunnable() {
-            private var lastDisplay = -1
-            override fun run() {
-                if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
-                    opentime = -1.0
-                    cancel()
-                    return
-                }
-
-                if (opentime > 0) {
-                    val currentDisplay = opentime.toInt()
-                    if (currentDisplay != lastDisplay) {
-                        val title = Title.title(
-                            Component.empty(),
-                            Component.text()
-                                .append(Component.text("大门即将开启于 ", NamedTextColor.GREEN))
-                                .append(Component.text(currentDisplay.toString(), NamedTextColor.LIGHT_PURPLE))
-                                .append(Component.text(" ……", NamedTextColor.GREEN))
-                                .build(),
-                            Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(1), Duration.ofMillis(500))
-                        )
-                        Bukkit.getOnlinePlayers().forEach { player ->
-                            player.showTitle(title)
-                            player.playSound(player.location, Sound.BLOCK_DISPENSER_FAIL, 0.2f, 2f)
-                        }
-                        lastDisplay = currentDisplay
-                    }
-                    opentime -= 1.0
-                } else {
-                    openDoor(door, true)
-                    opentime = -1.0
-                    cancel()
-                }
+        var lastDisplay = -1
+        val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
+            if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
+                opentime = -1.0
+                schedTask.cancel()
+                return@runAtFixedRate
             }
-        }.runTaskTimer(plugin, 0L, 20L)
-        doorTasks.add(task.taskId)
+
+            if (opentime > 0) {
+                val currentDisplay = opentime.toInt()
+                if (currentDisplay != lastDisplay) {
+                    val title = Title.title(
+                        Component.empty(),
+                        Component.text()
+                            .append(Component.text("大门即将开启于 ", NamedTextColor.GREEN))
+                            .append(Component.text(currentDisplay.toString(), NamedTextColor.LIGHT_PURPLE))
+                            .append(Component.text(" ……", NamedTextColor.GREEN))
+                            .build(),
+                        Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(1), Duration.ofMillis(500))
+                    )
+                    Bukkit.getOnlinePlayers().forEach { player ->
+                        player.showTitle(title)
+                        player.playSound(player.location, Sound.BLOCK_DISPENSER_FAIL, 0.2f, 2f)
+                    }
+                    lastDisplay = currentDisplay
+                }
+                opentime -= 1.0
+            } else {
+                openDoor(door, true)
+                opentime = -1.0
+                schedTask.cancel()
+            }
+        }, 0L, 20L)
+        doorTasks.add(task)
     }
 
     private fun startCloseCountdown(door: Door) {
-        val task = object : BukkitRunnable() {
-            private var lastDisplay = -1.0
-            override fun run() {
-                if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
-                    closetime = -1.0
-                    cancel()
-                    return
-                }
-
-                if (closetime > 0) {
-                    val currentDisplay = if (closetime % 1 == 0.0) closetime.toInt().toDouble() else Math.floor(closetime * 10) / 10
-
-                    val humansBehind = Bukkit.getOnlinePlayers().count { player ->
-                        val team = plugin.gameManager.getPlayerTeam(player)
-                        if (team != GameManager.Team.HUMAN) return@count false
-                        val room = plugin.gameManager.getPlayerRoom(player)
-                        room < currentDoorNumber
-                    }
-
-                    if (closetime > 3.1 && humansBehind == 0) {
-                        Bukkit.broadcast(Component.text("所有人类都已进入，大门即将关闭……", NamedTextColor.GREEN))
-                        closetime = 3.1
-                    }
-
-                    if (currentDisplay != lastDisplay) {
-                        val displayStr = if (currentDisplay % 1 == 0.0) currentDisplay.toInt().toString() else String.format("%.1f", currentDisplay)
-
-                        Bukkit.getOnlinePlayers().forEach { player ->
-                            val room = plugin.gameManager.getPlayerRoom(player)
-                            val title = if (room < currentDoorNumber) {
-                                Title.title(
-                                    Component.text(displayStr, NamedTextColor.RED),
-                                    Component.text("$currentDoorNumber 号大门即将关闭，请立即进入！", NamedTextColor.GOLD),
-                                    Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(1), Duration.ofMillis(500))
-                                )
-                            } else {
-                                Title.title(
-                                    Component.empty(),
-                                    Component.text()
-                                        .append(Component.text("$currentDoorNumber 号大门将在 ", NamedTextColor.GRAY))
-                                        .append(Component.text(displayStr, NamedTextColor.RED))
-                                        .append(Component.text(" 秒后关闭……", NamedTextColor.GRAY))
-                                        .build(),
-                                    Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(1), Duration.ofMillis(500))
-                                )
-                            }
-                            player.showTitle(title)
-                        }
-                        lastDisplay = currentDisplay
-                    }
-
-                    when (closetime.toInt()) {
-                        5, 3, 2, 1 -> {
-                            Bukkit.getOnlinePlayers().forEach { player ->
-                                player.playSound(player.location, Sound.ENTITY_ELDER_GUARDIAN_CURSE, 0.1f, 2f)
-                            }
-                        }
-                    }
-
-                    closetime -= 0.1
-                } else {
-                    closeDoor(door)
-                    closetime = -1.0
-                    cancel()
-                }
+        var lastDisplay = -1.0
+        val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
+            if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
+                closetime = -1.0
+                schedTask.cancel()
+                return@runAtFixedRate
             }
-        }.runTaskTimer(plugin, 0L, 2L)
-        doorTasks.add(task.taskId)
+
+            if (closetime > 0) {
+                val currentDisplay = if (closetime % 1 == 0.0) closetime.toInt().toDouble() else Math.floor(closetime * 10) / 10
+
+                val humansBehind = Bukkit.getOnlinePlayers().count { player ->
+                    val team = plugin.gameManager.getPlayerTeam(player)
+                    if (team != GameManager.Team.HUMAN) return@count false
+                    val room = plugin.gameManager.getPlayerRoom(player)
+                    room < currentDoorNumber
+                }
+
+                if (closetime > 3.1 && humansBehind == 0) {
+                    Bukkit.broadcast(Component.text("所有人类都已进入，大门即将关闭……", NamedTextColor.GREEN))
+                    closetime = 3.1
+                }
+
+                if (currentDisplay != lastDisplay) {
+                    val displayStr = if (currentDisplay % 1 == 0.0) currentDisplay.toInt().toString() else String.format("%.1f", currentDisplay)
+
+                    Bukkit.getOnlinePlayers().forEach { player ->
+                        val room = plugin.gameManager.getPlayerRoom(player)
+                        val title = if (room < currentDoorNumber) {
+                            Title.title(
+                                Component.text(displayStr, NamedTextColor.RED),
+                                Component.text("$currentDoorNumber 号大门即将关闭，请立即进入！", NamedTextColor.GOLD),
+                                Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(1), Duration.ofMillis(500))
+                            )
+                        } else {
+                            Title.title(
+                                Component.empty(),
+                                Component.text()
+                                    .append(Component.text("$currentDoorNumber 号大门将在 ", NamedTextColor.GRAY))
+                                    .append(Component.text(displayStr, NamedTextColor.RED))
+                                    .append(Component.text(" 秒后关闭……", NamedTextColor.GRAY))
+                                    .build(),
+                                Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(1), Duration.ofMillis(500))
+                            )
+                        }
+                        player.showTitle(title)
+                    }
+                    lastDisplay = currentDisplay
+                }
+
+                when (closetime.toInt()) {
+                    5, 3, 2, 1 -> {
+                        Bukkit.getOnlinePlayers().forEach { player ->
+                            player.playSound(player.location, Sound.ENTITY_ELDER_GUARDIAN_CURSE, 0.1f, 2f)
+                        }
+                    }
+                }
+
+                closetime -= 0.1
+            } else {
+                closeDoor(door)
+                closetime = -1.0
+                schedTask.cancel()
+            }
+        }, 0L, 2L)
+        doorTasks.add(task)
     }
 
     private fun openDoor(door: Door, broadcast: Boolean) {
@@ -210,7 +206,7 @@ class DoorManager(private val plugin: ZombieRun) {
         door.open(world)
 
         forbidden = true
-        Bukkit.getScheduler().runTaskLater(plugin, Runnable { forbidden = false }, 60L)
+        Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ -> forbidden = false }, 60L)
 
         if (broadcast) {
             val soundLoc = Bukkit.getOnlinePlayers().firstOrNull()?.location ?: world.spawnLocation
@@ -261,21 +257,19 @@ class DoorManager(private val plugin: ZombieRun) {
 
     private fun startTransferCountdown(player: Player) {
         var countdown = 10
-        val taskId = object : BukkitRunnable() {
-            override fun run() {
-                if (countdown > 0) {
-                    player.showTitle(Title.title(
-                        Component.text("§c$countdown"),
-                        Component.text("§4大门已关闭，请等待传送")
-                    ))
-                    countdown--
-                } else {
-                    plugin.respawnManager.teleportPlayerByDoorClose(player, doorclose)
-                    transferTasks.remove(player)
-                    cancel()
-                }
+        val taskId = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
+            if (countdown > 0) {
+                player.showTitle(Title.title(
+                    Component.text("§c$countdown"),
+                    Component.text("§4大门已关闭，请等待传送")
+                ))
+                countdown--
+            } else {
+                plugin.respawnManager.teleportPlayerByDoorClose(player, doorclose)
+                transferTasks.remove(player)
+                schedTask.cancel()
             }
-        }.runTaskTimer(plugin, 0L, 20L).taskId
+        }, 0L, 20L)
         transferTasks[player] = taskId
     }
 
@@ -283,7 +277,7 @@ class DoorManager(private val plugin: ZombieRun) {
         val world = Bukkit.getWorlds().first()
         when (door.doorNumber) {
             6 -> {
-                Bukkit.getScheduler().runTaskLater(plugin, Runnable {
+                Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
                     Bukkit.getOnlinePlayers().forEach { player ->
                         if (plugin.gameManager.getPlayerRoom(player) == 6) {
                             player.showTitle(Title.title(
@@ -297,33 +291,31 @@ class DoorManager(private val plugin: ZombieRun) {
             }
             7 -> {
                 var count = 5
-                val elevatorTask = object : BukkitRunnable() {
-                    override fun run() {
-                        if (count > 0) {
-                            Bukkit.getOnlinePlayers().forEach { player ->
-                                if (plugin.gameManager.getPlayerRoom(player) == 7) {
-                                    player.showTitle(Title.title(
-                                        Component.text("§a$count"),
-                                        Component.text("§e电梯即将到达……")
-                                    ))
-                                }
+                val elevatorTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
+                    if (count > 0) {
+                        Bukkit.getOnlinePlayers().forEach { player ->
+                            if (plugin.gameManager.getPlayerRoom(player) == 7) {
+                                player.showTitle(Title.title(
+                                    Component.text("§a$count"),
+                                    Component.text("§e电梯即将到达……")
+                                ))
                             }
-                            count--
-                        } else {
-                            Bukkit.getOnlinePlayers().forEach { player ->
-                                if (plugin.gameManager.getPlayerRoom(player) == 7) {
-                                    player.showTitle(Title.title(
-                                        Component.text("§a电梯已到达"),
-                                        Component.text("§e祝您旅途愉快")
-                                    ))
-                                    player.teleport(player.location.add(0.0, 13.0, 0.0))
-                                }
-                            }
-                            cancel()
                         }
+                        count--
+                    } else {
+                        Bukkit.getOnlinePlayers().forEach { player ->
+                            if (plugin.gameManager.getPlayerRoom(player) == 7) {
+                                player.showTitle(Title.title(
+                                    Component.text("§a电梯已到达"),
+                                    Component.text("§e祝您旅途愉快")
+                                ))
+                                player.teleport(player.location.add(0.0, 13.0, 0.0))
+                            }
+                        }
+                        schedTask.cancel()
                     }
-                }.runTaskTimer(plugin, 0L, 20L)
-                doorTasks.add(elevatorTask.taskId)
+                }, 0L, 20L)
+                doorTasks.add(elevatorTask)
             }
         }
     }
@@ -333,47 +325,45 @@ class DoorManager(private val plugin: ZombieRun) {
         endtime = 30.0
         Bukkit.broadcast(Component.text("§c\n直升机已启动！\n人类将在 30 秒后撤离！\n"))
 
-        val task = object : BukkitRunnable() {
-            private var lastDisplay = -1.0
-            override fun run() {
-                if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
-                    endtime = -1.0
-                    cancel()
-                    return
-                }
+        var lastDisplay = -1.0
+        val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
+            if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
+                endtime = -1.0
+                schedTask.cancel()
+                return@runAtFixedRate
+            }
 
-                if (endtime > 0) {
-                    val currentDisplay = if (endtime % 1 == 0.0) endtime.toInt().toDouble() else Math.floor(endtime * 10) / 10
+            if (endtime > 0) {
+                val currentDisplay = if (endtime % 1 == 0.0) endtime.toInt().toDouble() else Math.floor(endtime * 10) / 10
 
-                    if (currentDisplay != lastDisplay) {
-                        val displayStr = if (currentDisplay % 1 == 0.0) currentDisplay.toInt().toString() else String.format("%.1f", currentDisplay)
-                        Bukkit.getOnlinePlayers().forEach { player ->
-                            player.showTitle(Title.title(
-                                Component.text(""),
-                                Component.text("§e游戏将于 §d$displayStr §e秒后结束！")
-                            ))
-                            player.playSound(player.location, Sound.BLOCK_DISPENSER_FAIL, 0.2f, 2f)
-                        }
-                        lastDisplay = currentDisplay
-                    }
-                    endtime -= 0.1
-                } else {
+                if (currentDisplay != lastDisplay) {
+                    val displayStr = if (currentDisplay % 1 == 0.0) currentDisplay.toInt().toString() else String.format("%.1f", currentDisplay)
                     Bukkit.getOnlinePlayers().forEach { player ->
                         player.showTitle(Title.title(
-                            Component.text("§c游戏结束"),
-                            Component.text("§b人类 §a成功逃离！")
+                            Component.text(""),
+                            Component.text("§e游戏将于 §d$displayStr §e秒后结束！")
                         ))
-                        if (plugin.gameManager.getPlayerTeam(player) == GameManager.Team.HUMAN) {
-                            plugin.coinManager.addCoins(player.uniqueId, 200)
-                            player.sendMessage(Component.text("§6+ 200 硬币！ (作为人类活到最后)"))
-                        }
+                        player.playSound(player.location, Sound.BLOCK_DISPENSER_FAIL, 0.2f, 2f)
                     }
-                    endHelicopterEscape()
-                    cancel()
+                    lastDisplay = currentDisplay
                 }
+                endtime -= 0.1
+            } else {
+                Bukkit.getOnlinePlayers().forEach { player ->
+                    player.showTitle(Title.title(
+                        Component.text("§c游戏结束"),
+                        Component.text("§b人类 §a成功逃离！")
+                    ))
+                    if (plugin.gameManager.getPlayerTeam(player) == GameManager.Team.HUMAN) {
+                        plugin.coinManager.addCoins(player.uniqueId, 200)
+                        player.sendMessage(Component.text("§6+ 200 硬币！ (作为人类活到最后)"))
+                    }
+                }
+                endHelicopterEscape()
+                schedTask.cancel()
             }
-        }.runTaskTimer(plugin, 0L, 2L)
-        doorTasks.add(task.taskId)
+        }, 0L, 2L)
+        doorTasks.add(task)
     }
 
     private fun endHelicopterEscape() {
@@ -381,9 +371,9 @@ class DoorManager(private val plugin: ZombieRun) {
     }
 
     fun reset() {
-        doorTasks.forEach { Bukkit.getScheduler().cancelTask(it) }
+        doorTasks.forEach { it.cancel() }
         doorTasks.clear()
-        transferTasks.values.forEach { Bukkit.getScheduler().cancelTask(it) }
+        transferTasks.values.forEach { it.cancel() }
         transferTasks.clear()
 
         plugin.buttonManager.resetAllButtons()

@@ -19,7 +19,7 @@ import org.bukkit.event.block.BlockPlaceEvent
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.event.player.*
 import com.destroystokyo.paper.event.player.PlayerJumpEvent
-import org.bukkit.scheduler.BukkitRunnable
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import java.time.Duration
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -37,8 +37,8 @@ class GameListener(
         val button: Button,
         val teleportedPlayers: MutableSet<UUID>
     ) {
-        var countdownTaskId: Int = -1
-        var forceDelayTaskId: Int = -1
+        var countdownTask: ScheduledTask? = null
+        var forceDelayTask: ScheduledTask? = null
     }
 
     @EventHandler
@@ -231,12 +231,10 @@ class GameListener(
             }
         }
 
-        val task = object : BukkitRunnable() {
-            override fun run() {
+        val task = Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
                 if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
                     activeTpSessions.remove(session.button.name)
-                    cancel()
-                    return
+                    return@runDelayed
                 }
                 Bukkit.getOnlinePlayers().forEach { player ->
                     if (player.uniqueId !in session.teleportedPlayers) {
@@ -244,10 +242,8 @@ class GameListener(
                     }
                 }
                 activeTpSessions.remove(session.button.name)
-                cancel()
-            }
-        }.runTaskLater(plugin, (forceDelay * 20L).coerceAtLeast(1L))
-        session.forceDelayTaskId = task.taskId
+            }, (forceDelay * 20L).coerceAtLeast(1L))
+        session.forceDelayTask = task
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -307,12 +303,11 @@ class GameListener(
                         }
 
                         var remaining = countdown
-                        val countdownTask = object : BukkitRunnable() {
-                            override fun run() {
+                        val countdownTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { task ->
                                 if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
                                     activeTpSessions.remove(button.name)
-                                    cancel()
-                                    return
+                                    task.cancel()
+                                    return@runAtFixedRate
                                 }
                                 if (remaining > 0) {
                                     if (remaining % 5 == 0 || remaining <= 3) {
@@ -328,12 +323,11 @@ class GameListener(
                                     }
                                     remaining--
                                 } else {
-                                    cancel()
+                                    task.cancel()
                                     startTpForceDelay(session, forceDelay)
                                 }
-                            }
-                        }.runTaskTimer(plugin, 0L, 20L)
-                        session.countdownTaskId = countdownTask.taskId
+                            }, 0L, 20L)
+                        session.countdownTask = countdownTask
                     }
                     button.isEscape() -> {
                         if (team != GameManager.Team.HUMAN) {
@@ -437,7 +431,7 @@ class GameListener(
             .append(Component.text(msg, NamedTextColor.WHITE))
             .build()
 
-        Bukkit.getScheduler().runTask(plugin, Runnable {
+        Bukkit.getGlobalRegionScheduler().run(plugin, { _ ->
             Bukkit.broadcast(messageComponent)
         })
     }

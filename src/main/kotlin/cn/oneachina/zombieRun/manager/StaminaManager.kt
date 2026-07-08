@@ -1,6 +1,7 @@
 package cn.oneachina.zombieRun.manager
 
 import cn.oneachina.zombieRun.ZombieRun
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.Bukkit
@@ -9,7 +10,6 @@ import org.bukkit.attribute.Attribute
 import org.bukkit.entity.Player
 import org.bukkit.potion.PotionEffect
 import org.bukkit.potion.PotionEffectType
-import org.bukkit.scheduler.BukkitRunnable
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -41,9 +41,9 @@ class StaminaManager(private val plugin: ZombieRun) {
     }
 
     private val playerStamina: ConcurrentHashMap<Player, PlayerStamina> = ConcurrentHashMap()
-    private val staminaTask: CopyOnWriteArrayList<Int> = CopyOnWriteArrayList()
-    private val actionBarTask: CopyOnWriteArrayList<Int> = CopyOnWriteArrayList()
-    private val zombieHealthBarTask: CopyOnWriteArrayList<Int> = CopyOnWriteArrayList()
+    private val staminaTask: CopyOnWriteArrayList<ScheduledTask> = CopyOnWriteArrayList()
+    private val actionBarTask: CopyOnWriteArrayList<ScheduledTask> = CopyOnWriteArrayList()
+    private val zombieHealthBarTask: CopyOnWriteArrayList<ScheduledTask> = CopyOnWriteArrayList()
 
     fun init() {
         startStaminaRegenTask()
@@ -109,70 +109,64 @@ class StaminaManager(private val plugin: ZombieRun) {
     }
 
     private fun startStaminaRegenTask() {
-        val task = object : BukkitRunnable() {
-            override fun run() {
-                for ((player, ps) in playerStamina) {
-                    if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
-                        continue
-                    }
+        val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { _ ->
+            for ((player, ps) in playerStamina) {
+                if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
+                    continue
+                }
 
-                    val team = plugin.gameManager.getPlayerTeam(player)
-                    if (team != GameManager.Team.HUMAN) {
-                        continue
-                    }
+                val team = plugin.gameManager.getPlayerTeam(player)
+                if (team != GameManager.Team.HUMAN) {
+                    continue
+                }
 
-                    if (ps.isExhausted) {
-                        // 体力耗尽状态，只有当体力恢复到100时才能解除
-                        if (ps.stamina >= 100.0) {
-                            ps.isExhausted = false
-                            player.sendMessage("§a体力已完全恢复，可以跑跳了！")
-                        } else {
-                            // 体力耗尽时快速恢复
-                            var regen = 1.0
-                            if (!ps.isMoving) {
-                                regen += 1.0
-                            }
-                            ps.addStamina(regen)
+                if (ps.isExhausted) {
+                    if (ps.stamina >= 100.0) {
+                        ps.isExhausted = false
+                        player.sendMessage("§a体力已完全恢复，可以跑跳了！")
+                    } else {
+                        var regen = 1.0
+                        if (!ps.isMoving) {
+                            regen += 1.0
+                        }
+                        ps.addStamina(regen)
+                    }
+                } else {
+                    if (ps.isSprinting) {
+                        ps.sprintTicks += 1
+                        if (ps.sprintTicks >= 2) {
+                            ps.deductStamina(1.0)
+                            ps.sprintTicks -= 2
                         }
                     } else {
-                        if (ps.isSprinting) {
-                            ps.sprintTicks += 1
-                            if (ps.sprintTicks >= 2) {
-                                ps.deductStamina(1.0)
-                                ps.sprintTicks -= 2
-                            }
-                        } else {
-                            ps.sprintTicks = 0
-                            var regen = 0.5
-                            if (!ps.isMoving) {
-                                regen += 0.5
-                            }
-                            ps.addStamina(regen)
+                        ps.sprintTicks = 0
+                        var regen = 0.5
+                        if (!ps.isMoving) {
+                            regen += 0.5
                         }
-
-                        // 处理跳跃消耗
-                        if (ps.jumpCount >= 2) {
-                            ps.deductStamina(1.0)
-                            ps.jumpCount = 0
-                        }
-
-                        // 检查是否体力耗尽
-                        if (ps.stamina <= 0) {
-                            ps.isExhausted = true
-                            player.sendMessage("§c体力耗尽！请等待体力恢复到100才能跑跳。")
-                        }
+                        ps.addStamina(regen)
                     }
 
-                    ps.staminastate = if (ps.stamina <= 0) 2 else 1
-                    ps.isMoving = false
+                    if (ps.jumpCount >= 2) {
+                        ps.deductStamina(1.0)
+                        ps.jumpCount = 0
+                    }
+
+                    if (ps.stamina <= 0) {
+                        ps.isExhausted = true
+                        player.sendMessage("§c体力耗尽！请等待体力恢复到100才能跑跳。")
+                    }
                 }
+
+                ps.staminastate = if (ps.stamina <= 0) 2 else 1
+                ps.isMoving = false
             }
-        }.runTaskTimer(plugin, 0L, 2L)
-        staminaTask.add(task.taskId)
+        }, 0L, 2L)
+        staminaTask.add(task)
     }
 
     private fun startActionBarTask() {
-        val task = Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, {
+        val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { _ ->
             for ((player, ps) in playerStamina) {
                 if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
                     continue
@@ -191,7 +185,7 @@ class StaminaManager(private val plugin: ZombieRun) {
     }
 
     private fun startZombieHealthBarTask() {
-        val task = Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, {
+        val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { _ ->
             for (player in Bukkit.getOnlinePlayers()) {
                 val team = plugin.gameManager.getPlayerTeam(player)
                 if (team == GameManager.Team.ZOMBIE || team == GameManager.Team.ZOMBIE_MAIN) {
@@ -239,21 +233,19 @@ class StaminaManager(private val plugin: ZombieRun) {
         player.addPotionEffect(PotionEffect(PotionEffectType.REGENERATION, Int.MAX_VALUE, 1, false, false))
 
         if (team == GameManager.Team.ZOMBIE_MAIN) {
-            val task = object : BukkitRunnable() {
-                override fun run() {
-                    if (!player.isOnline || plugin.gameManager.getPlayerTeam(player) != GameManager.Team.ZOMBIE_MAIN) {
-                        cancel()
-                        return
-                    }
-                    player.world.spawnParticle(Particle.DRAGON_BREATH, player.location.clone().add(0.0, 0.5, 0.0), 3,
-                        0.5, 1.0, 0.5, 0.0)
+            Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { task ->
+                if (!player.isOnline || plugin.gameManager.getPlayerTeam(player) != GameManager.Team.ZOMBIE_MAIN) {
+                    task.cancel()
+                    return@runAtFixedRate
                 }
-            }.runTaskTimer(plugin, 0L, 2L)
+                player.world.spawnParticle(Particle.DRAGON_BREATH, player.location.clone().add(0.0, 0.5, 0.0), 3,
+                    0.5, 1.0, 0.5, 0.0)
+            }, 0L, 2L)
         }
     }
 
     private fun startStaminaEffectsTask() {
-        val task = Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, {
+        val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { _ ->
             for ((player, ps) in playerStamina) {
                 if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) continue
                 if (plugin.gameManager.getPlayerTeam(player) != GameManager.Team.HUMAN) continue
@@ -273,9 +265,9 @@ class StaminaManager(private val plugin: ZombieRun) {
     }
 
     fun clear() {
-        staminaTask.forEach { Bukkit.getScheduler().cancelTask(it) }
-        actionBarTask.forEach { Bukkit.getScheduler().cancelTask(it) }
-        zombieHealthBarTask.forEach { Bukkit.getScheduler().cancelTask(it) }
+        staminaTask.forEach { it.cancel() }
+        actionBarTask.forEach { it.cancel() }
+        zombieHealthBarTask.forEach { it.cancel() }
         staminaTask.clear()
         actionBarTask.clear()
         zombieHealthBarTask.clear()

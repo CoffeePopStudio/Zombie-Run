@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "cn.oneachina"
-version = "26.1-snapshot-10"
+version = "26.1.2"
 
 repositories {
     mavenCentral()
@@ -16,7 +16,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:26.1.2.build.+")
     compileOnly("me.clip:placeholderapi:2.12.2")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation("com.zaxxer:HikariCP:7.0.2")
@@ -24,11 +24,11 @@ dependencies {
 
 tasks {
     runServer {
-        minecraftVersion("1.21.11")
+        minecraftVersion("1.21.4")
     }
 }
 
-val targetJavaVersion = 21
+val targetJavaVersion = 25
 kotlin {
     jvmToolchain(targetJavaVersion)
 }

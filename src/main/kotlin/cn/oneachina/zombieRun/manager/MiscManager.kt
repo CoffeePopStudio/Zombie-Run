@@ -134,8 +134,8 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
         val causingEntity = event.damageSource.causingEntity
         if (causingEntity == null && event.cause != EntityDamageEvent.DamageCause.ENTITY_ATTACK) {
             lastHealth[victim] = victim.health
-            Bukkit.getScheduler().runTaskLater(plugin, Runnable {
-                val before = lastHealth.remove(victim) ?: return@Runnable
+            Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
+                val before = lastHealth.remove(victim) ?: return@runDelayed
                 val after = victim.health
                 val damage = before - after
                 if (damage > 0) {

@@ -9,6 +9,7 @@ import cn.oneachina.zombieRun.listener.PlayerTaskTracker
 import cn.oneachina.zombieRun.listener.WeaponListener
 import cn.oneachina.zombieRun.manager.*
 import cn.oneachina.zombieRun.papi.ZombieRunExpansion
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import org.bukkit.Bukkit
 import org.bukkit.plugin.java.JavaPlugin
 
@@ -44,7 +45,7 @@ class ZombieRun : JavaPlugin() {
         coinManager = CoinManager(this).apply { init() }
         shopGUI = ShopGUI(this)
 
-        Bukkit.getScheduler().runTaskLater(this, Runnable {
+        Bukkit.getGlobalRegionScheduler().runDelayed(this, { _ ->
             doorManager.reset()
         }, 20L)
 

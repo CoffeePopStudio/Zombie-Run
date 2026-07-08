@@ -4,6 +4,7 @@ import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.model.Door
 import cn.oneachina.zombieRun.task.StartCountdownTask
 import cn.oneachina.zombieRun.task.WaitStartCountdownTask
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
@@ -34,11 +35,12 @@ class GameManager(private val plugin: ZombieRun) {
 
     var alphaZombie: Player? = null
     var isCountdownActive = false
-    var countdownTask: StartCountdownTask? = null
+    var countdownTask: ScheduledTask? = null
+    var startCountdownTaskInstance: StartCountdownTask? = null
 
-    private var waitStartTask: WaitStartCountdownTask? = null
-    private var autoCheckTaskId: Int = -1
-    private var maxDurationTaskId: Int = -1
+    private var waitStartTask: ScheduledTask? = null
+    private var autoCheckTask: ScheduledTask? = null
+    private var maxDurationTask: ScheduledTask? = null
 
     init {
         startAutoCheckTask()
@@ -77,8 +79,8 @@ class GameManager(private val plugin: ZombieRun) {
         }
         cancelWaitStartTask()
         setGameStatus(GameStatus.STARTING)
-        countdownTask = StartCountdownTask(plugin, this)
-        countdownTask!!.runTaskTimer(plugin, 0L, 20L)
+        startCountdownTaskInstance = StartCountdownTask(plugin, this)
+        countdownTask = startCountdownTaskInstance!!.start()
     }
 
     fun selectAlphaZombie(): Player {
@@ -114,19 +116,19 @@ class GameManager(private val plugin: ZombieRun) {
             .filter { it.mode == Door.DoorMode.PLAYER }
             .forEach { plugin.doorManager.openDoorImmediatelyByName(it.name, broadcast = false) }
 
-        Bukkit.getScheduler().runTaskLater(plugin, Runnable {
+        Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
             plugin.doorManager.getAllDoors()
                 .filter { it.mode == Door.DoorMode.ZOMBIE }
                 .forEach { plugin.doorManager.openDoorImmediatelyByName(it.name, broadcast = false) }
         }, 100L)
 
-        Bukkit.getScheduler().runTaskLater(plugin, Runnable {
+        Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
             Bukkit.getOnlinePlayers().forEach { player ->
                 player.showTitle(Title.title(Component.text("警告！", NamedTextColor.RED), Component.text("收容装置发生破裂！请尽全力逃出！", NamedTextColor.RED)))
             }
         }, 100L)
 
-        Bukkit.getScheduler().runTaskLater(plugin, Runnable {
+        Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
             if (alpha.isOnline && getPlayerTeam(alpha) == Team.ZOMBIE_MAIN) {
                 alpha.gameMode = GameMode.ADVENTURE
                 alpha.showTitle(Title.title(
@@ -150,7 +152,7 @@ class GameManager(private val plugin: ZombieRun) {
 
     private fun startMaxDurationTimer() {
         val maxDuration = plugin.configManager.getMaxDuration()
-        maxDurationTaskId = Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, Runnable {
+        maxDurationTask = Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
             if (status == GameStatus.RUNNING) {
                 plugin.logger.info("游戏时间已达上限，强制结束")
                 Bukkit.broadcast(Component.text("§c游戏时间已达上限！"))
@@ -211,7 +213,7 @@ class GameManager(private val plugin: ZombieRun) {
 
         sendGameEndResult()
 
-        Bukkit.getScheduler().runTaskLater(plugin, Runnable {
+        Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
             Bukkit.getOnlinePlayers().forEach { player ->
                 plugin.respawnManager.teleportToWaitRespawn(player)
                 player.gameMode = GameMode.ADVENTURE
@@ -358,19 +360,17 @@ class GameManager(private val plugin: ZombieRun) {
         playerTeams.clear()
         playerRooms.clear()
         countdownTask?.cancel()
+        countdownTask = null
+        startCountdownTaskInstance = null
         cancelWaitStartTask()
-        if (autoCheckTaskId != -1) {
-            Bukkit.getScheduler().cancelTask(autoCheckTaskId)
-            autoCheckTaskId = -1
-        }
-        if (maxDurationTaskId != -1) {
-            Bukkit.getScheduler().cancelTask(maxDurationTaskId)
-            maxDurationTaskId = -1
-        }
+        autoCheckTask?.cancel()
+        autoCheckTask = null
+        maxDurationTask?.cancel()
+        maxDurationTask = null
     }
 
     private fun startAutoCheckTask() {
-        autoCheckTaskId = Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, {
+        autoCheckTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { _ ->
             checkAutoStartCondition()
         }, 0L, 20L)
     }
@@ -386,8 +386,7 @@ class GameManager(private val plugin: ZombieRun) {
                 if (onlineCount >= minPlayers) {
                     if (waitStartTask == null) {
                         waitStartCountdown = plugin.configManager.getStartDelay()
-                        waitStartTask = WaitStartCountdownTask(plugin, this, waitStartCountdown)
-                        waitStartTask!!.runTaskTimer(plugin, 0L, 20L)
+                        waitStartTask = WaitStartCountdownTask(plugin, this, waitStartCountdown).start()
                     }
                 } else {
                     cancelWaitStartTask()
@@ -413,6 +412,7 @@ class GameManager(private val plugin: ZombieRun) {
     fun cancelCountdownTask() {
         countdownTask?.cancel()
         countdownTask = null
+        startCountdownTaskInstance = null
         isCountdownActive = false
     }
 }

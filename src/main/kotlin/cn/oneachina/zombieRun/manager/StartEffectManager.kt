@@ -30,7 +30,7 @@ class StartEffectManager(private val plugin: ZombieRun) {
         var cumulativeDelay = 0L
         for (effect in effects) {
             cumulativeDelay += effect.delay
-            Bukkit.getScheduler().runTaskLater(plugin, Runnable {
+            Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
                 when (effect.type.lowercase()) {
                     "command" -> Bukkit.dispatchCommand(Bukkit.getConsoleSender(), effect.command)
                     else -> plugin.logger.warning("未知的效果类型: ${effect.type}")
