@@ -2,7 +2,9 @@ package cn.oneachina.zombieRun
 
 import cn.oneachina.zombieRun.command.DoorPerformanceCommand
 import cn.oneachina.zombieRun.command.ZombieRunCommand
+import cn.oneachina.zombieRun.listener.CombatListener
 import cn.oneachina.zombieRun.listener.GameListener
+import cn.oneachina.zombieRun.listener.PlayerTaskTracker
 import cn.oneachina.zombieRun.manager.*
 import cn.oneachina.zombieRun.papi.ZombieRunExpansion
 import org.bukkit.Bukkit
@@ -45,7 +47,9 @@ class ZombieRun : JavaPlugin() {
         }, 20L)
 
         val pm = Bukkit.getPluginManager()
-        pm.registerEvents(GameListener(this), this)
+        val taskTracker = PlayerTaskTracker()
+        pm.registerEvents(GameListener(this, taskTracker), this)
+        pm.registerEvents(CombatListener(this, taskTracker), this)
         pm.registerEvents(miscManager, this)
 
         val zrCommand = ZombieRunCommand(this)
