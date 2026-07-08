@@ -5,6 +5,7 @@ import cn.oneachina.zombieRun.command.ZombieRunCommand
 import cn.oneachina.zombieRun.listener.CombatListener
 import cn.oneachina.zombieRun.listener.GameListener
 import cn.oneachina.zombieRun.listener.PlayerTaskTracker
+import cn.oneachina.zombieRun.listener.WeaponListener
 import cn.oneachina.zombieRun.manager.*
 import cn.oneachina.zombieRun.papi.ZombieRunExpansion
 import org.bukkit.Bukkit
@@ -20,16 +21,12 @@ class ZombieRun : JavaPlugin() {
     lateinit var staminaManager: StaminaManager
     lateinit var miscManager: MiscManager
     lateinit var startEffectManager: StartEffectManager
+    lateinit var weaponManager: WeaponManager
     var weaponMechanicsAvailable = false
 
     override fun onEnable() {
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
             ZombieRunExpansion(this).register()
-        }
-
-        weaponMechanicsAvailable = Bukkit.getPluginManager().getPlugin("WeaponMechanics") != null
-        if (!weaponMechanicsAvailable) {
-            logger.warning("WeaponMechanics 未安装，枪械功能将被禁用")
         }
 
         configManager = ConfigManager(this).apply { loadConfig() }
@@ -41,6 +38,7 @@ class ZombieRun : JavaPlugin() {
         staminaManager = StaminaManager(this).apply { init() }
         miscManager = MiscManager(this)
         startEffectManager = StartEffectManager(this).apply { loadEffects() }
+        weaponManager = WeaponManager(this).apply { loadWeapons() }
 
         Bukkit.getScheduler().runTaskLater(this, Runnable {
             doorManager.reset()
@@ -50,6 +48,7 @@ class ZombieRun : JavaPlugin() {
         val taskTracker = PlayerTaskTracker()
         pm.registerEvents(GameListener(this, taskTracker), this)
         pm.registerEvents(CombatListener(this, taskTracker), this)
+        pm.registerEvents(WeaponListener(this), this)
         pm.registerEvents(miscManager, this)
 
         val zrCommand = ZombieRunCommand(this)
