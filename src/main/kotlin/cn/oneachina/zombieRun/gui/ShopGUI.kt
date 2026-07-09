@@ -3,6 +3,8 @@ package cn.oneachina.zombieRun.gui
 import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.manager.GameManager
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
@@ -29,21 +31,27 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
         val totalRows = rows + 1
         val size = totalRows * 9
 
-        val inv = Bukkit.createInventory(null, size, Component.text("§8$GUI_TITLE"))
+        val inv = Bukkit.createInventory(null, size, Component.text(GUI_TITLE).color(NamedTextColor.GRAY))
 
         weapons.forEachIndexed { index, config ->
             val material = Material.matchMaterial(config.material) ?: Material.WOODEN_HOE
             val item = ItemStack(material)
             val meta = item.itemMeta ?: return@forEachIndexed
+            val customModelDataComponent = meta.customModelDataComponent
             meta.displayName(Component.text(config.name.replace("&", "§")))
-            val lore = mutableListOf<String>()
-            lore.addAll(config.lore.map { it.replace("&", "§") })
-            lore.add("")
-            lore.add("§e价格: §6${config.price} 硬币")
-            lore.add("§7伤害: ${config.damage} | 弹容: ${config.maxAmmo}")
-            meta.lore = lore
-            if (config.customModelData > 0) {
-                meta.setCustomModelData(config.customModelData)
+            val serializer = LegacyComponentSerializer.legacySection()
+            val lore : MutableList<Component> = config.lore
+                .map { serializer.deserialize(it.replace("&", "§")) }
+                .toMutableList()
+            lore.add(Component.empty())
+            lore.add(Component.text("价格: ", NamedTextColor.YELLOW)
+                .append(Component.text("${config.price} 硬币", NamedTextColor.GOLD)))
+            lore.add(Component.text("伤害: ${config.damage} | 弹容: ${config.maxAmmo}", NamedTextColor.GRAY))
+
+            meta.lore(lore)
+            if (!config.customModelData.floats().isEmpty()) {
+                customModelDataComponent.floats = config.customModelData.floats()
+                meta.setCustomModelDataComponent(customModelDataComponent)
             }
             meta.persistentDataContainer.set(shopKey, PersistentDataType.STRING, config.id)
             item.itemMeta = meta
@@ -72,9 +80,7 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
     @EventHandler
     fun onInventoryClick(event: InventoryClickEvent) {
         val title = event.view.title()
-        val plainTitle = if (title is Component) {
-            net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(title)
-        } else title.toString()
+        val plainTitle = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(title)
 
         if (plainTitle != "§8$GUI_TITLE") return
 
@@ -116,9 +122,7 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
     @EventHandler
     fun onInventoryDrag(event: InventoryDragEvent) {
         val title = event.view.title()
-        val plainTitle = if (title is Component) {
-            net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(title)
-        } else title.toString()
+        val plainTitle = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(title)
 
         if (plainTitle == "§8$GUI_TITLE") {
             event.isCancelled = true

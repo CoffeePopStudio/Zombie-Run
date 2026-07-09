@@ -6,6 +6,7 @@ import cn.oneachina.zombieRun.model.Door
 import cn.oneachina.zombieRun.model.Button
 import cn.oneachina.zombieRun.model.Respawn
 import cn.oneachina.zombieRun.model.WeaponConfig
+import io.papermc.paper.datacomponent.item.CustomModelData
 import org.bukkit.configuration.file.YamlConfiguration
 import java.io.File
 import java.io.IOException
@@ -329,7 +330,7 @@ class ConfigManager(private val plugin: ZombieRun) {
             val cfg = WeaponConfig(
                 id = id,
                 material = ws.getString("material") ?: "WOODEN_HOE",
-                customModelData = ws.getInt("custom-model-data", 0),
+                customModelData = CustomModelData.customModelData().addFloat(ws.getInt("custom-model-data", 0).toFloat()).build(),
                 name = ws.getString("name") ?: id,
                 lore = ws.getStringList("lore") ?: emptyList(),
                 damage = ws.getDouble("damage", 5.0),

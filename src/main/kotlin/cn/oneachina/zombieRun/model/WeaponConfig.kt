@@ -1,9 +1,11 @@
 package cn.oneachina.zombieRun.model
 
+import io.papermc.paper.datacomponent.item.CustomModelData
+
 data class WeaponConfig(
     val id: String,
     val material: String,
-    val customModelData: Int,
+    val customModelData: CustomModelData,
     val name: String,
     val lore: List<String>,
     val damage: Double,
