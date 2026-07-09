@@ -66,6 +66,94 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                 }
                 handleDoor(sender, args.drop(1).toTypedArray())
             }
+            "profile" -> {
+                if (sender !is Player) {
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
+                    return true
+                }
+                val target = if (args.size > 1) Bukkit.getPlayer(args[1]) else sender
+                if (target == null) {
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c玩家不在线！"))
+                    return true
+                }
+                plugin.profileGUI.open(sender, target)
+            }
+            "quest" -> {
+                if (sender !is Player) {
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
+                    return true
+                }
+                plugin.questGUI.open(sender)
+            }
+            "title" -> {
+                if (sender !is Player) {
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
+                    return true
+                }
+                if (args.size == 1) {
+                    plugin.titleGUI.open(sender)
+                } else {
+                    val titleName = args.drop(1).joinToString(" ")
+                    if (plugin.titleManager.equipTitle(sender, titleName)) {
+                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已装备称号：§e$titleName"))
+                    } else {
+                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有解锁这个称号！"))
+                    }
+                }
+            }
+            "xp" -> {
+                if (!sender.hasPermission("zombie.run.admin")) {
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有权限使用此命令！"))
+                    return true
+                }
+                if (args.size < 4) {
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr xp <add|set> <玩家> <数量>"))
+                    return true
+                }
+                val amount = args.getOrNull(3)?.toIntOrNull()
+                if (amount == null || amount <= 0) {
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c数量必须是正整数！"))
+                    return true
+                }
+                val target = Bukkit.getPlayer(args[2])
+                if (target == null) {
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c玩家不在线！"))
+                    return true
+                }
+                when (args[1].lowercase()) {
+                    "add" -> {
+                        plugin.progressionManager.addXp(target, amount, "管理员操作")
+                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已给 ${target.name} 增加 $amount XP"))
+                    }
+                    "set" -> {
+                        plugin.progressionManager.setXp(target.uniqueId, amount)
+                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已将 ${target.name} 的 XP 设置为 $amount"))
+                    }
+                    else -> sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr xp <add|set> <玩家> <数量>"))
+                }
+            }
+            "level" -> {
+                if (!sender.hasPermission("zombie.run.admin")) {
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有权限使用此命令！"))
+                    return true
+                }
+                if (args.size < 4 || args[1].lowercase() != "set") {
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr level set <玩家> <等级>"))
+                    return true
+                }
+                val level = args.getOrNull(3)?.toIntOrNull()
+                if (level == null || level < 1 || level > cn.oneachina.zombieRun.manager.ProgressionManager.MAX_LEVEL) {
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c等级必须在 1-${cn.oneachina.zombieRun.manager.ProgressionManager.MAX_LEVEL} 之间！"))
+                    return true
+                }
+                val target = Bukkit.getPlayer(args[2])
+                if (target == null) {
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c玩家不在线！"))
+                    return true
+                }
+                plugin.progressionManager.setLevel(target.uniqueId, level)
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已将 ${target.name} 的等级设置为 $level"))
+            }
             else -> sendHelp(sender)
         }
         return true
@@ -552,7 +640,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
 
         return when (args.size) {
             1 -> {
-                listOf("start", "door", "spawn", "doors", "buttons", "reload", "open", "close", "select", "unselect", "randomgun", "lobby")
+                listOf("start", "door", "spawn", "doors", "buttons", "reload", "open", "close", "select", "unselect", "randomgun", "lobby", "profile", "quest", "title", "xp", "level")
                     .filter { it.startsWith(args[0].lowercase()) }
                     .toMutableList()
             }
@@ -574,6 +662,12 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                         val count = plugin.miscManager.getSelectableWeapons().size
                         (1..count).map { it.toString() }.filter { it.startsWith(args[1]) }.toMutableList()
                     }
+                    "xp" -> {
+                        listOf("add", "set").filter { it.startsWith(args[1].lowercase()) }.toMutableList()
+                    }
+                    "level" -> {
+                        listOf("set").filter { it.startsWith(args[1].lowercase()) }.toMutableList()
+                    }
                     else -> mutableListOf()
                 }
             }
@@ -582,6 +676,10 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                     "spawn" -> TabCompleters.spawn(plugin, args)
                     "doors" -> TabCompleters.doors(plugin, args)
                     "buttons" -> TabCompleters.buttons(plugin, args)
+                    "xp" -> {
+                        if (args.size == 2) listOf("add", "set").filter { it.startsWith(args[1].lowercase()) }.toMutableList()
+                        else null
+                    }
                     else -> mutableListOf()
                 }
             }
