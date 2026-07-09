@@ -86,6 +86,11 @@ class ZombieRun : JavaPlugin() {
     }
 
     override fun onDisable() {
+        Bukkit.getOnlinePlayers().forEach { player ->
+            player.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH)?.baseValue = 20.0
+            player.health = 20.0
+            player.clearActivePotionEffects()
+        }
         if (this::coinManager.isInitialized) {
             coinManager.close()
         }
