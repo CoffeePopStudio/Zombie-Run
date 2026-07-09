@@ -61,7 +61,7 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
         val barIndex = rows * 9
         val close = ItemStack(Material.BARRIER)
         val closeMeta = close.itemMeta ?: return
-        closeMeta.displayName(Component.text("§c关闭商店"))
+        closeMeta.displayName(Component.text("关闭商店", NamedTextColor.RED))
         close.itemMeta = closeMeta
         inv.setItem(barIndex + 4, close)
 
@@ -82,7 +82,7 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
         val title = event.view.title()
         val plainTitle = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(title)
 
-        if (plainTitle != "§8$GUI_TITLE") return
+        if (plainTitle != GUI_TITLE) return
 
         event.isCancelled = true
         val player = event.whoClicked as? Player ?: return
@@ -96,20 +96,23 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
             val config = plugin.weaponManager.getWeaponConfig(weaponId) ?: return
             val coins = plugin.coinManager.getCoins(player.uniqueId)
             if (coins < config.price) {
-                player.sendMessage("§c硬币不足！需要: ${config.price}，当前: $coins")
+                player.sendMessage(Component.text("硬币不足！需要: ${config.price}，当前: $coins", NamedTextColor.RED))
                 player.closeInventory()
                 return
             }
 
             if (player.inventory.firstEmpty() == -1) {
-                player.sendMessage("§c背包已满，请清理后重试")
+                player.sendMessage(Component.text("背包已满，请清理后重试", NamedTextColor.RED))
                 player.closeInventory()
                 return
             }
 
             plugin.coinManager.takeCoins(player.uniqueId, config.price)
             plugin.weaponManager.giveWeapon(player, weaponId)
-            player.sendMessage("§a购买成功！${config.name.replace("&", "§")} §a花费: ${config.price} 硬币")
+            player.sendMessage(Component.text(
+                "购买成功！${config.name.replace("&", "")} 花费: ${config.price} 硬币",
+                NamedTextColor.GREEN
+            ))
             player.closeInventory()
             return
         }
@@ -124,7 +127,7 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
         val title = event.view.title()
         val plainTitle = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(title)
 
-        if (plainTitle == "§8$GUI_TITLE") {
+        if (plainTitle == GUI_TITLE) {
             event.isCancelled = true
         }
     }

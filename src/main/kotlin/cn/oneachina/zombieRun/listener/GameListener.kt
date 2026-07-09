@@ -5,6 +5,7 @@ import cn.oneachina.zombieRun.manager.GameManager
 import cn.oneachina.zombieRun.model.Button
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import net.kyori.adventure.title.Title
 import org.bukkit.Bukkit
@@ -103,7 +104,7 @@ class GameListener(
         ) {
             player.isSprinting = false
             plugin.staminaManager.setSprinting(player, false)
-            player.sendMessage("§c体力耗尽！请等待体力恢复到100才能疾跑。")
+            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c体力耗尽！请等待体力恢复到100才能疾跑。"))
         }
 
         if (team == GameManager.Team.SPECTATOR) return
@@ -147,7 +148,7 @@ class GameListener(
                 val currentRoom = plugin.gameManager.getPlayerRoom(player)
                 if (previousDoorNumber > currentRoom) {
                     plugin.gameManager.setPlayerRoom(player, previousDoorNumber)
-                    player.sendMessage("§a已通过 ${previousDoorNumber} 号门，房间号更新为 ${previousDoorNumber}！")
+                    player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已通过 ${previousDoorNumber} 号门，房间号更新为 ${previousDoorNumber}！"))
                 }
                 playerDoorEntryPoints.remove(playerId)
             }
@@ -212,7 +213,7 @@ class GameListener(
             val currentRoom = plugin.gameManager.getPlayerRoom(player)
             if (areaDoorNumber > currentRoom) {
                 plugin.gameManager.setPlayerRoom(player, areaDoorNumber)
-                player.sendMessage("§a已传送到 ${areaDoorNumber} 号区域！")
+                player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已传送到 ${areaDoorNumber} 号区域！"))
             }
         }
 
@@ -313,10 +314,10 @@ class GameListener(
                                     if (remaining % 5 == 0 || remaining <= 3) {
                                         Bukkit.getOnlinePlayers().forEach { p ->
                                             val alreadyTp = p.uniqueId in teleportedPlayers
-                                            val msg = if (alreadyTp) "§a已传送" else "§c$remaining 秒"
-                                            p.showTitle(Title.title(
-                                                Component.empty(),
-                                                Component.text("已传送: ${teleportedPlayers.size} | 剩余: $msg", NamedTextColor.YELLOW),
+                                            val msgStr = if (alreadyTp) "§a已传送" else "§c$remaining 秒"
+                                        p.showTitle(Title.title(
+                                            Component.empty(),
+                                            LegacyComponentSerializer.legacySection().deserialize("§e已传送: ${teleportedPlayers.size} | 剩余: $msgStr"),
                                                 Title.Times.times(Duration.ofMillis(300), Duration.ofMillis(700), Duration.ofMillis(300))
                                             ))
                                         }
@@ -392,7 +393,7 @@ class GameListener(
         if (plugin.gameManager.getPlayerTeam(player) != GameManager.Team.HUMAN) return
         if (event.isSprinting && !plugin.staminaManager.canSprintOrJump(player)) {
             event.isCancelled = true
-            player.sendMessage("§c体力耗尽！请等待体力恢复到100才能疾跑。")
+            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c体力耗尽！请等待体力恢复到100才能疾跑。"))
         }
     }
 
@@ -403,7 +404,7 @@ class GameListener(
         if (plugin.gameManager.getPlayerTeam(player) != GameManager.Team.HUMAN) return
         if (!plugin.staminaManager.canSprintOrJump(player)) {
             event.isCancelled = true
-            player.sendMessage("§c体力耗尽！请等待体力恢复到100才能跳跃。")
+            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c体力耗尽！请等待体力恢复到100才能跳跃。"))
             return
         }
         plugin.staminaManager.addJumpCount(player)

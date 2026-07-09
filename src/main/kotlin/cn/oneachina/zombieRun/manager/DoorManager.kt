@@ -5,6 +5,7 @@ import cn.oneachina.zombieRun.model.Door
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.title.Title
 import org.bukkit.Bukkit
 import org.bukkit.GameMode
@@ -63,12 +64,12 @@ class DoorManager(private val plugin: ZombieRun) {
 
         if (door.mode == Door.DoorMode.START) {
             openDoorImmediately(doorNumber)
-            player?.sendMessage(Component.text("§a起始门已开启！"))
+            player?.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a起始门已开启！"))
             return
         }
 
         if (door.mode == Door.DoorMode.PLAYER || door.mode == Door.DoorMode.ZOMBIE) {
-            player?.sendMessage(Component.text("§c此门不能通过按钮开启！"))
+            player?.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此门不能通过按钮开启！"))
             return
         }
 
@@ -89,7 +90,7 @@ class DoorManager(private val plugin: ZombieRun) {
         }
 
         val playerName = player?.name ?: "控制台"
-        Bukkit.broadcast(Component.text("§b$playerName §a开启了 $doorNumber 号大门！"))
+        Bukkit.broadcast(LegacyComponentSerializer.legacySection().deserialize("§b$playerName §a开启了 $doorNumber 号大门！"))
 
         opentime = door.delay.toDouble()
         startOpenCountdown(door)
@@ -260,8 +261,8 @@ class DoorManager(private val plugin: ZombieRun) {
         val taskId = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
             if (countdown > 0) {
                 player.showTitle(Title.title(
-                    Component.text("§c$countdown"),
-                    Component.text("§4大门已关闭，请等待传送")
+                    LegacyComponentSerializer.legacySection().deserialize("§c$countdown"),
+                    LegacyComponentSerializer.legacySection().deserialize("§4大门已关闭，请等待传送")
                 ))
                 countdown--
             } else {
@@ -281,8 +282,8 @@ class DoorManager(private val plugin: ZombieRun) {
                     Bukkit.getOnlinePlayers().forEach { player ->
                         if (plugin.gameManager.getPlayerRoom(player) == 6) {
                             player.showTitle(Title.title(
-                                Component.text("§a感谢乘坐机场专线"),
-                                Component.text("§e请拿好你的行李，有序下车")
+                                LegacyComponentSerializer.legacySection().deserialize("§a感谢乘坐机场专线"),
+                                LegacyComponentSerializer.legacySection().deserialize("§e请拿好你的行李，有序下车")
                             ))
                             player.teleportAsync(world.getBlockAt(110, 35, 112).location.add(0.5, 0.0, 0.5))
                         }
@@ -296,8 +297,8 @@ class DoorManager(private val plugin: ZombieRun) {
                         Bukkit.getOnlinePlayers().forEach { player ->
                             if (plugin.gameManager.getPlayerRoom(player) == 7) {
                                 player.showTitle(Title.title(
-                                    Component.text("§a$count"),
-                                    Component.text("§e电梯即将到达……")
+                                    LegacyComponentSerializer.legacySection().deserialize("§a$count"),
+                                    LegacyComponentSerializer.legacySection().deserialize("§e电梯即将到达……")
                                 ))
                             }
                         }
@@ -306,8 +307,8 @@ class DoorManager(private val plugin: ZombieRun) {
                         Bukkit.getOnlinePlayers().forEach { player ->
                             if (plugin.gameManager.getPlayerRoom(player) == 7) {
                                 player.showTitle(Title.title(
-                                    Component.text("§a电梯已到达"),
-                                    Component.text("§e祝您旅途愉快")
+                                    LegacyComponentSerializer.legacySection().deserialize("§a电梯已到达"),
+                                    LegacyComponentSerializer.legacySection().deserialize("§e祝您旅途愉快")
                                 ))
                                 player.teleportAsync(player.location.add(0.0, 13.0, 0.0))
                             }
@@ -323,7 +324,7 @@ class DoorManager(private val plugin: ZombieRun) {
     fun startHelicopterEscape() {
         if (endtime >= 0) return
         endtime = 30.0
-        Bukkit.broadcast(Component.text("§c\n直升机已启动！\n人类将在 30 秒后撤离！\n"))
+        Bukkit.broadcast(LegacyComponentSerializer.legacySection().deserialize("§c\n直升机已启动！\n人类将在 30 秒后撤离！\n"))
 
         var lastDisplay = -1.0
         val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
@@ -340,8 +341,8 @@ class DoorManager(private val plugin: ZombieRun) {
                     val displayStr = if (currentDisplay % 1 == 0.0) currentDisplay.toInt().toString() else String.format("%.1f", currentDisplay)
                     Bukkit.getOnlinePlayers().forEach { player ->
                         player.showTitle(Title.title(
-                            Component.text(""),
-                            Component.text("§e游戏将于 §d$displayStr §e秒后结束！")
+                            Component.empty(),
+                            LegacyComponentSerializer.legacySection().deserialize("§e游戏将于 §d$displayStr §e秒后结束！")
                         ))
                         player.playSound(player.location, Sound.BLOCK_DISPENSER_FAIL, 0.2f, 2f)
                     }
@@ -351,12 +352,12 @@ class DoorManager(private val plugin: ZombieRun) {
             } else {
                 Bukkit.getOnlinePlayers().forEach { player ->
                     player.showTitle(Title.title(
-                        Component.text("§c游戏结束"),
-                        Component.text("§b人类 §a成功逃离！")
+                        LegacyComponentSerializer.legacySection().deserialize("§c游戏结束"),
+                        LegacyComponentSerializer.legacySection().deserialize("§b人类 §a成功逃离！")
                     ))
                     if (plugin.gameManager.getPlayerTeam(player) == GameManager.Team.HUMAN) {
                         plugin.coinManager.addCoins(player.uniqueId, 200)
-                        player.sendMessage(Component.text("§6+ 200 硬币！ (作为人类活到最后)"))
+                        player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§6+ 200 硬币！ (作为人类活到最后)"))
                     }
                 }
                 endHelicopterEscape()

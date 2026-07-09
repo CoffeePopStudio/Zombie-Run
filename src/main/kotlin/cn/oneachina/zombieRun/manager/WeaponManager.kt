@@ -4,6 +4,8 @@ import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.model.AmmoConfig
 import cn.oneachina.zombieRun.model.WeaponConfig
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.Sound
@@ -39,13 +41,15 @@ class WeaponManager(private val plugin: ZombieRun) {
         val material = Material.matchMaterial(config.material) ?: Material.WOODEN_HOE
         val item = ItemStack(material)
         val meta = item.itemMeta ?: return null
-        meta.displayName(Component.text(
-            config.name.replace("&", "§")
-        ))
-        val loreStr = config.lore.map { it.replace("&", "§") }
-        meta.lore = loreStr
-        if (config.customModelData > 0) {
-            meta.setCustomModelData(config.customModelData)
+        val customModelDataComponent = meta.customModelDataComponent
+        meta.displayName(LegacyComponentSerializer.legacySection().deserialize(config.name.replace("&", "§")))
+        val lore: MutableList<Component> = config.lore
+            .map { LegacyComponentSerializer.legacySection().deserialize(it.replace("&", "§")) }
+            .toMutableList()
+        meta.lore(lore)
+        if (!config.customModelData.floats().isEmpty()) {
+            customModelDataComponent.floats = config.customModelData.floats()
+            meta.setCustomModelDataComponent(customModelDataComponent)
         }
         meta.persistentDataContainer.set(weaponIdKey, PersistentDataType.STRING, id)
         meta.persistentDataContainer.set(ammoKey, PersistentDataType.INTEGER, config.maxAmmo)
@@ -56,7 +60,7 @@ class WeaponManager(private val plugin: ZombieRun) {
     fun giveWeapon(player: Player, weaponId: String): Boolean {
         val item = buildWeaponItem(weaponId) ?: return false
         if (player.inventory.firstEmpty() == -1) {
-            player.sendMessage("§c背包已满，无法接收武器")
+            player.sendMessage(Component.text("背包已满，无法接收武器", NamedTextColor.RED))
             return false
         }
         player.inventory.addItem(item)
@@ -84,7 +88,7 @@ class WeaponManager(private val plugin: ZombieRun) {
 
         if (ammo <= 0) {
             player.playSound(player.location, Sound.BLOCK_DISPENSER_FAIL, 0.5f, 1.5f)
-            player.sendActionBar(Component.text("§c弹药耗尽"))
+            player.sendActionBar(Component.text("弹药耗尽", NamedTextColor.RED))
             return false
         }
 
@@ -139,11 +143,15 @@ class WeaponManager(private val plugin: ZombieRun) {
         item.itemMeta = meta
 
         val barColor = when {
-            ammo.toDouble() / config.maxAmmo > 0.5 -> "§a"
-            ammo.toDouble() / config.maxAmmo > 0.25 -> "§e"
-            else -> "§c"
+            ammo.toDouble() / config.maxAmmo > 0.5 -> NamedTextColor.GREEN
+            ammo.toDouble() / config.maxAmmo > 0.25 -> NamedTextColor.YELLOW
+            else -> NamedTextColor.RED
         }
-        player.sendActionBar(Component.text("${barColor}${ammo} §7/ ${config.maxAmmo}"))
+        player.sendActionBar(
+            Component.text(ammo, barColor)
+                .append(Component.text(" / ", NamedTextColor.GRAY))
+                .append(Component.text(config.maxAmmo))
+        )
         return true
     }
 
@@ -155,7 +163,7 @@ class WeaponManager(private val plugin: ZombieRun) {
         var ammo = pdc.get(ammoKey, PersistentDataType.INTEGER) ?: 0
 
         if (ammo >= config.maxAmmo) {
-            player.sendActionBar(Component.text("§a弹药已满"))
+            player.sendActionBar(Component.text("弹药已满", NamedTextColor.GREEN))
             return false
         }
 
@@ -175,7 +183,7 @@ class WeaponManager(private val plugin: ZombieRun) {
 
         if (foundAmmoSlot == -1) {
             player.playSound(player.location, Sound.BLOCK_DISPENSER_FAIL, 0.5f, 1.5f)
-            player.sendActionBar(Component.text("§c没有匹配的弹药"))
+            player.sendActionBar(Component.text("没有匹配的弹药", NamedTextColor.RED))
             return false
         }
 
@@ -191,7 +199,12 @@ class WeaponManager(private val plugin: ZombieRun) {
         }
 
         player.playSound(player.location, Sound.BLOCK_IRON_DOOR_CLOSE, 1f, 1.5f)
-        player.sendActionBar(Component.text("§a装填完成 §7${ammo} / ${config.maxAmmo}"))
+        player.sendActionBar(
+            Component.text("装填完成 ", NamedTextColor.GREEN)
+                .append(Component.text(ammo, NamedTextColor.GRAY))
+                .append(Component.text(" / "))
+                .append(Component.text(config.maxAmmo))
+        )
         return true
     }
 
@@ -200,12 +213,14 @@ class WeaponManager(private val plugin: ZombieRun) {
         val material = Material.matchMaterial(config.material) ?: Material.PAPER
         val item = ItemStack(material, amount)
         val meta = item.itemMeta ?: return null
-        meta.displayName(Component.text(config.name.replace("&", "§")))
+        val customModelDataComponent = meta.customModelDataComponent
+        meta.displayName(LegacyComponentSerializer.legacySection().deserialize(config.name.replace("&", "§")))
         if (config.lore.isNotEmpty()) {
             meta.lore = config.lore.map { it.replace("&", "§") }
         }
-        if (config.customModelData > 0) {
-            meta.setCustomModelData(config.customModelData)
+        if (!config.customModelData.floats().isEmpty()) {
+            customModelDataComponent.floats = config.customModelData.floats()
+            meta.setCustomModelDataComponent(customModelDataComponent)
         }
         meta.persistentDataContainer.set(
             NamespacedKey("zombie-run", "ammo_type"), PersistentDataType.STRING, ammoId

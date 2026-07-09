@@ -1,21 +1,22 @@
 package cn.oneachina.zombieRun.command
 
 import cn.oneachina.zombieRun.ZombieRun
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.command.CommandSender
 
 object WeaponCommands {
 
     fun handle(plugin: ZombieRun, sender: CommandSender, args: Array<out String>) {
         if (!sender.hasPermission("zombie.run.admin")) {
-            sender.sendMessage("§c你没有权限使用此命令！")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有权限使用此命令！"))
             return
         }
         if (args.isEmpty() || args[0].lowercase() != "create") {
-            sender.sendMessage("§c用法: /zr weapon create <id> <material> <damage> <price>")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr weapon create <id> <material> <damage> <price>"))
             return
         }
         if (args.size < 5) {
-            sender.sendMessage("§c用法: /zr weapon create <id> <material> <damage> <price>")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr weapon create <id> <material> <damage> <price>"))
             return
         }
         val id = args[1]
@@ -23,7 +24,7 @@ object WeaponCommands {
         val damage = args[3].toDoubleOrNull()
         val price = args[4].toIntOrNull()
         if (damage == null || price == null) {
-            sender.sendMessage("§c伤害和价格必须是数字！")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c伤害和价格必须是数字！"))
             return
         }
 
@@ -41,6 +42,6 @@ object WeaponCommands {
         config.set("custom-weapons.$id.range", 30)
         plugin.configManager.saveConfig()
         plugin.weaponManager.loadWeapons()
-        sender.sendMessage("§a武器 '$id' 已创建到 config.yml，请编辑 config.yml 调整详细属性后 /zr reload")
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a武器 '$id' 已创建到 config.yml，请编辑 config.yml 调整详细属性后 /zr reload"))
     }
 }

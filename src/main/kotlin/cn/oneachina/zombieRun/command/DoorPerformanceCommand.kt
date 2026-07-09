@@ -2,6 +2,7 @@ package cn.oneachina.zombieRun.command
 
 import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.test.DoorPerformanceTest
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
@@ -15,7 +16,7 @@ class DoorPerformanceCommand(private val plugin: ZombieRun) : CommandExecutor {
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         if (!sender.hasPermission("zombie.run.admin")) {
-            sender.sendMessage("§c你没有权限执行此命令！")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有权限执行此命令！"))
             return true
         }
 

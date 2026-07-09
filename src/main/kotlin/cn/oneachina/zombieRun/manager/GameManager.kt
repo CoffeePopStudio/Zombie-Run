@@ -8,6 +8,7 @@ import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.title.Title
 import org.bukkit.Bukkit
 import org.bukkit.GameMode
@@ -155,7 +156,7 @@ class GameManager(private val plugin: ZombieRun) {
         maxDurationTask = Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
             if (status == GameStatus.RUNNING) {
                 plugin.logger.info("游戏时间已达上限，强制结束")
-                Bukkit.broadcast(Component.text("§c游戏时间已达上限！"))
+                Bukkit.broadcast(LegacyComponentSerializer.legacySection().deserialize("§c游戏时间已达上限！"))
                 endGame(Team.SPECTATOR)
             }
         }, (maxDuration * 20L).coerceAtLeast(1L))
@@ -336,14 +337,14 @@ class GameManager(private val plugin: ZombieRun) {
         killList.forEachIndexed { index, (player, _) ->
             val reward = killRewards[index] ?: 0
             plugin.coinManager.addCoins(player.uniqueId, reward)
-            player.sendMessage("§6+ $reward 硬币! (击杀第 ${index+1} 名)")
+            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§6+ $reward 硬币! (击杀第 ${index+1} 名)"))
         }
 
         val infectRewards = mapOf(0 to 200, 1 to 150, 2 to 100)
         infectList.forEachIndexed { index, (player, _) ->
             val reward = infectRewards[index] ?: 0
             plugin.coinManager.addCoins(player.uniqueId, reward)
-            player.sendMessage("§6+ $reward 硬币! (感染第 ${index+1} 名)")
+            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§6+ $reward 硬币! (感染第 ${index+1} 名)"))
         }
     }
 
@@ -396,7 +397,7 @@ class GameManager(private val plugin: ZombieRun) {
                 if (onlineCount < minPlayers) {
                     cancelCountdownTask()
                     setGameStatus(GameStatus.WAITING)
-                    Bukkit.broadcast(Component.text("§c人数不足，游戏取消"))
+                    Bukkit.broadcast(LegacyComponentSerializer.legacySection().deserialize("§c人数不足，游戏取消"))
                 }
             }
 

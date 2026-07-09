@@ -3,6 +3,7 @@ package cn.oneachina.zombieRun.listener
 import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.manager.GameManager
 import com.destroystokyo.paper.event.player.PlayerJumpEvent
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerMoveEvent
@@ -19,7 +20,7 @@ class StaminaListener(private val plugin: ZombieRun) : Listener {
         val stamina = plugin.staminaManager.getStamina(player)
         if (stamina <= 0) {
             event.isCancelled = true
-            player.sendMessage("§c体力不足，无法跳跃！")
+            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c体力不足，无法跳跃！"))
             return
         }
 
@@ -40,7 +41,7 @@ class StaminaListener(private val plugin: ZombieRun) : Listener {
 
         if (event.isSprinting && plugin.staminaManager.isStaminaEmpty(player)) {
             event.isCancelled = true
-            player.sendMessage("§c体力不足，无法冲刺！")
+            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c体力不足，无法冲刺！"))
             return
         }
     }
@@ -62,7 +63,7 @@ class StaminaListener(private val plugin: ZombieRun) : Listener {
             if (plugin.staminaManager.isStaminaEmpty(player)) {
                 player.isSprinting = false
                 plugin.staminaManager.setSprinting(player, false)
-                player.sendMessage("§c体力不足，无法冲刺！")
+                player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c体力不足，无法冲刺！"))
             }
         }
     }

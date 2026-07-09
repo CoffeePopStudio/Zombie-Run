@@ -5,6 +5,7 @@ import cn.oneachina.zombieRun.manager.GameManager
 import cn.oneachina.zombieRun.model.Button
 import cn.oneachina.zombieRun.model.Door
 import cn.oneachina.zombieRun.model.Respawn
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
@@ -23,7 +24,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         when (args[0].lowercase()) {
             "start", "spawn", "doors", "buttons", "reload", "open", "close" -> {
                 if (!sender.hasPermission("zombie.run.admin")) {
-                    sender.sendMessage("§c你没有权限使用此命令！")
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有权限使用此命令！"))
                     return true
                 }
                 when (args[0].lowercase()) {
@@ -40,14 +41,14 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
             "coins" -> CoinCommands.handle(plugin, sender, args.drop(1).toTypedArray())
             "shop" -> {
                 if (sender !is Player) {
-                    sender.sendMessage("§c此命令只能由玩家执行！")
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
                     return true
                 }
                 plugin.shopGUI.open(sender)
             }
             "select", "unselect", "randomgun", "lobby", "transfer" -> {
                 if (sender !is Player) {
-                    sender.sendMessage("§c此命令只能由玩家执行！")
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
                     return true
                 }
                 when (args[0].lowercase()) {
@@ -60,7 +61,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
             }
             "door" -> {
                 if (sender !is Player) {
-                    sender.sendMessage("§c此命令只能由玩家执行！")
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
                     return true
                 }
                 handleDoor(sender, args.drop(1).toTypedArray())
@@ -71,50 +72,50 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
     }
 
     private fun sendHelp(sender: CommandSender) {
-        sender.sendMessage("§a===== 僵尸快跑命令 =====")
-        sender.sendMessage("§a/zr start - 开始游戏（需要管理员）")
-        sender.sendMessage("§a/zr door <门号> - 触发指定门")
-        sender.sendMessage("§a/zr spawn add <名称> <类型> [门号] [房间号] - 添加重生点")
-        sender.sendMessage("§a/zr spawn remove <名称> - 删除重生点")
-        sender.sendMessage("§a/zr spawn list - 列出重生点")
-        sender.sendMessage("§a/zr doors add <x1> <y1> <z1> <x2> <y2> <z2> [mode] [门号] [delay] [材质] - 添加门")
-        sender.sendMessage("§a/zr doors remove <名称> - 删除门")
-        sender.sendMessage("§a/zr doors list - 列出门")
-        sender.sendMessage("§a/zr buttons add <x> <y> <z> normal <门号> - 添加普通开门按钮")
-        sender.sendMessage("§a/zr buttons add <x> <y> <z> tp <playerX> <playerY> <playerZ> <zombieX> <zombieY> <zombieZ> <门号1> [门号2] [门号3] [门号4] [门号5] - 添加传送按钮（人类和僵尸目标，最多控制5个门）")
-        sender.sendMessage("§a/zr buttons add <x> <y> <z> escape - 添加撤离按钮")
-        sender.sendMessage("§a/zr buttons remove <名称> - 删除按钮")
-        sender.sendMessage("§a/zr buttons list - 列出按钮")
-        sender.sendMessage("§a/zr reload - 重载配置")
-        sender.sendMessage("§a/zr open - 开始游戏（管理员/控制台）")
-        sender.sendMessage("§a/zr close - 结束游戏（管理员/控制台）")
-        sender.sendMessage("§a/zr select <编号> - 选择想要购买的枪械")
-        sender.sendMessage("§a/zr unselect - 取消选择")
-        sender.sendMessage("§a/zr randomgun - 随机获得枪械（仅人类）")
-        sender.sendMessage("§a/zr lobby - 返回大厅")
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a===== 僵尸快跑命令 ====="))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr start - 开始游戏（需要管理员）"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr door <门号> - 触发指定门"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr spawn add <名称> <类型> [门号] [房间号] - 添加重生点"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr spawn remove <名称> - 删除重生点"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr spawn list - 列出重生点"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr doors add <x1> <y1> <z1> <x2> <y2> <z2> [mode] [门号] [delay] [材质] - 添加门"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr doors remove <名称> - 删除门"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr doors list - 列出门"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr buttons add <x> <y> <z> normal <门号> - 添加普通开门按钮"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr buttons add <x> <y> <z> tp <playerX> <playerY> <playerZ> <zombieX> <zombieY> <zombieZ> <门号1> [门号2] [门号3] [门号4] [门号5] - 添加传送按钮（人类和僵尸目标，最多控制5个门）"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr buttons add <x> <y> <z> escape - 添加撤离按钮"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr buttons remove <名称> - 删除按钮"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr buttons list - 列出按钮"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr reload - 重载配置"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr open - 开始游戏（管理员/控制台）"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr close - 结束游戏（管理员/控制台）"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr select <编号> - 选择想要购买的枪械"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr unselect - 取消选择"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr randomgun - 随机获得枪械（仅人类）"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr lobby - 返回大厅"))
     }
 
     private fun handleStart(sender: CommandSender) {
         if (sender !is Player) {
-            sender.sendMessage("§c此命令只能由玩家执行！")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
             return
         }
         plugin.gameManager.forceStartGame()
-        sender.sendMessage("§a游戏开始！")
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a游戏开始！"))
     }
 
     private fun handleDoor(sender: CommandSender, args: Array<out String>) {
         if (args.isEmpty()) {
-            sender.sendMessage("§c用法: /zr door <门号>")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr door <门号>"))
             return
         }
         if (sender !is Player) {
-            sender.sendMessage("§c此命令只能由玩家执行！")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
             return
         }
         val doorNumber = args[0].toIntOrNull()
         if (doorNumber == null) {
-            sender.sendMessage("§c门号必须是整数！")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c门号必须是整数！"))
             return
         }
         plugin.doorManager.triggerDoor(doorNumber, sender)
@@ -122,24 +123,24 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
 
     private fun handleSpawn(sender: CommandSender, args: Array<out String>) {
         if (args.isEmpty()) {
-            sender.sendMessage("§c用法: /zr spawn <add|remove|list>")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr spawn <add|remove|list>"))
             return
         }
         when (args[0].lowercase()) {
             "add" -> handleSpawnAdd(sender, args.drop(1).toTypedArray())
             "remove" -> handleSpawnRemove(sender, args.drop(1).toTypedArray())
             "list" -> handleSpawnList(sender)
-            else -> sender.sendMessage("§c未知子命令，可用: add, remove, list")
+            else -> sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c未知子命令，可用: add, remove, list"))
         }
     }
 
     private fun handleSpawnAdd(sender: CommandSender, args: Array<out String>) {
         if (sender !is Player) {
-            sender.sendMessage("§c此命令只能由玩家执行！")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
             return
         }
         if (args.size < 2) {
-            sender.sendMessage("§c用法: /zr spawn add <名称> <类型> [门号] [房间号]")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr spawn add <名称> <类型> [门号] [房间号]"))
             return
         }
         val name = args[0]
@@ -147,7 +148,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         val type = try {
             Respawn.RespawnType.valueOf(typeStr)
         } catch (_: IllegalArgumentException) {
-            sender.sendMessage("§c无效的类型！可用: ${Respawn.RespawnType.entries.joinToString(", ")}")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c无效的类型！可用: ${Respawn.RespawnType.entries.joinToString(", ")}"))
             return
         }
         val doorNumber = if (args.size > 2) args[2].toIntOrNull() else null
@@ -166,48 +167,48 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         )
         plugin.configManager.addRespawn(respawn)
         plugin.respawnManager.addRespawn(respawn)
-        sender.sendMessage("§a重生点 '$name' 添加成功！")
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a重生点 '$name' 添加成功！"))
     }
 
     private fun handleSpawnRemove(sender: CommandSender, args: Array<out String>) {
         if (args.isEmpty()) {
-            sender.sendMessage("§c用法: /zr spawn remove <名称>")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr spawn remove <名称>"))
             return
         }
         val name = args[0]
         plugin.configManager.removeRespawn(name)
         plugin.respawnManager.removeRespawn(name)
-        sender.sendMessage("§a重生点 '$name' 删除成功！")
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a重生点 '$name' 删除成功！"))
     }
 
     private fun handleSpawnList(sender: CommandSender) {
         val respawns = plugin.respawnManager.getAllRespawns()
         if (respawns.isEmpty()) {
-            sender.sendMessage("§c当前没有重生点。")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c当前没有重生点。"))
             return
         }
-        sender.sendMessage("§a===== 重生点列表 =====")
-        respawns.forEach { sender.sendMessage("§a- ${it.name} (${it.type})") }
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a===== 重生点列表 ====="))
+        respawns.forEach { sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a- ${it.name} (${it.type})")) }
     }
 
     private fun handleDoors(sender: CommandSender, args: Array<out String>) {
         if (args.isEmpty()) {
-            sender.sendMessage("§c用法: /zr doors <add|remove|list>")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr doors <add|remove|list>"))
             return
         }
         when (args[0].lowercase()) {
             "add" -> handleDoorsAdd(sender, args.drop(1).toTypedArray())
             "remove" -> handleDoorsRemove(sender, args.drop(1).toTypedArray())
             "list" -> handleDoorsList(sender)
-            else -> sender.sendMessage("§c未知子命令，可用: add, remove, list")
+            else -> sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c未知子命令，可用: add, remove, list"))
         }
     }
 
     private fun handleDoorsAdd(sender: CommandSender, args: Array<out String>) {
         if (args.size < 7) {
-            sender.sendMessage("§c用法: /zr doors add <x1> <y1> <z1> <x2> <y2> <z2> [mode] [门号] [delay] [材质]")
-            sender.sendMessage("§cmode: normal, player, zombie, start (默认为 normal)")
-            sender.sendMessage("§c材质可填具体材质名（如 STONE）或 auto（自动扫描当前方块）")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr doors add <x1> <y1> <z1> <x2> <y2> <z2> [mode] [门号] [delay] [材质]"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§cmode: normal, player, zombie, start (默认为 normal)"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c材质可填具体材质名（如 STONE）或 auto（自动扫描当前方块）"))
             return
         }
         try {
@@ -221,7 +222,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
             val mode = args[6].lowercase()
             val validModes = setOf("normal", "player", "zombie", "start")
             if (mode !in validModes) {
-                sender.sendMessage("§c模式必须是 normal, player, zombie, start 之一")
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c模式必须是 normal, player, zombie, start 之一"))
                 return
             }
 
@@ -250,7 +251,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                         }
                     }
                 }
-                sender.sendMessage("§a已扫描门区域，共记录 ${blocks.size} 个方块。")
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已扫描门区域，共记录 ${blocks.size} 个方块。"))
             }
 
             val doorName = "door_${System.currentTimeMillis()}"
@@ -272,34 +273,34 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
             )
             plugin.configManager.addDoorFull(door)
             plugin.doorManager.addDoor(door)
-            sender.sendMessage("§a门 '$doorName' 添加成功！模式: $mode")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a门 '$doorName' 添加成功！模式: $mode"))
             if (useScanData) {
-                sender.sendMessage("§a使用自动扫描模式，关门时将恢复原始方块。")
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a使用自动扫描模式，关门时将恢复原始方块。"))
             }
         } catch (_: NumberFormatException) {
-            sender.sendMessage("§c坐标必须是整数！")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c坐标必须是整数！"))
         }
     }
 
     private fun handleDoorsRemove(sender: CommandSender, args: Array<out String>) {
         if (args.isEmpty()) {
-            sender.sendMessage("§c用法: /zr doors remove <名称>")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr doors remove <名称>"))
             return
         }
         val name = args[0]
         plugin.configManager.removeDoor(name)
         plugin.doorManager.removeDoor(name)
-        sender.sendMessage("§a门 '$name' 删除成功！")
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a门 '$name' 删除成功！"))
     }
 
     private fun handleDoorsList(sender: CommandSender) {
         val doors = plugin.doorManager.getAllDoors()
         if (doors.isEmpty()) {
-            sender.sendMessage("§c当前没有门。")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c当前没有门。"))
             return
         }
-        sender.sendMessage("§a===== 门列表 =====")
-        doors.forEach { sender.sendMessage("§a- ${it.name} (#${it.doorNumber}, ${it.mode})") }
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a===== 门列表 ====="))
+        doors.forEach { sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a- ${it.name} (#${it.doorNumber}, ${it.mode})")) }
     }
 
     private fun handleReload(sender: CommandSender) {
@@ -308,7 +309,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         plugin.respawnManager.loadRespawns()
         plugin.buttonManager.loadButtons()
         plugin.startEffectManager.loadEffects()
-        sender.sendMessage("§a配置重载成功！")
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a配置重载成功！"))
     }
 
     private fun handleOpen() {
@@ -325,46 +326,46 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
 
     private fun handleSelect(sender: CommandSender, args: Array<out String>) {
         if (sender !is Player) {
-            sender.sendMessage("§c此命令只能由玩家执行！")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
             return
         }
         val weapons = plugin.miscManager.getSelectableWeapons()
         if (weapons.isEmpty()) {
-            sender.sendMessage("§c当前没有可选枪械。")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c当前没有可选枪械。"))
             return
         }
         if (args.isEmpty()) {
-            sender.sendMessage("§c用法: /zr select <编号 1-${weapons.size}>")
-            sender.sendMessage("§7可选枪械:")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr select <编号 1-${weapons.size}>"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§7可选枪械:"))
             weapons.forEachIndexed { index, weapon ->
-                sender.sendMessage("§7${index + 1}. $weapon")
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§7${index + 1}. $weapon"))
             }
             return
         }
         val num = args[0].toIntOrNull()
         if (num == null || num !in 1..weapons.size) {
-            sender.sendMessage("§c编号必须是 1-${weapons.size} 的整数！")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c编号必须是 1-${weapons.size} 的整数！"))
             return
         }
         if (!plugin.miscManager.setSelectedWeapon(sender, num)) {
-            sender.sendMessage("§c选择失败，请重试。")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c选择失败，请重试。"))
             return
         }
-        sender.sendMessage("§a已选择枪械 ${weapons[num - 1]}，下次随机时将自动购买。")
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已选择枪械 ${weapons[num - 1]}，下次随机时将自动购买。"))
     }
 
     private fun handleUnselect(sender: CommandSender) {
         if (sender !is Player) {
-            sender.sendMessage("§c此命令只能由玩家执行！")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
             return
         }
         plugin.miscManager.clearSelectedWeapon(sender)
-        sender.sendMessage("§a已取消选择，将随机获得枪械。")
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已取消选择，将随机获得枪械。"))
     }
 
     private fun handleRandomgun(sender: CommandSender) {
         if (sender !is Player) {
-            sender.sendMessage("§c此命令只能由玩家执行！")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
             return
         }
         plugin.miscManager.giveRandomGun(sender)
@@ -372,7 +373,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
 
     private fun handleLobby(sender: CommandSender) {
         if (sender !is Player) {
-            sender.sendMessage("§c此命令只能由玩家执行！")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
             return
         }
         plugin.miscManager.teleportToLobby(sender)
@@ -380,27 +381,27 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
 
     private fun handleButtons(sender: CommandSender, args: Array<out String>) {
         if (args.isEmpty()) {
-            sender.sendMessage("§c用法: /zr buttons <add|remove|list>")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr buttons <add|remove|list>"))
             return
         }
         when (args[0].lowercase()) {
             "add" -> handleButtonsAdd(sender, args.drop(1).toTypedArray())
             "remove" -> handleButtonsRemove(sender, args.drop(1).toTypedArray())
             "list" -> handleButtonsList(sender)
-            else -> sender.sendMessage("§c未知子命令，可用: add, remove, list")
+            else -> sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c未知子命令，可用: add, remove, list"))
         }
     }
 
     private fun handleButtonsAdd(sender: CommandSender, args: Array<out String>) {
         if (sender !is Player) {
-            sender.sendMessage("§c此命令只能由玩家执行！")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
             return
         }
         if (args.size < 4) {
-            sender.sendMessage("§c用法: /zr buttons add <x> <y> <z> <mode> [参数...]")
-            sender.sendMessage("§c模式 normal: /zr buttons add <x> <y> <z> normal <门号>")
-            sender.sendMessage("§c模式 tp: /zr buttons add <x> <y> <z> tp <playerX> <playerY> <playerZ> <zombieX> <zombieY> <zombieZ> <门号> [操控门号1] [操控门号2] [操控门号3] [操控门号4] [操控门号5] (操控门号可选)")
-            sender.sendMessage("§c模式 escape: /zr buttons add <x> <y> <z> escape")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr buttons add <x> <y> <z> <mode> [参数...]"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c模式 normal: /zr buttons add <x> <y> <z> normal <门号>"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c模式 tp: /zr buttons add <x> <y> <z> tp <playerX> <playerY> <playerZ> <zombieX> <zombieY> <zombieZ> <门号> [操控门号1] [操控门号2] [操控门号3] [操控门号4] [操控门号5] (操控门号可选)"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c模式 escape: /zr buttons add <x> <y> <z> escape"))
             return
         }
         try {
@@ -412,12 +413,12 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
             val button: Button = when (mode) {
                 "normal" -> {
                     if (args.size < 5) {
-                        sender.sendMessage("§cnormal模式需要指定门号！")
+                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§cnormal模式需要指定门号！"))
                         return
                     }
                     val doorNumber = args[4].toIntOrNull()
                     if (doorNumber == null) {
-                        sender.sendMessage("§c门号必须是整数！")
+                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c门号必须是整数！"))
                         return
                     }
                     val name = "button_${x}_${y}_${z}_normal"
@@ -425,7 +426,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                 }
                 "tp" -> {
                     if (args.size < 11) {
-                        sender.sendMessage("§ctp模式需要指定人类目标坐标、僵尸目标坐标和区域门号！")
+                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§ctp模式需要指定人类目标坐标、僵尸目标坐标和区域门号！"))
                         return
                     }
                     val playerX = args[4].toIntOrNull()
@@ -438,7 +439,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                     if (playerX == null || playerY == null || playerZ == null ||
                         zombieX == null || zombieY == null || zombieZ == null ||
                         areaDoorNumber == null) {
-                        sender.sendMessage("§c所有目标坐标和门号必须是整数！")
+                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c所有目标坐标和门号必须是整数！"))
                         return
                     }
                     
@@ -468,7 +469,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                     Button(name, x, y, z, mode)
                 }
                 else -> {
-                    sender.sendMessage("§c无效的模式！可用: normal, tp, escape")
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c无效的模式！可用: normal, tp, escape"))
                     return
                 }
             }
@@ -476,30 +477,30 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
             plugin.buttonManager.addButton(button)
             plugin.configManager.addButton(button)
 
-            sender.sendMessage("§a按钮添加成功！名称: ${button.name}, 模式: ${button.mode}")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a按钮添加成功！名称: ${button.name}, 模式: ${button.mode}"))
         } catch (_: NumberFormatException) {
-            sender.sendMessage("§c坐标和数字参数必须是整数！")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c坐标和数字参数必须是整数！"))
         }
     }
 
     private fun handleButtonsRemove(sender: CommandSender, args: Array<out String>) {
         if (args.isEmpty()) {
-            sender.sendMessage("§c用法: /zr buttons remove <名称>")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr buttons remove <名称>"))
             return
         }
         val name = args[0]
         plugin.buttonManager.removeButton(name)
         plugin.configManager.removeButton(name)
-        sender.sendMessage("§a按钮 '$name' 删除成功！")
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a按钮 '$name' 删除成功！"))
     }
 
     private fun handleButtonsList(sender: CommandSender) {
         val buttons = plugin.buttonManager.getAllButtons()
         if (buttons.isEmpty()) {
-            sender.sendMessage("§c当前没有按钮。")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c当前没有按钮。"))
             return
         }
-        sender.sendMessage("§a===== 按钮列表 =====")
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a===== 按钮列表 ====="))
         buttons.forEach {
             val info = when {
                 it.isNormal() -> "门号: ${it.doorNumber}"
@@ -507,38 +508,38 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                 it.isEscape() -> "撤离按钮"
                 else -> ""
             }
-            sender.sendMessage("§a- ${it.name} 模式: ${it.mode} 坐标: ${it.x},${it.y},${it.z} $info")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a- ${it.name} 模式: ${it.mode} 坐标: ${it.x},${it.y},${it.z} $info"))
         }
     }
 
     private fun handleTransfer(sender: Player, args: Array<out String>) {
         if (args.isEmpty()) {
-            sender.sendMessage("§c用法: /zr transfer <玩家> <金额>")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr transfer <玩家> <金额>"))
             return
         }
         if (args.size < 2) {
-            sender.sendMessage("§c用法: /zr transfer <玩家> <金额>")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr transfer <玩家> <金额>"))
             return
         }
         val target = Bukkit.getPlayer(args[0])
         if (target == null) {
-            sender.sendMessage("§c玩家不在线！")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c玩家不在线！"))
             return
         }
         val amount = args[1].toIntOrNull()
         if (amount == null || amount <= 0) {
-            sender.sendMessage("§c金额必须是正整数！")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c金额必须是正整数！"))
             return
         }
         val current = plugin.coinManager.getCoins(sender.uniqueId)
         if (current < amount) {
-            sender.sendMessage("§c你的硬币不足！")
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你的硬币不足！"))
             return
         }
         plugin.coinManager.takeCoins(sender.uniqueId, amount)
         plugin.coinManager.addCoins(target.uniqueId, amount)
-        sender.sendMessage("§a成功转账 $amount 硬币给 ${target.name}")
-        target.sendMessage("§a你收到了来自 ${sender.name} 的 $amount 硬币")
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a成功转账 $amount 硬币给 ${target.name}"))
+        target.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a你收到了来自 ${sender.name} 的 $amount 硬币"))
     }
 
     override fun onTabComplete(
