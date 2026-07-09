@@ -190,7 +190,9 @@ class StaminaManager(private val plugin: ZombieRun) {
             for (player in Bukkit.getOnlinePlayers()) {
                 val team = plugin.gameManager.getPlayerTeam(player)
                 if (team == GameManager.Team.ZOMBIE || team == GameManager.Team.ZOMBIE_MAIN) {
-                    player.addPotionEffect(PotionEffect(PotionEffectType.REGENERATION, 40, 0, false, false))
+                    player.scheduler.run(plugin, { _ ->
+                        player.addPotionEffect(PotionEffect(PotionEffectType.REGENERATION, 40, 0, false, false))
+                    }, null)
                 }
             }
         }, 1L, 20L)
@@ -252,13 +254,17 @@ class StaminaManager(private val plugin: ZombieRun) {
                 if (plugin.gameManager.getPlayerTeam(player) != GameManager.Team.HUMAN) continue
 
                 if (ps.staminastate == 2) {
-                    player.addPotionEffect(PotionEffect(PotionEffectType.SLOWNESS, 40, 0, false, false))
-                    player.addPotionEffect(PotionEffect(PotionEffectType.WEAKNESS, 40, 0, false, false))
-                    player.addPotionEffect(PotionEffect(PotionEffectType.GLOWING, 40, 0, false, false))
+                    player.scheduler.run(plugin, { _ ->
+                        player.addPotionEffect(PotionEffect(PotionEffectType.SLOWNESS, 40, 0, false, false))
+                        player.addPotionEffect(PotionEffect(PotionEffectType.WEAKNESS, 40, 0, false, false))
+                        player.addPotionEffect(PotionEffect(PotionEffectType.GLOWING, 40, 0, false, false))
+                    }, null)
                 } else {
-                    player.removePotionEffect(PotionEffectType.SLOWNESS)
-                    player.removePotionEffect(PotionEffectType.WEAKNESS)
-                    player.removePotionEffect(PotionEffectType.GLOWING)
+                    player.scheduler.run(plugin, { _ ->
+                        player.removePotionEffect(PotionEffectType.SLOWNESS)
+                        player.removePotionEffect(PotionEffectType.WEAKNESS)
+                        player.removePotionEffect(PotionEffectType.GLOWING)
+                    }, null)
                 }
             }
         }, 1L, 20L)
