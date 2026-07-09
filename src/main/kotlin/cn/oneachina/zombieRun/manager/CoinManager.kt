@@ -143,6 +143,18 @@ class CoinManager(private val plugin: ZombieRun) {
         }
     }
 
+    fun resetCoins(uuid: UUID) {
+        cache[uuid] = 0
+        CompletableFuture.runAsync {
+            dataSource.connection.use { conn ->
+                conn.prepareStatement("UPDATE zr_economy SET coins = 0 WHERE uuid = ?").use { stmt ->
+                    stmt.setString(1, uuid.toString())
+                    stmt.executeUpdate()
+                }
+            }
+        }
+    }
+
     fun close() {
         flushAll()
         dataSource.close()

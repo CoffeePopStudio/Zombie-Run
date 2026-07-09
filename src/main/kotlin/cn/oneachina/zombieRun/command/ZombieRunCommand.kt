@@ -22,7 +22,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         }
 
         when (args[0].lowercase()) {
-            "start", "spawn", "doors", "buttons", "reload", "open", "close" -> {
+            "start", "spawn", "doors", "buttons", "reload", "open", "close", "reset" -> {
                 if (!sender.hasPermission("zombie.run.admin")) {
                     sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有权限使用此命令！"))
                     return true
@@ -35,6 +35,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                     "reload" -> handleReload(sender)
                     "open" -> handleOpen()
                     "close" -> handleClose()
+                    "reset" -> handleReset(sender, args.drop(1).toTypedArray())
                     "weapon" -> WeaponCommands.handle(plugin, sender, args.drop(1).toTypedArray())
                 }
             }
@@ -412,6 +413,30 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         plugin.gameManager.endGame(GameManager.Team.SPECTATOR)
     }
 
+    private fun handleReset(sender: CommandSender, args: Array<out String>) {
+        if (args.isEmpty()) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr reset <玩家>"))
+            return
+        }
+        val target = Bukkit.getPlayer(args[0])
+        val uuid = if (target != null) {
+            target.uniqueId
+        } else {
+            try {
+                java.util.UUID.fromString(args[0])
+            } catch (_: IllegalArgumentException) {
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c玩家不在线且未提供有效的 UUID！"))
+                return
+            }
+        }
+        plugin.progressionManager.resetPlayer(uuid)
+        plugin.coinManager.resetCoins(uuid)
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已重置玩家数据：等级、XP、硬币、击杀、感染、任务、解锁均已清空。"))
+        if (target != null) {
+            target.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你的数据已被管理员重置。"))
+        }
+    }
+
     private fun handleSelect(sender: CommandSender, args: Array<out String>) {
         if (sender !is Player) {
             sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
@@ -640,7 +665,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
 
         return when (args.size) {
             1 -> {
-                listOf("start", "door", "spawn", "doors", "buttons", "reload", "open", "close", "select", "unselect", "randomgun", "lobby", "profile", "quest", "title", "xp", "level")
+                listOf("start", "door", "spawn", "doors", "buttons", "reload", "open", "close", "reset", "select", "unselect", "randomgun", "lobby", "profile", "quest", "title", "xp", "level")
                     .filter { it.startsWith(args[0].lowercase()) }
                     .toMutableList()
             }

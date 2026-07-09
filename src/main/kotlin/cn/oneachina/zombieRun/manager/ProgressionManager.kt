@@ -305,6 +305,29 @@ class ProgressionManager(private val plugin: ZombieRun) {
         cache.clear()
     }
 
+    fun resetPlayer(uuid: UUID) {
+        CompletableFuture.runAsync {
+            getConnection().use { conn ->
+                conn.prepareStatement(
+                    "UPDATE player_progression SET level = 1, xp = 0, total_kills = 0, total_infections = 0, games_played = 0, human_wins = 0, equipped_title = null WHERE uuid = ?"
+                ).use { stmt ->
+                    stmt.setString(1, uuid.toString())
+                    stmt.executeUpdate()
+                }
+                conn.prepareStatement("DELETE FROM player_unlocks WHERE uuid = ?").use { stmt ->
+                    stmt.setString(1, uuid.toString())
+                    stmt.executeUpdate()
+                }
+                conn.prepareStatement("DELETE FROM player_quests WHERE uuid = ?").use { stmt ->
+                    stmt.setString(1, uuid.toString())
+                    stmt.executeUpdate()
+                }
+            }
+        }.get()
+        cache[uuid] = PlayerProfile(uuid = uuid)
+        plugin.questManager.invalidateCache(uuid)
+    }
+
     fun close() {
         flushAll()
     }
