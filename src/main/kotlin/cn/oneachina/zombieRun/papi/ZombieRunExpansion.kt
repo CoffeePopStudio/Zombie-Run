@@ -2,6 +2,7 @@ package cn.oneachina.zombieRun.papi
 
 import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.manager.GameManager
+import cn.oneachina.zombieRun.manager.ProgressionManager
 import me.clip.placeholderapi.expansion.PlaceholderExpansion
 import org.bukkit.Bukkit
 import org.bukkit.OfflinePlayer
@@ -80,6 +81,23 @@ class ZombieRunExpansion(private val plugin: ZombieRun) : PlaceholderExpansion()
                 if (player == null || player.player == null) return ""
                 val p = player.player!!
                 when (params.lowercase()) {
+                    "level" -> plugin.progressionManager.getLevel(p.uniqueId).toString()
+                    "xp" -> plugin.progressionManager.getXp(p.uniqueId).toString()
+                    "xp_max" -> {
+                        val lvl = plugin.progressionManager.getLevel(p.uniqueId)
+                        if (lvl >= ProgressionManager.MAX_LEVEL) "0"
+                        else ProgressionManager.xpForLevel(lvl).toString()
+                    }
+                    "xp_percent" -> {
+                        val lvl = plugin.progressionManager.getLevel(p.uniqueId)
+                        if (lvl >= ProgressionManager.MAX_LEVEL) "1.0"
+                        else (plugin.progressionManager.getXp(p.uniqueId).toDouble() / ProgressionManager.xpForLevel(lvl)).toString()
+                    }
+                    "title" -> plugin.titleManager.getPlayerTitle(p)
+                    "total_kills" -> plugin.progressionManager.getTotalKills(p.uniqueId).toString()
+                    "total_infections" -> plugin.progressionManager.getTotalInfections(p.uniqueId).toString()
+                    "games_played" -> plugin.progressionManager.getGamesPlayed(p.uniqueId).toString()
+                    "human_wins" -> plugin.progressionManager.getHumanWins(p.uniqueId).toString()
                     "coins" -> plugin.coinManager.getCoins(p.uniqueId).toString()
                     "kills" -> plugin.miscManager.getKills(p).toString()
                     "infections" -> plugin.miscManager.getInfections(p).toString()
