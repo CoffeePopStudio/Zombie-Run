@@ -2,7 +2,10 @@ package cn.oneachina.zombieRun
 
 import cn.oneachina.zombieRun.command.DoorPerformanceCommand
 import cn.oneachina.zombieRun.command.ZombieRunCommand
+import cn.oneachina.zombieRun.gui.ProfileGUI
+import cn.oneachina.zombieRun.gui.QuestGUI
 import cn.oneachina.zombieRun.gui.ShopGUI
+import cn.oneachina.zombieRun.gui.TitleGUI
 import cn.oneachina.zombieRun.listener.CombatListener
 import cn.oneachina.zombieRun.listener.GameListener
 import cn.oneachina.zombieRun.listener.PlayerTaskTracker
@@ -26,7 +29,11 @@ class ZombieRun : JavaPlugin() {
     lateinit var coinManager: CoinManager
     lateinit var progressionManager: ProgressionManager
     lateinit var questManager: QuestManager
+    lateinit var titleManager: TitleManager
     lateinit var shopGUI: ShopGUI
+    lateinit var profileGUI: ProfileGUI
+    lateinit var questGUI: QuestGUI
+    lateinit var titleGUI: TitleGUI
 
     override fun onEnable() {
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
@@ -46,7 +53,11 @@ class ZombieRun : JavaPlugin() {
         coinManager = CoinManager(this).apply { init() }
         progressionManager = ProgressionManager(this).apply { init() }
         questManager = QuestManager(this).apply { init() }
+        titleManager = TitleManager(this)
         shopGUI = ShopGUI(this)
+        profileGUI = ProfileGUI(this)
+        questGUI = QuestGUI(this)
+        titleGUI = TitleGUI(this)
 
         Bukkit.getGlobalRegionScheduler().runDelayed(this, { _ ->
             doorManager.reset()
@@ -58,6 +69,9 @@ class ZombieRun : JavaPlugin() {
         pm.registerEvents(CombatListener(this, taskTracker), this)
         pm.registerEvents(WeaponListener(this), this)
         pm.registerEvents(shopGUI, this)
+        pm.registerEvents(profileGUI, this)
+        pm.registerEvents(questGUI, this)
+        pm.registerEvents(titleGUI, this)
         pm.registerEvents(miscManager, this)
 
         val zrCommand = ZombieRunCommand(this)
