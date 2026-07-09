@@ -187,7 +187,9 @@ class GameListener(
         val block = player.location.block
         if (block.type == Material.BLACK_WOOL) {
             if (plugin.gameManager.getPlayerTeam(player) != GameManager.Team.SPECTATOR) {
-                player.damage(1000.0)
+                player.scheduler.run(plugin, { _ ->
+                    player.health = 0.0
+                }, null)
             }
         }
     }
