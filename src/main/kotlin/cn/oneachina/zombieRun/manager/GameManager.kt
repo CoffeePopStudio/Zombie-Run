@@ -148,6 +148,10 @@ class GameManager(private val plugin: ZombieRun) {
 
         plugin.startEffectManager.executeStartEffects()
 
+        Bukkit.getOnlinePlayers().forEach { player ->
+            plugin.questManager.ensureQuests(player)
+        }
+
         startMaxDurationTimer()
     }
 
@@ -213,6 +217,11 @@ class GameManager(private val plugin: ZombieRun) {
         }
 
         sendGameEndResult()
+
+        plugin.progressionListener.onGameEnd()
+        if (winner == Team.HUMAN) {
+            plugin.progressionListener.onHumanWin()
+        }
 
         Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
             Bukkit.getOnlinePlayers().forEach { player ->

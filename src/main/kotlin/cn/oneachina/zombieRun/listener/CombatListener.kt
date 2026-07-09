@@ -72,6 +72,7 @@ class CombatListener(
             GameManager.Team.ZOMBIE, GameManager.Team.ZOMBIE_MAIN -> {
                 if (killer != null && plugin.gameManager.getPlayerTeam(killer) == GameManager.Team.HUMAN) {
                     plugin.miscManager.addKill(killer)
+                    plugin.progressionListener.onKillZombie(killer, victim, victimTeam == GameManager.Team.ZOMBIE_MAIN)
                     val reward = if (victimTeam == GameManager.Team.ZOMBIE_MAIN) 150 else 50
                     plugin.coinManager.addCoins(killer.uniqueId, reward)
                     killer.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§6+ $reward 硬币!"))
@@ -114,6 +115,7 @@ class CombatListener(
 
     private fun infectPlayer(attacker: Player, victim: Player) {
         plugin.miscManager.addInfection(attacker)
+        plugin.progressionListener.onInfectHuman(attacker, victim)
         plugin.coinManager.addCoins(attacker.uniqueId, 50)
 
         val attackerColor = if (plugin.gameManager.getPlayerTeam(attacker) == GameManager.Team.ZOMBIE_MAIN) "5" else "2"

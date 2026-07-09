@@ -163,6 +163,7 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
 
             val damage = event.finalDamage * 2
             attacker.sendActionBar(Component.text("造成伤害: ${String.format("%.1f", damage)}").color(NamedTextColor.RED))
+            plugin.progressionListener.onDealDamage(attacker, event.finalDamage)
         }
     }
 

@@ -9,6 +9,7 @@ import cn.oneachina.zombieRun.gui.TitleGUI
 import cn.oneachina.zombieRun.listener.CombatListener
 import cn.oneachina.zombieRun.listener.GameListener
 import cn.oneachina.zombieRun.listener.PlayerTaskTracker
+import cn.oneachina.zombieRun.listener.ProgressionListener
 import cn.oneachina.zombieRun.listener.WeaponListener
 import cn.oneachina.zombieRun.manager.*
 import cn.oneachina.zombieRun.papi.ZombieRunExpansion
@@ -28,6 +29,7 @@ class ZombieRun : JavaPlugin() {
     lateinit var weaponManager: WeaponManager
     lateinit var coinManager: CoinManager
     lateinit var progressionManager: ProgressionManager
+    lateinit var progressionListener: ProgressionListener
     lateinit var questManager: QuestManager
     lateinit var titleManager: TitleManager
     lateinit var shopGUI: ShopGUI
@@ -52,6 +54,7 @@ class ZombieRun : JavaPlugin() {
         weaponManager = WeaponManager(this).apply { loadWeapons() }
         coinManager = CoinManager(this).apply { init() }
         progressionManager = ProgressionManager(this).apply { init() }
+        progressionListener = ProgressionListener(this)
         questManager = QuestManager(this).apply { init() }
         titleManager = TitleManager(this)
         shopGUI = ShopGUI(this)

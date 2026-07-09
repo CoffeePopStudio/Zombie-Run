@@ -149,6 +149,7 @@ class GameListener(
                 if (previousDoorNumber > currentRoom) {
                     plugin.gameManager.setPlayerRoom(player, previousDoorNumber)
                     player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已通过 ${previousDoorNumber} 号门，房间号更新为 ${previousDoorNumber}！"))
+                    plugin.progressionListener.onPassDoor(player)
                 }
                 playerDoorEntryPoints.remove(playerId)
             }
@@ -418,12 +419,18 @@ class GameListener(
         val rawMsg = PlainTextComponentSerializer.plainText().serialize(event.message())
         val msg = rawMsg.replace("&", "")
 
-        val prefix = when (team) {
+        val title = plugin.titleManager.getPlayerTitle(player)
+        val titlePrefix = if (title.isNotEmpty() && plugin.gameManager.getGameStatus() == GameManager.GameStatus.RUNNING) {
+            Component.text("[$title] ", NamedTextColor.GOLD)
+        } else {
+            Component.empty()
+        }
+        val prefix = titlePrefix.append(when (team) {
             GameManager.Team.HUMAN -> Component.text("[人类] ", NamedTextColor.AQUA)
             GameManager.Team.ZOMBIE -> Component.text("[僵尸] ", NamedTextColor.DARK_GREEN)
             GameManager.Team.ZOMBIE_MAIN -> Component.text("[母体] ", NamedTextColor.LIGHT_PURPLE)
             else -> Component.text("[等待] ", NamedTextColor.GRAY)
-        }
+        })
 
         val messageComponent = Component.text()
             .append(prefix)
