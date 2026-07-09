@@ -184,12 +184,10 @@ class GameListener(
     }
 
     private fun handleBlackWoolDamage(player: Player) {
-        val block = player.location.block
-        if (block.type == Material.BLACK_WOOL) {
+        val blockUnderFeet = player.location.clone().subtract(0.0, 0.1, 0.0).block
+        if (blockUnderFeet.type == Material.BLACK_WOOL) {
             if (plugin.gameManager.getPlayerTeam(player) != GameManager.Team.SPECTATOR) {
-                player.scheduler.run(plugin, { _ ->
-                    player.health = 0.0
-                }, null)
+                player.health = 0.0
             }
         }
     }
