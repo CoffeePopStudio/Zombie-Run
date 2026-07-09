@@ -8,6 +8,7 @@ import org.bukkit.World
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import kotlin.math.sqrt
 
 class DoorPerformanceTest(private val plugin: ZombieRun) {
 
@@ -82,7 +83,7 @@ class DoorPerformanceTest(private val plugin: ZombieRun) {
         // 计算平均时间和标准差
         val average = results.average()
         val variance = results.map { (it - average) * (it - average) }.average()
-        val stdDev = Math.sqrt(variance)
+        val stdDev = sqrt(variance)
         
         return PerformanceResult(
             average = average / 1_000_000, // 转换为毫秒
