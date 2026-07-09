@@ -9,7 +9,6 @@ import cn.oneachina.zombieRun.listener.PlayerTaskTracker
 import cn.oneachina.zombieRun.listener.WeaponListener
 import cn.oneachina.zombieRun.manager.*
 import cn.oneachina.zombieRun.papi.ZombieRunExpansion
-import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import org.bukkit.Bukkit
 import org.bukkit.plugin.java.JavaPlugin
 
@@ -66,10 +65,20 @@ class ZombieRun : JavaPlugin() {
     }
 
     override fun onDisable() {
-        coinManager.close()
-        doorManager.reset()
-        respawnManager.clear()
-        gameManager.clear()
-        buttonManager.clear()
+        if (this::coinManager.isInitialized) {
+            coinManager.close()
+        }
+        if (this::doorManager.isInitialized) {
+            doorManager.reset()
+        }
+        if (this::respawnManager.isInitialized) {
+            respawnManager.clear()
+        }
+        if (this::gameManager.isInitialized) {
+            gameManager.clear()
+        }
+        if (this::buttonManager.isInitialized) {
+            buttonManager.clear()
+        }
     }
 }

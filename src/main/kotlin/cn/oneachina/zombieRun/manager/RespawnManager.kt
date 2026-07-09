@@ -161,7 +161,7 @@ class RespawnManager(private val plugin: ZombieRun) {
     fun respawnPlayer(player: Player) {
         val respawn = getDefaultRespawn()
         val location = respawn.getLocation(player.world)
-        player.teleport(location)
+        player.teleportAsync(location)
         plugin.logger.info("玩家 ${player.name} 重生至默认点")
     }
 
@@ -218,56 +218,56 @@ class RespawnManager(private val plugin: ZombieRun) {
     fun teleportToWaitRespawn(player: Player) {
         val respawn = getWaitRespawn() ?: getDefaultRespawn()
         val location = respawn.getLocation(player.world)
-        player.teleport(location)
+        player.teleportAsync(location)
         plugin.logger.info("玩家 ${player.name} 传送到等待出生点 ${respawn.name}")
     }
 
     fun teleportToPlayerInitialRespawn(player: Player) {
         val respawn = getPlayerInitialRespawn() ?: getDefaultRespawn()
         val location = respawn.getLocation(player.world)
-        player.teleport(location)
+        player.teleportAsync(location)
         plugin.logger.info("玩家 ${player.name} 传送到初始出生点 ${respawn.name}")
     }
 
     fun teleportToZombieRespawn(zombie: Player) {
         val respawn = getZombieRespawn() ?: getDefaultRespawn()
         val location = respawn.getLocation(zombie.world)
-        zombie.teleport(location)
+        zombie.teleportAsync(location)
         plugin.logger.info("僵尸传送到出生点 ${respawn.name}")
     }
 
     fun teleportToZombieMainRespawn(zombie: Player) {
         val respawn = getZombieMainRespawn() ?: getDefaultRespawn()
         val location = respawn.getLocation(zombie.world)
-        zombie.teleport(location)
+        zombie.teleportAsync(location)
         plugin.logger.info("母体僵尸传送到出生点 ${respawn.name}")
     }
 
     fun teleportPlayerByDoorClose(player: Player, doorNumber: Int) {
         val respawn = getDoorPlayerRespawn(doorNumber) ?: getDefaultRespawn()
         val location = respawn.getLocation(player.world)
-        player.teleport(location)
+        player.teleportAsync(location)
         plugin.logger.info("玩家 ${player.name} 因门关闭传送到门${doorNumber}传送点 ${respawn.name}")
     }
 
     fun teleportPlayerByRoom(player: Player, roomNumber: Int) {
         val respawn = getRoomPlayerRespawn(roomNumber) ?: getDefaultRespawn()
         val location = respawn.getLocation(player.world)
-        player.teleport(location)
+        player.teleportAsync(location)
         plugin.logger.info("玩家 ${player.name} 传送到房间${roomNumber}传送点 ${respawn.name}")
     }
 
     fun teleportZombieByDoorClose(zombie: Player, doorNumber: Int) {
         val respawn = getDoorZombieRespawn(doorNumber) ?: getZombieRespawn() ?: getDefaultRespawn()
         val location = respawn.getLocation(zombie.world)
-        zombie.teleport(location)
+        zombie.teleportAsync(location)
         plugin.logger.info("僵尸传送到门${doorNumber}传送点 ${respawn.name}")
     }
 
     fun teleportZombieSpecial(zombie: Player, doorNumber: Int) {
         val respawn = getSpecialZombieRespawn(doorNumber) ?: getDoorZombieRespawn(doorNumber) ?: getZombieRespawn() ?: getDefaultRespawn()
         val location = respawn.getLocation(zombie.world)
-        zombie.teleport(location)
+        zombie.teleportAsync(location)
         plugin.logger.info("僵尸特殊传送到门${doorNumber}传送点 ${respawn.name}")
     }
 

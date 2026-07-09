@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "cn.oneachina"
-version = "26.1.2"
+version = "1.0.2"
 
 repositories {
     mavenCentral()
@@ -20,6 +20,10 @@ dependencies {
     compileOnly("me.clip:placeholderapi:2.12.2")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation("com.zaxxer:HikariCP:7.0.2")
+}
+
+runPaper {
+    folia.registerTask()
 }
 
 tasks {

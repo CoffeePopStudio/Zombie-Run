@@ -45,6 +45,7 @@ class WaitStartCountdownTask(
             }
 
             countdown--
-        }, 0L, 20L)
+        }, 1L, 20L)
     }
 }
+

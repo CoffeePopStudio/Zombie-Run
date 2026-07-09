@@ -200,7 +200,7 @@ class GameListener(
         val (tx, ty, tz) = target
         val loc = org.bukkit.Location(player.world, tx + 0.5, ty.toDouble(), tz + 0.5)
 
-        player.teleport(loc)
+        player.teleportAsync(loc)
         player.showTitle(Title.title(
             Component.text("传送完成", NamedTextColor.GREEN),
             Component.text("你已被传送！", NamedTextColor.GREEN),
@@ -326,7 +326,7 @@ class GameListener(
                                     task.cancel()
                                     startTpForceDelay(session, forceDelay)
                                 }
-                            }, 0L, 20L)
+                            }, 1L, 20L)
                         session.countdownTask = countdownTask
                     }
                     button.isEscape() -> {
@@ -436,3 +436,4 @@ class GameListener(
         })
     }
 }
+

@@ -28,10 +28,10 @@ class StartCountdownTask(
 
         Bukkit.getOnlinePlayers().forEach { player ->
             if (player == alphaZombie) {
-                player.teleport(plugin.respawnManager.getZombieMainRespawn()?.getLocation(player.world)
+                player.teleportAsync(plugin.respawnManager.getZombieMainRespawn()?.getLocation(player.world)
                     ?: plugin.respawnManager.getDefaultRespawn().getLocation(player.world))
             } else {
-                player.teleport(plugin.respawnManager.getPlayerInitialRespawn()?.getLocation(player.world)
+                player.teleportAsync(plugin.respawnManager.getPlayerInitialRespawn()?.getLocation(player.world)
                     ?: plugin.respawnManager.getDefaultRespawn().getLocation(player.world))
             }
             player.gameMode = GameMode.ADVENTURE
@@ -65,6 +65,7 @@ class StartCountdownTask(
                     Component.text("大门将在 $countdown 秒后打开", NamedTextColor.WHITE)
                 ))
             }
-        }, 0L, 20L)
+        }, 1L, 20L)
     }
 }
+

@@ -161,7 +161,7 @@ class StaminaManager(private val plugin: ZombieRun) {
                 ps.staminastate = if (ps.stamina <= 0) 2 else 1
                 ps.isMoving = false
             }
-        }, 0L, 2L)
+        }, 1L, 2L)
         staminaTask.add(task)
     }
 
@@ -180,7 +180,7 @@ class StaminaManager(private val plugin: ZombieRun) {
                 val staminaBar = buildStaminaBar(ps.stamina, ps.maxStamina, ps.staminastate)
                 player.sendActionBar(staminaBar)
             }
-        }, 0L, 2L)
+        }, 1L, 2L)
         actionBarTask.add(task)
     }
 
@@ -192,7 +192,7 @@ class StaminaManager(private val plugin: ZombieRun) {
                     player.addPotionEffect(PotionEffect(PotionEffectType.REGENERATION, 40, 0, false, false))
                 }
             }
-        }, 0L, 20L)
+        }, 1L, 20L)
         zombieHealthBarTask.add(task)
     }
 
@@ -240,7 +240,7 @@ class StaminaManager(private val plugin: ZombieRun) {
                 }
                 player.world.spawnParticle(Particle.DRAGON_BREATH, player.location.clone().add(0.0, 0.5, 0.0), 3,
                     0.5, 1.0, 0.5, 0.0)
-            }, 0L, 2L)
+            }, 1L, 2L)
         }
     }
 
@@ -260,7 +260,7 @@ class StaminaManager(private val plugin: ZombieRun) {
                     player.removePotionEffect(PotionEffectType.GLOWING)
                 }
             }
-        }, 0L, 20L)
+        }, 1L, 20L)
         staminaTask.add(task)
     }
 
@@ -274,3 +274,4 @@ class StaminaManager(private val plugin: ZombieRun) {
         playerStamina.clear()
     }
 }
+

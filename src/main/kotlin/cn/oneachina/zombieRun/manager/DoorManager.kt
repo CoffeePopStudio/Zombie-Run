@@ -128,7 +128,7 @@ class DoorManager(private val plugin: ZombieRun) {
                 opentime = -1.0
                 schedTask.cancel()
             }
-        }, 0L, 20L)
+        }, 1L, 20L)
         doorTasks.add(task)
     }
 
@@ -197,7 +197,7 @@ class DoorManager(private val plugin: ZombieRun) {
                 closetime = -1.0
                 schedTask.cancel()
             }
-        }, 0L, 2L)
+        }, 1L, 2L)
         doorTasks.add(task)
     }
 
@@ -269,7 +269,7 @@ class DoorManager(private val plugin: ZombieRun) {
                 transferTasks.remove(player)
                 schedTask.cancel()
             }
-        }, 0L, 20L)
+        }, 1L, 20L)
         transferTasks[player] = taskId
     }
 
@@ -284,7 +284,7 @@ class DoorManager(private val plugin: ZombieRun) {
                                 Component.text("§a感谢乘坐机场专线"),
                                 Component.text("§e请拿好你的行李，有序下车")
                             ))
-                            player.teleport(world.getBlockAt(110, 35, 112).location.add(0.5, 0.0, 0.5))
+                            player.teleportAsync(world.getBlockAt(110, 35, 112).location.add(0.5, 0.0, 0.5))
                         }
                     }
                 }, 60L)
@@ -309,12 +309,12 @@ class DoorManager(private val plugin: ZombieRun) {
                                     Component.text("§a电梯已到达"),
                                     Component.text("§e祝您旅途愉快")
                                 ))
-                                player.teleport(player.location.add(0.0, 13.0, 0.0))
+                                player.teleportAsync(player.location.add(0.0, 13.0, 0.0))
                             }
                         }
                         schedTask.cancel()
                     }
-                }, 0L, 20L)
+                }, 1L, 20L)
                 doorTasks.add(elevatorTask)
             }
         }
@@ -362,7 +362,7 @@ class DoorManager(private val plugin: ZombieRun) {
                 endHelicopterEscape()
                 schedTask.cancel()
             }
-        }, 0L, 2L)
+        }, 1L, 2L)
         doorTasks.add(task)
     }
 
@@ -422,3 +422,4 @@ class DoorManager(private val plugin: ZombieRun) {
         val door = getDoorByNumber(doorNumber)
     }
 }
+

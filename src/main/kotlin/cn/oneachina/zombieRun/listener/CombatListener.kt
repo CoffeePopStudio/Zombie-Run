@@ -146,7 +146,7 @@ class CombatListener(
                 taskTracker.unregister(task, victim.uniqueId)
                 task.cancel()
             }
-        }, 0L, 20L)
+        }, 1L, 20L)
         if (scheduledTask != null) taskTracker.register(scheduledTask, victim)
     }
 
@@ -165,3 +165,4 @@ class CombatListener(
         if (scheduledTask != null) taskTracker.register(scheduledTask, victim)
     }
 }
+
