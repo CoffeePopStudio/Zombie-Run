@@ -357,7 +357,7 @@ class ConfigManager(private val plugin: ZombieRun) {
             val cfg = AmmoConfig(
                 id = id,
                 material = as_.getString("material") ?: "PAPER",
-                customModelData = as_.getInt("custom-model-data", 0),
+                customModelData = CustomModelData.customModelData().addFloat(as_.getInt("custom-model-data", 0).toFloat()).build(),
                 name = as_.getString("name") ?: id,
                 lore = as_.getStringList("lore") ?: emptyList()
             )
