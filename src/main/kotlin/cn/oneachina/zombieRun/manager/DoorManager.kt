@@ -205,6 +205,10 @@ class DoorManager(private val plugin: ZombieRun) {
     private fun openDoor(door: Door, broadcast: Boolean) {
         val world = Bukkit.getWorlds().first()
         door.open(world)
+        val center = door.getCenterLocation(world)
+        Bukkit.getRegionScheduler().execute(plugin, center) {
+            door.openBlocks(world)
+        }
 
         forbidden = true
         Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ -> forbidden = false }, 60L)
@@ -234,6 +238,10 @@ class DoorManager(private val plugin: ZombieRun) {
     private fun closeDoor(door: Door) {
         val world = Bukkit.getWorlds().first()
         door.close(world)
+        val center = door.getCenterLocation(world)
+        Bukkit.getRegionScheduler().execute(plugin, center) {
+            door.closeBlocks(world)
+        }
 
         doorclose = currentDoorNumber
 

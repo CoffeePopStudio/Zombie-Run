@@ -78,6 +78,9 @@ class Door(
     fun open(world: World) {
         isOpen = true
         openTimestamp = System.currentTimeMillis()
+    }
+
+    fun openBlocks(world: World) {
         getBlocks(world).forEach { block ->
             if (!block.type.isAir) {
                 block.type = Material.AIR
@@ -87,6 +90,9 @@ class Door(
 
     fun close(world: World) {
         isOpen = false
+    }
+
+    fun closeBlocks(world: World) {
         if (useScanData && blocks.isNotEmpty()) {
             blocks.forEach { (posStr, materialName) ->
                 val parts = posStr.split(',').map { it.toInt() }
