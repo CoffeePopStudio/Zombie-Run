@@ -2,6 +2,8 @@ package cn.oneachina.zombieRun.manager
 
 import cn.oneachina.zombieRun.ZombieRun
 import org.bukkit.entity.Player
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 class TitleManager(private val plugin: ZombieRun) {
 
@@ -27,8 +29,10 @@ class TitleManager(private val plugin: ZombieRun) {
         }
     }
 
+    private val availableTitlesCache = ConcurrentHashMap<UUID, Set<String>>()
+
     fun getAvailableTitles(player: Player): List<Pair<String, String>> {
-        val unlocks = plugin.progressionManager.getUnlocks(player.uniqueId)
+        val unlocks = getCachedUnlocks(player)
         val titles = mutableListOf<Pair<String, String>>()
 
         UNLOCK_TITLES.forEach { (key, name) ->
@@ -40,9 +44,23 @@ class TitleManager(private val plugin: ZombieRun) {
         return titles
     }
 
+    private fun getCachedUnlocks(player: Player): Set<String> {
+        return availableTitlesCache.computeIfAbsent(player.uniqueId) {
+            plugin.progressionManager.getUnlocks(player.uniqueId)
+        }
+    }
+
+    fun invalidateUnlockCache(uuid: UUID) {
+        availableTitlesCache.remove(uuid)
+    }
+
     fun getPlayerTitle(player: Player): String {
         val equipped = plugin.progressionManager.getEquippedTitle(player.uniqueId)
-        if (equipped != null && equipped in UNLOCK_TITLES.values) return equipped
+        if (equipped != null) {
+            val unlocks = getCachedUnlocks(player)
+            val titleKey = UNLOCK_TITLES.entries.firstOrNull { it.value == equipped }?.key
+            if (titleKey != null && titleKey in unlocks) return equipped
+        }
 
         val level = plugin.progressionManager.getLevel(player.uniqueId)
         return getDefaultTitle(level)

@@ -177,7 +177,10 @@ class ProgressionManager(private val plugin: ZombieRun) {
             10 -> unlock(uuid, "title_escape_expert", player, "§a解锁称号：§e「逃生专家」")
             15 -> unlock(uuid, "golden_pistol", player, "§a解锁金色手枪皮肤！")
             20 -> unlock(uuid, "title_elite_agent", player, "§a解锁称号：§e「精英特工」")
+            25 -> unlock(uuid, "title_light_of_hope", player, "§a解锁称号：§e「希望之光」")
             30 -> unlock(uuid, "title_legend", player, "§a解锁称号：§e「传奇」")
+            35 -> unlock(uuid, "title_butcher", player, "§a解锁称号：§e「屠夫」")
+            40 -> unlock(uuid, "title_undying", player, "§a解锁称号：§e「不死之身」")
             50 -> unlock(uuid, "golden_rifle", player, "§a解锁金色步枪皮肤！")
         }
     }
@@ -195,6 +198,7 @@ class ProgressionManager(private val plugin: ZombieRun) {
                 }
             }
         }
+        plugin.titleManager.invalidateUnlockCache(uuid)
         player.sendMessage(LegacyComponentSerializer.legacySection().deserialize(msg))
     }
 
