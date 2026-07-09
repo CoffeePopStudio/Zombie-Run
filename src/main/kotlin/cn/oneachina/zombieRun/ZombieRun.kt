@@ -24,6 +24,7 @@ class ZombieRun : JavaPlugin() {
     lateinit var startEffectManager: StartEffectManager
     lateinit var weaponManager: WeaponManager
     lateinit var coinManager: CoinManager
+    lateinit var progressionManager: ProgressionManager
     lateinit var shopGUI: ShopGUI
 
     override fun onEnable() {
@@ -42,6 +43,7 @@ class ZombieRun : JavaPlugin() {
         startEffectManager = StartEffectManager(this).apply { loadEffects() }
         weaponManager = WeaponManager(this).apply { loadWeapons() }
         coinManager = CoinManager(this).apply { init() }
+        progressionManager = ProgressionManager(this).apply { init() }
         shopGUI = ShopGUI(this)
 
         Bukkit.getGlobalRegionScheduler().runDelayed(this, { _ ->
@@ -76,6 +78,9 @@ class ZombieRun : JavaPlugin() {
         }
         if (this::gameManager.isInitialized) {
             gameManager.clear()
+        }
+        if (this::progressionManager.isInitialized) {
+            progressionManager.close()
         }
         if (this::buttonManager.isInitialized) {
             buttonManager.clear()
