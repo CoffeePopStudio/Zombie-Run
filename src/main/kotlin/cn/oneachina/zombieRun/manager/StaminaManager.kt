@@ -227,13 +227,14 @@ class StaminaManager(private val plugin: ZombieRun) {
             GameManager.Team.ZOMBIE_MAIN -> 500.0
             else -> return
         }
-        player.getAttribute(Attribute.MAX_HEALTH)?.baseValue = maxHealth
-        player.health = maxHealth
-
-        player.addPotionEffect(PotionEffect(PotionEffectType.STRENGTH, Int.MAX_VALUE, 0, false, false))
-        player.addPotionEffect(PotionEffect(PotionEffectType.SPEED, Int.MAX_VALUE, 0, false, false))
-        player.addPotionEffect(PotionEffect(PotionEffectType.JUMP_BOOST, Int.MAX_VALUE, 0, false, false))
-        player.addPotionEffect(PotionEffect(PotionEffectType.REGENERATION, Int.MAX_VALUE, 1, false, false))
+        player.scheduler.run(plugin, { _ ->
+            player.getAttribute(Attribute.MAX_HEALTH)?.baseValue = maxHealth
+            player.health = maxHealth
+            player.addPotionEffect(PotionEffect(PotionEffectType.STRENGTH, Int.MAX_VALUE, 0, false, false))
+            player.addPotionEffect(PotionEffect(PotionEffectType.SPEED, Int.MAX_VALUE, 0, false, false))
+            player.addPotionEffect(PotionEffect(PotionEffectType.JUMP_BOOST, Int.MAX_VALUE, 0, false, false))
+            player.addPotionEffect(PotionEffect(PotionEffectType.REGENERATION, Int.MAX_VALUE, 1, false, false))
+        }, null)
 
         if (team == GameManager.Team.ZOMBIE_MAIN) {
             Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { task ->
