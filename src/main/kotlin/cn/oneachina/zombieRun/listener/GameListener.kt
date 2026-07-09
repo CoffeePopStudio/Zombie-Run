@@ -53,22 +53,28 @@ class GameListener(
         when (plugin.gameManager.getGameStatus()) {
             GameManager.GameStatus.WAITING, GameManager.GameStatus.ENDED -> {
                 plugin.gameManager.setPlayerTeam(player, GameManager.Team.HUMAN)
-                plugin.respawnManager.teleportToPlayerInitialRespawn(player)
                 player.gameMode = GameMode.ADVENTURE
                 player.clearActivePotionEffects()
                 player.inventory.clear()
                 player.health = 20.0
+                Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
+                    plugin.respawnManager.teleportToPlayerInitialRespawn(player)
+                }, 1L)
             }
             GameManager.GameStatus.STARTING -> {
                 plugin.gameManager.setPlayerTeam(player, GameManager.Team.HUMAN)
-                plugin.respawnManager.teleportToPlayerInitialRespawn(player)
                 player.gameMode = GameMode.ADVENTURE
+                Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
+                    plugin.respawnManager.teleportToPlayerInitialRespawn(player)
+                }, 1L)
             }
             GameManager.GameStatus.RUNNING -> {
                 plugin.gameManager.setPlayerTeam(player, GameManager.Team.ZOMBIE)
-                plugin.respawnManager.teleportToZombieRespawn(player)
                 player.gameMode = GameMode.ADVENTURE
                 plugin.staminaManager.applyZombieEffects(player)
+                Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
+                    plugin.respawnManager.teleportToZombieRespawn(player)
+                }, 1L)
             }
         }
     }
