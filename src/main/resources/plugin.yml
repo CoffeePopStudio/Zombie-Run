@@ -9,10 +9,8 @@ authors: [ oneachina ]
 
 commands:
   zr:
-    description: 僵尸快跑插件管理命令
-    usage: /zr <reload|doors|spawn|region>
-    permission: zombie.run.admin
-    permission-message: §c你没有权限使用此命令！
+    description: 僵尸跑快插件命令
+    usage: /zr <help>
   start:
     description: 开始游戏
     usage: /start

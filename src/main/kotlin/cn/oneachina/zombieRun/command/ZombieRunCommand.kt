@@ -661,13 +661,14 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         alias: String,
         args: Array<out String>
     ): MutableList<String>? {
-        if (!sender.hasPermission("zombie.run.admin")) return mutableListOf()
+        val isAdmin = sender.hasPermission("zombie.run.admin")
+        val adminCmds = listOf("start", "spawn", "doors", "buttons", "reload", "open", "close", "reset", "xp", "level")
+        val playerCmds = listOf("door", "select", "unselect", "randomgun", "lobby", "profile", "quest", "title", "transfer", "shop", "coins")
 
         return when (args.size) {
             1 -> {
-                listOf("start", "door", "spawn", "doors", "buttons", "reload", "open", "close", "reset", "select", "unselect", "randomgun", "lobby", "profile", "quest", "title", "xp", "level")
-                    .filter { it.startsWith(args[0].lowercase()) }
-                    .toMutableList()
+                val all = playerCmds + if (isAdmin) adminCmds else emptyList()
+                all.filter { it.startsWith(args[0].lowercase()) }.toMutableList()
             }
             2 -> {
                 when (args[0].lowercase()) {
@@ -675,12 +676,15 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                         (1..9).map { it.toString() }.filter { it.startsWith(args[1]) }.toMutableList()
                     }
                     "spawn" -> {
+                        if (!isAdmin) return mutableListOf()
                         listOf("add", "remove", "list").filter { it.startsWith(args[1].lowercase()) }.toMutableList()
                     }
                     "doors" -> {
+                        if (!isAdmin) return mutableListOf()
                         listOf("add", "remove", "list").filter { it.startsWith(args[1].lowercase()) }.toMutableList()
                     }
                     "buttons" -> {
+                        if (!isAdmin) return mutableListOf()
                         listOf("add", "remove", "list").filter { it.startsWith(args[1].lowercase()) }.toMutableList()
                     }
                     "select" -> {
@@ -688,20 +692,39 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                         (1..count).map { it.toString() }.filter { it.startsWith(args[1]) }.toMutableList()
                     }
                     "xp" -> {
+                        if (!isAdmin) return mutableListOf()
                         listOf("add", "set").filter { it.startsWith(args[1].lowercase()) }.toMutableList()
                     }
                     "level" -> {
+                        if (!isAdmin) return mutableListOf()
                         listOf("set").filter { it.startsWith(args[1].lowercase()) }.toMutableList()
+                    }
+                    "coins" -> {
+                        if (!isAdmin) {
+                            listOf("top").filter { it.startsWith(args[1].lowercase()) }.toMutableList()
+                        } else {
+                            listOf("add", "remove", "set", "get", "top").filter { it.startsWith(args[1].lowercase()) }.toMutableList()
+                        }
                     }
                     else -> mutableListOf()
                 }
             }
             else -> {
                 when (args[0].lowercase()) {
-                    "spawn" -> TabCompleters.spawn(plugin, args)
-                    "doors" -> TabCompleters.doors(plugin, args)
-                    "buttons" -> TabCompleters.buttons(plugin, args)
+                    "spawn" -> {
+                        if (!isAdmin) return mutableListOf()
+                        TabCompleters.spawn(plugin, args)
+                    }
+                    "doors" -> {
+                        if (!isAdmin) return mutableListOf()
+                        TabCompleters.doors(plugin, args)
+                    }
+                    "buttons" -> {
+                        if (!isAdmin) return mutableListOf()
+                        TabCompleters.buttons(plugin, args)
+                    }
                     "xp" -> {
+                        if (!isAdmin) return mutableListOf()
                         if (args.size == 2) listOf("add", "set").filter { it.startsWith(args[1].lowercase()) }.toMutableList()
                         else null
                     }
