@@ -159,8 +159,6 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
         if (attackerTeam == GameManager.Team.HUMAN &&
             (victimTeam == GameManager.Team.ZOMBIE || victimTeam == GameManager.Team.ZOMBIE_MAIN)) {
 
-            victim.velocity = victim.velocity.add(attacker.location.direction.setY(-1.0).normalize().multiply(0.3))
-
             val damage = event.finalDamage * 2
             attacker.sendActionBar(Component.text("造成伤害: ${String.format("%.1f", damage)}").color(NamedTextColor.RED))
             plugin.progressionListener.onDealDamage(attacker, event.finalDamage)

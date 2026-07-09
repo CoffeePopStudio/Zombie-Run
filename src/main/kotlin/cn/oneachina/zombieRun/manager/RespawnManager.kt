@@ -131,7 +131,12 @@ class RespawnManager(private val plugin: ZombieRun) {
     }
 
     fun selectRespawn(player: Player): Respawn {
-        return getDefaultRespawn()
+        return when (plugin.gameManager.getPlayerTeam(player)) {
+            GameManager.Team.HUMAN -> getPlayerInitialRespawn() ?: getDefaultRespawn()
+            GameManager.Team.ZOMBIE -> getZombieRespawn() ?: getDefaultRespawn()
+            GameManager.Team.ZOMBIE_MAIN -> getZombieMainRespawn() ?: getDefaultRespawn()
+            else -> getWaitRespawn() ?: getDefaultRespawn()
+        }
     }
 
     fun getDefaultRespawn(): Respawn {

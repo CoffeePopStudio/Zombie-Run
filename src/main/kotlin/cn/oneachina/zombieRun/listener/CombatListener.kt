@@ -35,7 +35,7 @@ class CombatListener(
 
         if (attackerTeam == GameManager.Team.HUMAN &&
             (victimTeam == GameManager.Team.ZOMBIE || victimTeam == GameManager.Team.ZOMBIE_MAIN)) {
-            victim.velocity = victim.velocity.setY(-0.3)
+            victim.velocity = victim.velocity.add(attacker.location.direction.setY(-1.0).normalize().multiply(0.3))
             return
         }
 

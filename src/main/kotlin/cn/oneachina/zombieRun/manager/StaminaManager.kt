@@ -45,6 +45,7 @@ class StaminaManager(private val plugin: ZombieRun) {
     private val staminaTask: CopyOnWriteArrayList<ScheduledTask> = CopyOnWriteArrayList()
     private val actionBarTask: CopyOnWriteArrayList<ScheduledTask> = CopyOnWriteArrayList()
     private val zombieHealthBarTask: CopyOnWriteArrayList<ScheduledTask> = CopyOnWriteArrayList()
+    private val zombieMainParticleTasks: ConcurrentHashMap<Player, ScheduledTask> = ConcurrentHashMap()
 
     fun init() {
         startStaminaRegenTask()
@@ -191,7 +192,7 @@ class StaminaManager(private val plugin: ZombieRun) {
                 val team = plugin.gameManager.getPlayerTeam(player)
                 if (team == GameManager.Team.ZOMBIE || team == GameManager.Team.ZOMBIE_MAIN) {
                     player.scheduler.run(plugin, { _ ->
-                        player.addPotionEffect(PotionEffect(PotionEffectType.REGENERATION, 40, 0, false, false))
+                        player.addPotionEffect(PotionEffect(PotionEffectType.SPEED, 40, 0, false, false))
                     }, null)
                 }
             }
@@ -236,15 +237,18 @@ class StaminaManager(private val plugin: ZombieRun) {
             player.addPotionEffect(PotionEffect(PotionEffectType.REGENERATION, Int.MAX_VALUE, 1, false, false))
         }, null)
 
-        if (team == GameManager.Team.ZOMBIE_MAIN) {
-            Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { task ->
+        zombieMainParticleTasks[player]?.cancel()
+        if (team == GameManager.Team.ZOMBIE_MAIN && player.isOnline) {
+            val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { t ->
                 if (!player.isOnline || plugin.gameManager.getPlayerTeam(player) != GameManager.Team.ZOMBIE_MAIN) {
-                    task.cancel()
+                    zombieMainParticleTasks.remove(player)
+                    t.cancel()
                     return@runAtFixedRate
                 }
                 player.world.spawnParticle(Particle.DRAGON_BREATH, player.location.clone().add(0.0, 0.5, 0.0), 3,
                     0.5, 1.0, 0.5, 0.0)
             }, 1L, 2L)
+            zombieMainParticleTasks[player] = task
         }
     }
 
@@ -276,9 +280,11 @@ class StaminaManager(private val plugin: ZombieRun) {
         staminaTask.forEach { it.cancel() }
         actionBarTask.forEach { it.cancel() }
         zombieHealthBarTask.forEach { it.cancel() }
+        zombieMainParticleTasks.values.forEach { it.cancel() }
         staminaTask.clear()
         actionBarTask.clear()
         zombieHealthBarTask.clear()
+        zombieMainParticleTasks.clear()
         playerStamina.clear()
     }
 }

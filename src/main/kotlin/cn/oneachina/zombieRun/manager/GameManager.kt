@@ -196,6 +196,7 @@ class GameManager(private val plugin: ZombieRun) {
         if (status != GameStatus.RUNNING) return
         status = GameStatus.ENDED
 
+        alphaZombie = null
         plugin.doorManager.reset()
 
         val title = when (winner) {

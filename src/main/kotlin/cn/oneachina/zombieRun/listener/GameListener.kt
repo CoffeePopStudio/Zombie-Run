@@ -435,15 +435,17 @@ class GameListener(
         val msg = rawMsg.replace("&", "")
 
         val title = plugin.titleManager.getPlayerTitle(player)
-        val titlePrefix = if (title.isNotEmpty() && plugin.gameManager.getGameStatus() == GameManager.GameStatus.RUNNING) {
+        val gameStatus = plugin.gameManager.getGameStatus()
+        val titlePrefix = if (title.isNotEmpty() && gameStatus == GameManager.GameStatus.RUNNING) {
             Component.text("[$title] ", NamedTextColor.GOLD)
         } else {
             Component.empty()
         }
-        val prefix = titlePrefix.append(when (team) {
-            GameManager.Team.HUMAN -> Component.text("[人类] ", NamedTextColor.AQUA)
-            GameManager.Team.ZOMBIE -> Component.text("[僵尸] ", NamedTextColor.DARK_GREEN)
-            GameManager.Team.ZOMBIE_MAIN -> Component.text("[母体] ", NamedTextColor.LIGHT_PURPLE)
+        val prefix = titlePrefix.append(when {
+            gameStatus == GameManager.GameStatus.ENDED -> Component.text("[结束] ", NamedTextColor.RED)
+            team == GameManager.Team.HUMAN -> Component.text("[人类] ", NamedTextColor.AQUA)
+            team == GameManager.Team.ZOMBIE -> Component.text("[僵尸] ", NamedTextColor.DARK_GREEN)
+            team == GameManager.Team.ZOMBIE_MAIN -> Component.text("[母体] ", NamedTextColor.LIGHT_PURPLE)
             else -> Component.text("[等待] ", NamedTextColor.GRAY)
         })
 
