@@ -16,8 +16,6 @@ import org.bukkit.persistence.PersistentDataType
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.min
-import kotlin.math.toDegrees
-import kotlin.math.toRadians
 
 class WeaponManager(private val plugin: ZombieRun) {
 
@@ -136,7 +134,7 @@ class WeaponManager(private val plugin: ZombieRun) {
                             target.velocity = target.velocity.add(spreadDir.clone().multiply(config.knockback))
                         }
                         if (isHeadshot) {
-                            target.world.spawnParticle(Particle.CRIT, rayTrace.hitPosition, 5, 0.3, 0.3, 0.3, 0.0)
+                            target.world.spawnParticle(Particle.CRIT, target.location.clone().add(0.0, target.eyeHeight - 0.2, 0.0), 5, 0.3, 0.3, 0.3, 0.0)
                         }
                     }, null)
 
