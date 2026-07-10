@@ -94,12 +94,13 @@ object TabCompleters {
         }
     }
 
-    fun buttons(plugin: ZombieRun, args: Array<out String>): MutableList<String> {
+    fun buttons(plugin: ZombieRun, args: Array<out String>, sender: CommandSender): MutableList<String> {
         if (args.size < 2) return mutableListOf()
         return when (args[1].lowercase()) {
             "add" -> {
                 when (args.size) {
-                    3, 4 -> mutableListOf("~")
+                    3 -> mutableListOf(getTargetCoord(sender, 'x'))
+                    4 -> mutableListOf(getTargetCoord(sender, 'y'))
                     5 -> {
                         listOf("normal", "tp", "escape")
                             .filter { it.startsWith(args[4].lowercase()) }
@@ -110,7 +111,7 @@ object TabCompleters {
                         val mode = args[4].lowercase()
                         when (mode) {
                             "normal" -> listOf("<门号>").filter { it.startsWith(args[5]) }
-                            "tp" -> mutableListOf("~")
+                            "tp" -> mutableListOf(getTargetCoord(sender, 'x'))
                             "escape" -> mutableListOf()
                             else -> mutableListOf()
                         }
@@ -119,7 +120,7 @@ object TabCompleters {
                     7 -> {
                         val mode = args[4].lowercase()
                         when (mode) {
-                            "tp" -> mutableListOf("~")
+                            "tp" -> mutableListOf(getTargetCoord(sender, 'y'))
                             else -> mutableListOf()
                         }
                     }
@@ -127,7 +128,7 @@ object TabCompleters {
                     8 -> {
                         val mode = args[4].lowercase()
                         when (mode) {
-                            "tp" -> mutableListOf("~")
+                            "tp" -> mutableListOf(getTargetCoord(sender, 'z'))
                             else -> mutableListOf()
                         }
                     }
@@ -135,7 +136,7 @@ object TabCompleters {
                     9 -> {
                         val mode = args[4].lowercase()
                         when (mode) {
-                            "tp" -> mutableListOf("~")
+                            "tp" -> mutableListOf(getTargetCoord(sender, 'x'))
                             else -> mutableListOf()
                         }
                     }
@@ -143,7 +144,7 @@ object TabCompleters {
                     10 -> {
                         val mode = args[4].lowercase()
                         when (mode) {
-                            "tp" -> mutableListOf("~")
+                            "tp" -> mutableListOf(getTargetCoord(sender, 'y'))
                             else -> mutableListOf()
                         }
                     }
@@ -151,7 +152,7 @@ object TabCompleters {
                     11 -> {
                         val mode = args[4].lowercase()
                         when (mode) {
-                            "tp" -> mutableListOf("~")
+                            "tp" -> mutableListOf(getTargetCoord(sender, 'z'))
                             else -> mutableListOf()
                         }
                     }

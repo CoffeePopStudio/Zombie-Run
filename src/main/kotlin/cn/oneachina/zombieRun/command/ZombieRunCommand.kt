@@ -741,7 +741,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                     }
                     "buttons" -> {
                         if (!isAdmin) return mutableListOf()
-                        TabCompleters.buttons(plugin, args)
+                        TabCompleters.buttons(plugin, args, sender)
                     }
                     "xp" -> {
                         if (!isAdmin) return mutableListOf()
