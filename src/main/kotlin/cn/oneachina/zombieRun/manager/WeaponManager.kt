@@ -1,58 +1,69 @@
 package cn.oneachina.zombieRun.manager
 
 import cn.oneachina.zombieRun.ZombieRun
-import cn.oneachina.zombieRun.model.AmmoConfig
+import cn.oneachina.zombieRun.model.AmmoCategory
 import cn.oneachina.zombieRun.model.WeaponConfig
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
+import org.bukkit.Particle
 import org.bukkit.Sound
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.min
+import kotlin.math.toDegrees
+import kotlin.math.toRadians
 
 class WeaponManager(private val plugin: ZombieRun) {
 
     private val weaponIdKey = NamespacedKey("zombie-run", "weapon_id")
-    private val ammoKey = NamespacedKey("zombie-run", "ammo")
+    private val magazineKey = NamespacedKey("zombie-run", "magazine")
+    private val ammoCatKey = NamespacedKey("zombie-run", "ammo_cat")
+    private val reloadKey = NamespacedKey("zombie-run", "reloading")
+    private val shotCountKey = NamespacedKey("zombie-run", "shot_count")
 
     private var weapons: Map<String, WeaponConfig> = emptyMap()
-    private var ammoItems: Map<String, AmmoConfig> = emptyMap()
+    private var ammoCategories: Map<String, AmmoCategory> = emptyMap()
     private val cooldowns = ConcurrentHashMap<UUID, Int>()
+    private val adsState = ConcurrentHashMap<UUID, Boolean>()
+    private val adsStartTime = ConcurrentHashMap<UUID, Long>()
 
     fun loadWeapons() {
         weapons = plugin.configManager.loadWeaponConfigs()
-        ammoItems = plugin.configManager.loadAmmoConfigs()
-        plugin.logger.info("已加载 ${weapons.size} 把武器, ${ammoItems.size} 种弹药")
+        ammoCategories = plugin.configManager.loadAmmoCategories()
+        plugin.logger.info("已加载 ${weapons.size} 把武器, ${ammoCategories.size} 种弹药类别")
     }
 
     fun getWeaponConfig(id: String): WeaponConfig? = weapons[id]
-
     fun getAllWeaponConfigs(): Collection<WeaponConfig> = weapons.values
-
     fun getWeaponIds(): List<String> = weapons.keys.toList()
+    fun getAmmoCategory(id: String): AmmoCategory? = ammoCategories[id]
 
     fun buildWeaponItem(id: String): ItemStack? {
         val config = weapons[id] ?: return null
         val material = Material.matchMaterial(config.material) ?: Material.WOODEN_HOE
         val item = ItemStack(material)
         val meta = item.itemMeta ?: return null
-        val customModelDataComponent = meta.customModelDataComponent
+        val cmdComp = meta.customModelDataComponent
         meta.displayName(LegacyComponentSerializer.legacySection().deserialize(config.name.replace("&", "§")))
         val lore: MutableList<Component> = config.lore
             .map { LegacyComponentSerializer.legacySection().deserialize(it.replace("&", "§")) }
             .toMutableList()
         meta.lore(lore)
         if (!config.customModelData.floats().isEmpty()) {
-            customModelDataComponent.floats = config.customModelData.floats()
-            meta.setCustomModelDataComponent(customModelDataComponent)
+            cmdComp.floats = config.customModelData.floats()
+            meta.setCustomModelDataComponent(cmdComp)
         }
         meta.persistentDataContainer.set(weaponIdKey, PersistentDataType.STRING, id)
-        meta.persistentDataContainer.set(ammoKey, PersistentDataType.INTEGER, config.maxAmmo)
+        meta.persistentDataContainer.set(magazineKey, PersistentDataType.INTEGER, config.magazineSize)
+        meta.persistentDataContainer.set(ammoCatKey, PersistentDataType.STRING, config.ammoCategory)
+        meta.persistentDataContainer.set(reloadKey, PersistentDataType.INTEGER, 0)
+        meta.persistentDataContainer.set(shotCountKey, PersistentDataType.INTEGER, 0)
         item.itemMeta = meta
         return item
     }
@@ -84,11 +95,15 @@ class WeaponManager(private val plugin: ZombieRun) {
         val pdc = meta.persistentDataContainer
         val weaponId = pdc.get(weaponIdKey, PersistentDataType.STRING) ?: return false
         val config = weapons[weaponId] ?: return false
-        var ammo = pdc.get(ammoKey, PersistentDataType.INTEGER) ?: 0
+        var magazine = pdc.get(magazineKey, PersistentDataType.INTEGER) ?: 0
+        var shotCount = pdc.get(shotCountKey, PersistentDataType.INTEGER) ?: 0
+        val reloading = (pdc.get(reloadKey, PersistentDataType.INTEGER) ?: 0) > 0
 
-        if (ammo <= 0) {
-            player.playSound(player.location, Sound.BLOCK_DISPENSER_FAIL, 0.5f, 1.5f)
-            player.sendActionBar(Component.text("弹药耗尽", NamedTextColor.RED))
+        if (reloading || magazine <= 0) {
+            if (magazine <= 0 && !reloading) {
+                player.playSound(player.location, Sound.BLOCK_DISPENSER_FAIL, 0.5f, 1.5f)
+                player.sendActionBar(Component.text("弹药耗尽", NamedTextColor.RED))
+            }
             return false
         }
 
@@ -97,135 +112,251 @@ class WeaponManager(private val plugin: ZombieRun) {
         if (now - lastShot < config.cooldownTicks) return false
         cooldowns[player.uniqueId] = now
 
-        val world = player.world
+        val ads = adsState.getOrDefault(player.uniqueId, false)
+        val currentSpreadMultiplier = if (ads) config.adsSpreadMult else 1.0
+        val spreadFromRecoil = shotCount * config.spreadPerShot
+        val finalSpread = (config.spread + spreadFromRecoil) * currentSpreadMultiplier
+
         val eyeLoc = player.eyeLocation
-        val direction = eyeLoc.direction
-        val maxRange = config.range.toDouble()
+        val baseDir = eyeLoc.direction
 
         for (i in 0 until config.pellets) {
-            val spreadDir = if (config.pellets > 1) {
-                val yawOffset = (Math.random() - 0.5) * 0.3
-                val pitchOffset = (Math.random() - 0.5) * 0.3
-                val loc = eyeLoc.clone()
-                loc.yaw += Math.toDegrees(yawOffset).toFloat()
-                loc.pitch += Math.toDegrees(pitchOffset).toFloat()
-                loc.direction
-            } else {
-                direction
-            }
-
-            val rayTrace = world.rayTraceEntities(
-                eyeLoc, spreadDir, maxRange, 0.1
-            ) { it is Player && it != player }
+            val spreadDir = applySpreadAndRecoil(baseDir, config, shotCount, ads, finalSpread, config.pellets > 1)
+            val rayTrace = player.world.rayTraceEntities(eyeLoc, spreadDir, config.range.toDouble(), 0.1) { it is Player && it != player }
             if (rayTrace != null) {
                 val target = rayTrace.hitEntity as? Player ?: continue
                 val targetTeam = plugin.gameManager.getPlayerTeam(target)
                 if (targetTeam == GameManager.Team.ZOMBIE || targetTeam == GameManager.Team.ZOMBIE_MAIN) {
-                    target.damage(config.damage)
-                    if (config.knockback > 0) {
-                        target.velocity = target.velocity.add(
-                            spreadDir.clone().multiply(config.knockback)
-                        )
+                    val isHeadshot = checkHeadshot(target, rayTrace.hitPosition.y)
+                    val dmg = config.damage * (if (isHeadshot) config.headshotMult else 1.0)
+
+                    target.scheduler.run(plugin, { _ ->
+                        target.damage(dmg)
+                        if (config.knockback > 0) {
+                            target.velocity = target.velocity.add(spreadDir.clone().multiply(config.knockback))
+                        }
+                        if (isHeadshot) {
+                            target.world.spawnParticle(Particle.CRIT, rayTrace.hitPosition, 5, 0.3, 0.3, 0.3, 0.0)
+                        }
+                    }, null)
+
+                    target.sendActionBar(LegacyComponentSerializer.legacySection().deserialize("§c-${dmg.toInt()}"))
+                    if (isHeadshot) {
+                        plugin.progressionManager.addXp(player, 5, "爆头")
                     }
+                }
+                if (config.hitSound != null) {
+                    try {
+                        val s = Sound.valueOf(config.hitSound.uppercase())
+                        player.playSound(player.location, s, 0.5f, 1.5f)
+                    } catch (_: IllegalArgumentException) {}
                 }
             }
         }
 
         if (config.sound != null) {
             try {
-                val sound = Sound.valueOf(config.sound.uppercase())
-                player.playSound(player.location, sound, 0.8f, 1.2f)
+                val s = Sound.valueOf(config.sound.uppercase())
+                player.playSound(player.location, s, 0.8f, 1.2f)
             } catch (_: IllegalArgumentException) {}
         }
 
-        ammo -= 1
-        pdc.set(ammoKey, PersistentDataType.INTEGER, ammo)
+        magazine -= 1
+        shotCount += 1
+        pdc.set(magazineKey, PersistentDataType.INTEGER, magazine)
+        pdc.set(shotCountKey, PersistentDataType.INTEGER, shotCount)
         item.itemMeta = meta
 
         val barColor = when {
-            ammo.toDouble() / config.maxAmmo > 0.5 -> NamedTextColor.GREEN
-            ammo.toDouble() / config.maxAmmo > 0.25 -> NamedTextColor.YELLOW
+            magazine.toDouble() / config.magazineSize > 0.5 -> NamedTextColor.GREEN
+            magazine.toDouble() / config.magazineSize > 0.25 -> NamedTextColor.YELLOW
             else -> NamedTextColor.RED
         }
         player.sendActionBar(
-            Component.text(ammo, barColor)
+            Component.text(magazine, barColor)
                 .append(Component.text(" / ", NamedTextColor.GRAY))
-                .append(Component.text(config.maxAmmo))
+                .append(Component.text(config.magazineSize))
         )
         return true
     }
 
-    fun reloadWeapon(player: Player, weaponStack: ItemStack): Boolean {
+    private fun applySpreadAndRecoil(
+        baseDir: org.bukkit.util.Vector,
+        config: WeaponConfig,
+        shotCount: Int,
+        ads: Boolean,
+        spreadRad: Double,
+        multiPellet: Boolean
+    ): org.bukkit.util.Vector {
+        val dir = baseDir.clone()
+
+        val recoilIdx = (shotCount % config.recoil.size).coerceIn(0, config.recoil.size - 1)
+        val recoilAngle = config.recoil[recoilIdx] * (if (ads) config.adsRecoilMult else 1.0)
+        dir.y += Math.toRadians(recoilAngle)
+
+        if (multiPellet) {
+            val yawOffset = (Math.random() - 0.5) * spreadRad * 2
+            val pitchOffset = (Math.random() - 0.5) * spreadRad * 2
+            val loc = org.bukkit.Location(null, 0.0, 0.0, 0.0)
+            loc.direction = dir
+            loc.yaw += Math.toDegrees(yawOffset).toFloat()
+            loc.pitch += Math.toDegrees(pitchOffset).toFloat()
+            return loc.direction
+        }
+
+        val yawOffset = (Math.random() - 0.5) * spreadRad
+        val pitchOffset = (Math.random() - 0.5) * spreadRad
+        val loc = org.bukkit.Location(null, 0.0, 0.0, 0.0)
+        loc.direction = dir
+        loc.yaw += Math.toDegrees(yawOffset).toFloat()
+        loc.pitch += Math.toDegrees(pitchOffset).toFloat()
+        return loc.direction
+    }
+
+    private fun checkHeadshot(player: Player, hitY: Double): Boolean {
+        val feetY = player.location.y
+        val eyeY = feetY + player.eyeHeight
+        val headBottom = eyeY - 0.4
+        val headTop = eyeY + 0.3
+        return hitY in headBottom..headTop
+    }
+
+    fun handleReload(player: Player, weaponStack: ItemStack): Boolean {
         val meta = weaponStack.itemMeta ?: return false
         val pdc = meta.persistentDataContainer
         val weaponId = pdc.get(weaponIdKey, PersistentDataType.STRING) ?: return false
         val config = weapons[weaponId] ?: return false
-        var ammo = pdc.get(ammoKey, PersistentDataType.INTEGER) ?: 0
+        val magazine = pdc.get(magazineKey, PersistentDataType.INTEGER) ?: 0
+        val reloadProgress = pdc.get(reloadKey, PersistentDataType.INTEGER) ?: 0
 
-        if (ammo >= config.maxAmmo) {
-            player.sendActionBar(Component.text("弹药已满", NamedTextColor.GREEN))
+        if (magazine >= config.magazineSize) {
+            player.sendActionBar(Component.text("弹匣已满", NamedTextColor.GREEN))
             return false
         }
 
-        val inv = player.inventory
-        var foundAmmoSlot = -1
-        for (i in 0 until inv.size) {
-            val stack = inv.getItem(i) ?: continue
-            val ammoMeta = stack.itemMeta ?: continue
-            val stackAmmoType = ammoMeta.persistentDataContainer.get(
-                NamespacedKey("zombie-run", "ammo_type"), PersistentDataType.STRING
-            ) ?: continue
-            if (stackAmmoType == config.ammoType) {
-                foundAmmoSlot = i
-                break
+        val newProgress = reloadProgress + 1
+        if (newProgress >= config.reloadTimeTicks) {
+            val need = config.magazineSize - magazine
+            val ammoInInv = countAmmoInInventory(player, config.ammoCategory)
+            if (ammoInInv <= 0) {
+                pdc.set(reloadKey, PersistentDataType.INTEGER, 0)
+                weaponStack.itemMeta = meta
+                player.sendActionBar(Component.text("没有可用弹药", NamedTextColor.RED))
+                return false
             }
+            val actual = min(need, ammoInInv)
+            val newMagazine = magazine + actual
+            consumeAmmoFromInventory(player, config.ammoCategory, actual)
+
+            pdc.set(magazineKey, PersistentDataType.INTEGER, newMagazine)
+            pdc.set(reloadKey, PersistentDataType.INTEGER, 0)
+            weaponStack.itemMeta = meta
+
+            player.playSound(player.location, Sound.BLOCK_IRON_DOOR_CLOSE, 1f, 1.5f)
+            player.sendActionBar(
+                Component.text("装填完成 ", NamedTextColor.GREEN)
+                    .append(Component.text(newMagazine, NamedTextColor.GRAY))
+                    .append(Component.text(" / "))
+                    .append(Component.text(config.magazineSize))
+            )
+            return true
         }
 
-        if (foundAmmoSlot == -1) {
-            player.playSound(player.location, Sound.BLOCK_DISPENSER_FAIL, 0.5f, 1.5f)
-            player.sendActionBar(Component.text("没有匹配的弹药", NamedTextColor.RED))
-            return false
-        }
-
-        ammo = config.maxAmmo
-        pdc.set(ammoKey, PersistentDataType.INTEGER, ammo)
+        pdc.set(reloadKey, PersistentDataType.INTEGER, newProgress)
         weaponStack.itemMeta = meta
 
-        val ammoStack = inv.getItem(foundAmmoSlot)
-        if (ammoStack != null && ammoStack.amount > 1) {
-            ammoStack.amount -= 1
-        } else {
-            inv.setItem(foundAmmoSlot, null)
-        }
-
-        player.playSound(player.location, Sound.BLOCK_IRON_DOOR_CLOSE, 1f, 1.5f)
+        val percent = (newProgress.toDouble() / config.reloadTimeTicks * 100).toInt()
+        val filled = "█".repeat(percent / 5)
+        val empty = "░".repeat(20 - percent / 5)
         player.sendActionBar(
-            Component.text("装填完成 ", NamedTextColor.GREEN)
-                .append(Component.text(ammo, NamedTextColor.GRAY))
-                .append(Component.text(" / "))
-                .append(Component.text(config.maxAmmo))
+            LegacyComponentSerializer.legacySection().deserialize("§e装填中... $filled$empty $percent%")
         )
-        return true
+        return false
     }
 
-    fun buildAmmoItem(ammoId: String, amount: Int): ItemStack? {
-        val config = ammoItems[ammoId] ?: return null
-        val material = Material.matchMaterial(config.material) ?: Material.PAPER
+    fun cancelReload(player: Player, weaponStack: ItemStack) {
+        val meta = weaponStack.itemMeta ?: return
+        meta.persistentDataContainer.set(reloadKey, PersistentDataType.INTEGER, 0)
+        weaponStack.itemMeta = meta
+    }
+
+    private fun countAmmoInInventory(player: Player, category: String): Int {
+        var total = 0
+        for (item in player.inventory.contents) {
+            if (item == null) continue
+            val ammoCat = item.itemMeta?.persistentDataContainer?.get(ammoCatKey, PersistentDataType.STRING)
+            if (ammoCat == category) total += item.amount
+        }
+        return total
+    }
+
+    private fun consumeAmmoFromInventory(player: Player, category: String, amount: Int) {
+        var remaining = amount
+        val inv = player.inventory
+        for (i in 0 until inv.size) {
+            if (remaining <= 0) break
+            val item = inv.getItem(i) ?: continue
+            val ammoCat = item.itemMeta?.persistentDataContainer?.get(ammoCatKey, PersistentDataType.STRING)
+            if (ammoCat == category) {
+                val take = min(remaining, item.amount)
+                if (item.amount <= take) {
+                    inv.setItem(i, null)
+                } else {
+                    item.amount -= take
+                }
+                remaining -= take
+            }
+        }
+    }
+
+    fun buildAmmoItem(category: String, amount: Int): ItemStack? {
+        val cat = ammoCategories[category] ?: return null
+        val material = Material.matchMaterial(cat.itemMaterial) ?: Material.PAPER
         val item = ItemStack(material, amount)
         val meta = item.itemMeta ?: return null
-        val customModelDataComponent = meta.customModelDataComponent
-        meta.displayName(LegacyComponentSerializer.legacySection().deserialize(config.name.replace("&", "§")))
-        if (config.lore.isNotEmpty()) {
-            meta.lore = config.lore.map { it.replace("&", "§") }
+        val cmdComp = meta.customModelDataComponent
+        meta.displayName(LegacyComponentSerializer.legacySection().deserialize(cat.name.replace("&", "§")))
+        if (cat.customModelData > 0) {
+            cmdComp.floats = listOf(cat.customModelData.toFloat())
+            meta.setCustomModelDataComponent(cmdComp)
         }
-        if (!config.customModelData.floats().isEmpty()) {
-            customModelDataComponent.floats = config.customModelData.floats()
-            meta.setCustomModelDataComponent(customModelDataComponent)
-        }
-        meta.persistentDataContainer.set(
-            NamespacedKey("zombie-run", "ammo_type"), PersistentDataType.STRING, ammoId
-        )
+        meta.persistentDataContainer.set(ammoCatKey, PersistentDataType.STRING, category)
         item.itemMeta = meta
         return item
+    }
+
+    fun setAds(player: Player, ads: Boolean) {
+        if (ads) {
+            adsState[player.uniqueId] = true
+            adsStartTime[player.uniqueId] = System.currentTimeMillis()
+            player.scheduler.run(plugin, { _ ->
+                val attr = player.getAttribute(org.bukkit.attribute.Attribute.MOVEMENT_SPEED)
+                attr?.baseValue = (attr?.baseValue ?: 0.1) * 0.4
+                player.addPotionEffect(org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.SLOWNESS, -1, 0, false, false))
+            }, null)
+        } else {
+            adsState[player.uniqueId] = false
+            player.scheduler.run(plugin, { _ ->
+                val attr = player.getAttribute(org.bukkit.attribute.Attribute.MOVEMENT_SPEED)
+                attr?.baseValue = 0.1
+                player.removePotionEffect(org.bukkit.potion.PotionEffectType.SLOWNESS)
+            }, null)
+        }
+    }
+
+    fun isAds(player: Player): Boolean = adsState.getOrDefault(player.uniqueId, false)
+    fun getAdsStartTime(player: Player): Long = adsStartTime.getOrDefault(player.uniqueId, 0L)
+
+    fun isReloading(item: ItemStack): Boolean {
+        return (item.itemMeta?.persistentDataContainer?.get(reloadKey, PersistentDataType.INTEGER) ?: 0) > 0
+    }
+
+    fun getMagazine(item: ItemStack): Int {
+        return item.itemMeta?.persistentDataContainer?.get(magazineKey, PersistentDataType.INTEGER) ?: 0
+    }
+
+    fun removeAds(player: Player) {
+        adsState.remove(player.uniqueId)
+        adsStartTime.remove(player.uniqueId)
     }
 }
