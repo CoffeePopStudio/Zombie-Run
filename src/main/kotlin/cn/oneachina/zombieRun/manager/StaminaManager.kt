@@ -240,7 +240,7 @@ class StaminaManager(private val plugin: ZombieRun) {
                     t.cancel()
                     return@runAtFixedRate
                 }
-                player.world.spawnParticle(Particle.DRAGON_BREATH, player.location.clone().add(0.0, 0.5, 0.0), 3,
+                player.world.spawnParticle(Particle.SPELL, player.location.clone().add(0.0, 0.5, 0.0), 3,
                     0.5, 1.0, 0.5, 0.0)
             }, 1L, 2L)
             zombieMainParticleTasks[player] = task
