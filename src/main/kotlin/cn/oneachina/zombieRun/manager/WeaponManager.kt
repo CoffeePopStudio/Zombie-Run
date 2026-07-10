@@ -30,6 +30,7 @@ class WeaponManager(private val plugin: ZombieRun) {
     private val cooldowns = ConcurrentHashMap<UUID, Int>()
     private val adsState = ConcurrentHashMap<UUID, Boolean>()
     private val adsStartTime = ConcurrentHashMap<UUID, Long>()
+    private val autoFireTasks = ConcurrentHashMap<UUID, io.papermc.paper.threadedregions.scheduler.ScheduledTask?>()
 
     fun loadWeapons() {
         weapons = plugin.configManager.loadWeaponConfigs()
@@ -357,5 +358,45 @@ class WeaponManager(private val plugin: ZombieRun) {
     fun removeAds(player: Player) {
         adsState.remove(player.uniqueId)
         adsStartTime.remove(player.uniqueId)
+    }
+
+    fun startAutoFire(player: Player) {
+        val weaponStack = player.inventory.itemInMainHand
+        val weaponId = getWeaponId(weaponStack) ?: return
+        val config = weapons[weaponId] ?: return
+
+        if (autoFireTasks.containsKey(player.uniqueId)) return
+
+        val task = player.scheduler.runAtFixedRate(plugin, { t ->
+            val currentItem = player.inventory.itemInMainHand
+            val currentId = getWeaponId(currentItem)
+            if (currentId != weaponId) {
+                stopAutoFire(player)
+                t.cancel()
+                return@runAtFixedRate
+            }
+            if (isReloading(currentItem)) return@runAtFixedRate
+            if (getMagazine(currentItem) <= 0) {
+                stopAutoFire(player)
+                t.cancel()
+                return@runAtFixedRate
+            }
+            if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
+                stopAutoFire(player)
+                t.cancel()
+                return@runAtFixedRate
+            }
+            handleShoot(player, currentItem)
+        }, null, 0L, config.cooldownTicks.toLong())
+
+        autoFireTasks[player.uniqueId] = task
+    }
+
+    fun stopAutoFire(player: Player) {
+        autoFireTasks.remove(player.uniqueId)?.cancel()
+    }
+
+    fun isAutoFiring(player: Player): Boolean {
+        return autoFireTasks.containsKey(player.uniqueId)
     }
 }

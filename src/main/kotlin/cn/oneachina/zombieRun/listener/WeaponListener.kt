@@ -37,7 +37,13 @@ class WeaponListener(private val plugin: ZombieRun) : Listener {
                 }
                 wm.handleReload(player, item)
             } else {
-                wm.handleShoot(player, item)
+                val weaponId = wm.getWeaponId(item) ?: return
+                val config = wm.getWeaponConfig(weaponId) ?: return
+                if (config.automatic) {
+                    wm.startAutoFire(player)
+                } else {
+                    wm.handleShoot(player, item)
+                }
             }
         }
     }
@@ -50,6 +56,7 @@ class WeaponListener(private val plugin: ZombieRun) : Listener {
             if (plugin.weaponManager.isReloading(prevItem)) {
                 plugin.weaponManager.cancelReload(player, prevItem)
             }
+            plugin.weaponManager.stopAutoFire(player)
         }
         val newItem = player.inventory.getItem(event.newSlot)
         if (newItem != null && plugin.weaponManager.isZombieRunWeapon(newItem)) {
@@ -73,6 +80,7 @@ class WeaponListener(private val plugin: ZombieRun) : Listener {
         }
 
         if (event.isSneaking) {
+            wm.stopAutoFire(player)
             val weaponId = wm.getWeaponId(item) ?: return
             val config = wm.getWeaponConfig(weaponId) ?: return
             if (wm.isReloading(item) && wm.getMagazine(item) < config.magazineSize) {
