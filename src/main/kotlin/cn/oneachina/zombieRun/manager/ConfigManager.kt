@@ -124,7 +124,14 @@ class ConfigManager(private val plugin: ZombieRun) {
             val delay = doorSection.getInt("delay", 30)
             val material = doorSection.getString("material", "STONE") ?: "STONE"
             val useScanData = doorSection.getBoolean("use-scan-data", false)
-            val blocks = if (useScanData) loadDoorScanData(name) else emptyMap()
+            val blocks = if (useScanData) {
+                val fromFile = loadDoorScanData(name)
+                if (fromFile.isNotEmpty()) {
+                    fromFile
+                } else {
+                    migrateLegacyInlineScanData(name, doorSection)
+                }
+            } else emptyMap()
 
             val door = Door(
                 name = name,
@@ -184,6 +191,24 @@ class ConfigManager(private val plugin: ZombieRun) {
 
     private fun deleteDoorScanData(name: String) {
         getDoorScanFile(name).delete()
+    }
+
+    private fun migrateLegacyInlineScanData(name: String, doorSection: org.bukkit.configuration.ConfigurationSection): Map<String, String> {
+        val blocksSection = doorSection.getConfigurationSection("blocks") ?: return emptyMap()
+        val blocks = mutableMapOf<String, String>()
+        for (key in blocksSection.getKeys(false)) {
+            val mat = blocksSection.getString(key)
+            if (mat != null) blocks[key] = mat
+        }
+        if (blocks.isNotEmpty()) {
+            saveDoorScanData(name, blocks)
+            doorSection.set("blocks", null)
+            try {
+                config.save(configFile)
+            } catch (_: IOException) {}
+            plugin.logger.info("已迁移门 $name 的扫描数据到独立文件 (${blocks.size} 个方块)")
+        }
+        return blocks
     }
 
     fun loadRespawns(): List<Respawn> {
