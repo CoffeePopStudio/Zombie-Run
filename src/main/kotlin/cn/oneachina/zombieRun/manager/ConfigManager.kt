@@ -1,6 +1,7 @@
 package cn.oneachina.zombieRun.manager
 
 import cn.oneachina.zombieRun.ZombieRun
+import cn.oneachina.zombieRun.model.AmmoCategory
 import cn.oneachina.zombieRun.model.AmmoConfig
 import cn.oneachina.zombieRun.model.Door
 import cn.oneachina.zombieRun.model.Button
@@ -322,6 +323,21 @@ class ConfigManager(private val plugin: ZombieRun) {
         return config.getInt("tp-button.force-delay", 5)
     }
 
+    fun loadAmmoCategories(): Map<String, AmmoCategory> {
+        val cats = mutableMapOf<String, AmmoCategory>()
+        val section = config.getConfigurationSection("ammo-categories") ?: return cats
+        for (id in section.getKeys(false)) {
+            val cs = section.getConfigurationSection(id) ?: continue
+            cats[id] = AmmoCategory(
+                id = id,
+                name = cs.getString("name") ?: id,
+                itemMaterial = cs.getString("item-material") ?: "PAPER",
+                customModelData = cs.getInt("custom-model-data", 0)
+            )
+        }
+        return cats
+    }
+
     fun loadWeaponConfigs(): Map<String, WeaponConfig> {
         val weapons = mutableMapOf<String, WeaponConfig>()
         val section = config.getConfigurationSection("custom-weapons") ?: return weapons
@@ -334,36 +350,28 @@ class ConfigManager(private val plugin: ZombieRun) {
                 name = ws.getString("name") ?: id,
                 lore = ws.getStringList("lore") ?: emptyList(),
                 damage = ws.getDouble("damage", 5.0),
-                ammoType = ws.getString("ammo-type") ?: "pistol_ammo",
-                maxAmmo = ws.getInt("max-ammo", 12),
+                ammoCategory = ws.getString("ammo-category") ?: "light",
+                magazineSize = ws.getInt("magazine-size", 12),
+                maxReserve = ws.getInt("max-reserve", 60),
+                reloadTimeTicks = ws.getInt("reload-time-ticks", 30),
                 price = ws.getInt("price", 300),
                 cooldownTicks = ws.getInt("cooldown-ticks", 10),
-                sound = ws.getString("sound"),
+                spread = ws.getDouble("spread", 0.08),
+                adsSpreadMult = ws.getDouble("ads-spread-mult", 0.5),
+                adsRecoilMult = ws.getDouble("ads-recoil-mult", 0.7),
+                headshotMult = ws.getDouble("headshot-mult", 2.0),
                 knockback = ws.getDouble("knockback", 0.0),
                 range = ws.getInt("range", 30),
                 pellets = ws.getInt("pellets", 1),
-                automatic = ws.getBoolean("automatic", false)
+                sound = ws.getString("sound"),
+                hitSound = ws.getString("hit-sound"),
+                recoil = ws.getDoubleList("recoil")?.toList() ?: listOf(0.5),
+                automatic = ws.getBoolean("automatic", false),
+                spreadPerShot = ws.getDouble("spread-per-shot", 0.0)
             )
             weapons[id] = cfg
         }
         return weapons
-    }
-
-    fun loadAmmoConfigs(): Map<String, AmmoConfig> {
-        val ammos = mutableMapOf<String, AmmoConfig>()
-        val section = config.getConfigurationSection("ammo-items") ?: return ammos
-        for (id in section.getKeys(false)) {
-            val as_ = section.getConfigurationSection(id) ?: continue
-            val cfg = AmmoConfig(
-                id = id,
-                material = as_.getString("material") ?: "PAPER",
-                customModelData = CustomModelData.customModelData().addFloat(as_.getInt("custom-model-data", 0).toFloat()).build(),
-                name = as_.getString("name") ?: id,
-                lore = as_.getStringList("lore") ?: emptyList()
-            )
-            ammos[id] = cfg
-        }
-        return ammos
     }
 
     fun addDoorFull(door: Door) {
