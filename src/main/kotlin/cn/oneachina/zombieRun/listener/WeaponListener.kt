@@ -26,7 +26,11 @@ class WeaponListener(private val plugin: ZombieRun) : Listener {
         if (action == Action.RIGHT_CLICK_AIR || action == Action.RIGHT_CLICK_BLOCK) {
             event.isCancelled = true
 
-            if (wm.isReloading(item)) return
+            if (wm.isReloading(item)) {
+                wm.cancelReload(player, item)
+                player.sendMessage(Component.text("换弹已取消", NamedTextColor.YELLOW))
+                return
+            }
 
             if (player.isSneaking) {
                 val weaponId = wm.getWeaponId(item) ?: return
@@ -81,15 +85,6 @@ class WeaponListener(private val plugin: ZombieRun) : Listener {
 
         if (event.isSneaking) {
             wm.stopAutoFire(player)
-            val weaponId = wm.getWeaponId(item) ?: return
-            val config = wm.getWeaponConfig(weaponId) ?: return
-            if (wm.isReloading(item) && wm.getMagazine(item) < config.magazineSize) {
-                wm.handleReload(player, item)
-            }
-        } else {
-            if (wm.isReloading(item)) {
-                wm.cancelReload(player, item)
-            }
         }
     }
 }

@@ -31,6 +31,7 @@ class WeaponManager(private val plugin: ZombieRun) {
     private val adsState = ConcurrentHashMap<UUID, Boolean>()
     private val adsStartTime = ConcurrentHashMap<UUID, Long>()
     private val autoFireTasks = ConcurrentHashMap<UUID, io.papermc.paper.threadedregions.scheduler.ScheduledTask?>()
+    private val reloadTasks = ConcurrentHashMap<UUID, io.papermc.paper.threadedregions.scheduler.ScheduledTask?>()
 
     fun loadWeapons() {
         weapons = plugin.configManager.loadWeaponConfigs()
@@ -229,54 +230,95 @@ class WeaponManager(private val plugin: ZombieRun) {
         val weaponId = pdc.get(weaponIdKey, PersistentDataType.STRING) ?: return false
         val config = weapons[weaponId] ?: return false
         val magazine = pdc.get(magazineKey, PersistentDataType.INTEGER) ?: 0
-        val reloadProgress = pdc.get(reloadKey, PersistentDataType.INTEGER) ?: 0
 
         if (magazine >= config.magazineSize) {
             player.sendActionBar(Component.text("弹匣已满", NamedTextColor.GREEN))
             return false
         }
 
-        val newProgress = reloadProgress + 1
-        if (newProgress >= config.reloadTimeTicks) {
-            val need = config.magazineSize - magazine
-            val ammoInInv = countAmmoInInventory(player, config.ammoCategory)
-            if (ammoInInv <= 0) {
-                pdc.set(reloadKey, PersistentDataType.INTEGER, 0)
-                weaponStack.itemMeta = meta
-                player.sendActionBar(Component.text("没有可用弹药", NamedTextColor.RED))
-                return false
-            }
-            val actual = min(need, ammoInInv)
-            val newMagazine = magazine + actual
-            consumeAmmoFromInventory(player, config.ammoCategory, actual)
-
-            pdc.set(magazineKey, PersistentDataType.INTEGER, newMagazine)
-            pdc.set(reloadKey, PersistentDataType.INTEGER, 0)
-            weaponStack.itemMeta = meta
-
-            player.playSound(player.location, Sound.BLOCK_IRON_DOOR_CLOSE, 1f, 1.5f)
-            player.sendActionBar(
-                Component.text("装填完成 ", NamedTextColor.GREEN)
-                    .append(Component.text(newMagazine, NamedTextColor.GRAY))
-                    .append(Component.text(" / "))
-                    .append(Component.text(config.magazineSize))
-            )
-            return true
+        if (countAmmoInInventory(player, config.ammoCategory) <= 0) {
+            player.sendActionBar(Component.text("没有可用弹药", NamedTextColor.RED))
+            return false
         }
 
-        pdc.set(reloadKey, PersistentDataType.INTEGER, newProgress)
+        pdc.set(reloadKey, PersistentDataType.INTEGER, 1)
         weaponStack.itemMeta = meta
 
-        val percent = (newProgress.toDouble() / config.reloadTimeTicks * 100).toInt()
-        val filled = "█".repeat(percent / 5)
-        val empty = "░".repeat(20 - percent / 5)
-        player.sendActionBar(
-            LegacyComponentSerializer.legacySection().deserialize("§e装填中... $filled$empty $percent%")
-        )
-        return false
+        val task = player.scheduler.runAtFixedRate(plugin, { t ->
+            val currentItem = player.inventory.itemInMainHand
+            val currentId = getWeaponId(currentItem)
+            if (currentId != weaponId) {
+                forceCancelReload(player, weaponStack)
+                reloadTasks.remove(player.uniqueId)
+                t.cancel()
+                return@runAtFixedRate
+            }
+
+            val curMeta = currentItem.itemMeta ?: run {
+                forceCancelReload(player, weaponStack)
+                reloadTasks.remove(player.uniqueId)
+                t.cancel()
+                return@runAtFixedRate
+            }
+            val curPdc = curMeta.persistentDataContainer
+            var progress = curPdc.get(reloadKey, PersistentDataType.INTEGER) ?: 0
+            progress += 1
+
+            if (progress >= config.reloadTimeTicks) {
+                val currentMag = curPdc.get(magazineKey, PersistentDataType.INTEGER) ?: 0
+                val need = config.magazineSize - currentMag
+                val ammoInInv = countAmmoInInventory(player, config.ammoCategory)
+                if (ammoInInv <= 0) {
+                    curPdc.set(reloadKey, PersistentDataType.INTEGER, 0)
+                    currentItem.itemMeta = curMeta
+                    player.sendActionBar(Component.text("没有可用弹药", NamedTextColor.RED))
+                    reloadTasks.remove(player.uniqueId)
+                    t.cancel()
+                    return@runAtFixedRate
+                }
+                val actual = min(need, ammoInInv)
+                val newMagazine = currentMag + actual
+                consumeAmmoFromInventory(player, config.ammoCategory, actual)
+
+                curPdc.set(magazineKey, PersistentDataType.INTEGER, newMagazine)
+                curPdc.set(reloadKey, PersistentDataType.INTEGER, 0)
+                currentItem.itemMeta = curMeta
+
+                player.playSound(player.location, Sound.BLOCK_IRON_DOOR_CLOSE, 1f, 1.5f)
+                player.sendActionBar(
+                    Component.text("装填完成 ", NamedTextColor.GREEN)
+                        .append(Component.text(newMagazine, NamedTextColor.GRAY))
+                        .append(Component.text(" / "))
+                        .append(Component.text(config.magazineSize))
+                )
+                reloadTasks.remove(player.uniqueId)
+                t.cancel()
+                return@runAtFixedRate
+            }
+
+            curPdc.set(reloadKey, PersistentDataType.INTEGER, progress)
+            currentItem.itemMeta = curMeta
+
+            val percent = (progress.toDouble() / config.reloadTimeTicks * 100).toInt()
+            val filled = "█".repeat(percent / 5)
+            val empty = "░".repeat(20 - percent / 5)
+            player.sendActionBar(
+                LegacyComponentSerializer.legacySection().deserialize("§e装填中... $filled$empty $percent%")
+            )
+        }, null, 1L, 1L)
+
+        reloadTasks[player.uniqueId] = task
+        return true
     }
 
     fun cancelReload(player: Player, weaponStack: ItemStack) {
+        reloadTasks.remove(player.uniqueId)?.cancel()
+        val meta = weaponStack.itemMeta ?: return
+        meta.persistentDataContainer.set(reloadKey, PersistentDataType.INTEGER, 0)
+        weaponStack.itemMeta = meta
+    }
+
+    private fun forceCancelReload(player: Player, weaponStack: ItemStack) {
         val meta = weaponStack.itemMeta ?: return
         meta.persistentDataContainer.set(reloadKey, PersistentDataType.INTEGER, 0)
         weaponStack.itemMeta = meta
@@ -383,7 +425,7 @@ class WeaponManager(private val plugin: ZombieRun) {
                 t.cancel()
                 return@runAtFixedRate
             }
-            if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
+            if (!plugin.debugMode && plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
                 stopAutoFire(player)
                 t.cancel()
                 return@runAtFixedRate
