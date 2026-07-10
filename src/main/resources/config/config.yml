@@ -204,10 +204,26 @@ weapons:
   default-price: 600
   prices: {}
 
+# ---------- 弹药分类 ----------
+ammo-categories:
+  light:
+    name: "&e轻型弹药"
+    item-material: PAPER
+    custom-model-data: 30001
+  heavy:
+    name: "&9重型弹药"
+    item-material: IRON_INGOT
+    custom-model-data: 30002
+  energy:
+    name: "&d能量弹药"
+    item-material: GLOWSTONE_DUST
+    custom-model-data: 30003
+  shotgun:
+    name: "&6霰弹"
+    item-material: GUNPOWDER
+    custom-model-data: 30004
+
 # ---------- 自定义枪械 ----------
-# 每把枪定义在 custom-weapons 下，键为武器 ID
-# 玩家右键 = 射击，潜行+右键 = 换弹
-# 弹药在 ammo-items 下定义，ammo-type 用于匹配弹药
 custom-weapons:
   pistol:
     material: WOODEN_HOE
@@ -216,52 +232,61 @@ custom-weapons:
     lore:
       - "&7一把可靠的基础手枪"
     damage: 5.0
-    ammo-type: pistol_ammo
-    max-ammo: 12
+    ammo-category: light
+    magazine-size: 12
+    max-reserve: 60
+    reload-time-ticks: 30
     price: 300
     cooldown-ticks: 10
-    sound: ENTITY_GENERIC_EXPLODE
+    spread: 0.08
+    ads-spread-mult: 0.5
+    ads-recoil-mult: 0.7
+    headshot-mult: 2.0
     knockback: 0.3
     range: 30
+    sound: ENTITY_GENERIC_EXPLODE
+    hit-sound: ENTITY_ARROW_HIT_PLAYER
+    recoil: [0.3, 0.5, 0.5, 0.7, 0.7]
   shotgun:
     material: WOODEN_HOE
     custom-model-data: 10002
     name: "&6霰弹枪"
     damage: 3.0
-    ammo-type: shotgun_ammo
-    max-ammo: 8
+    ammo-category: shotgun
+    magazine-size: 8
+    max-reserve: 32
+    reload-time-ticks: 50
     price: 800
     cooldown-ticks: 30
+    spread: 0.2
+    ads-spread-mult: 0.6
+    ads-recoil-mult: 0.8
+    headshot-mult: 1.5
     range: 15
     pellets: 5
+    sound: ENTITY_GENERIC_EXPLODE
+    hit-sound: ENTITY_ARROW_HIT_PLAYER
+    recoil: [1.0, 2.0, 2.0]
   rifle:
     material: WOODEN_HOE
     custom-model-data: 10003
     name: "&c步枪"
     damage: 8.0
-    ammo-type: rifle_ammo
-    max-ammo: 30
+    ammo-category: heavy
+    magazine-size: 30
+    max-reserve: 90
+    reload-time-ticks: 60
     price: 1500
     cooldown-ticks: 4
+    spread: 0.3
+    ads-spread-mult: 0.4
+    ads-recoil-mult: 0.7
+    headshot-mult: 2.0
     range: 50
+    sound: ENTITY_GENERIC_EXPLODE
+    hit-sound: ENTITY_ARROW_HIT_PLAYER
+    recoil: [0.5, 0.7, 1.0, 1.3, 1.3, 1.0, 0.8, 0.5, 0.5, 0.5]
     automatic: true
-
-# ---------- 弹药物品 ----------
-ammo-items:
-  pistol_ammo:
-    material: PAPER
-    custom-model-data: 20001
-    name: "&e手枪弹药"
-    lore:
-      - "&7装填手枪用"
-  shotgun_ammo:
-    material: PAPER
-    custom-model-data: 20002
-    name: "&6霰弹弹药"
-  rifle_ammo:
-    material: PAPER
-    custom-model-data: 20003
-    name: "&c步枪弹药"
 
 # ---------- 杂项 ----------
 misc:
