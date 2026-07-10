@@ -129,7 +129,8 @@ class WeaponManager(private val plugin: ZombieRun) {
                     val dmg = config.damage * (if (isHeadshot) config.headshotMult else 1.0)
 
                     target.scheduler.run(plugin, { _ ->
-                        target.damage(dmg)
+                        val scale = cn.oneachina.zombieRun.listener.CombatListener.getDamageScale(targetTeam)
+                        target.damage(dmg * scale)
                         if (config.knockback > 0) {
                             target.velocity = target.velocity.add(spreadDir.clone().multiply(config.knockback))
                         }

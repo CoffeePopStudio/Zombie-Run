@@ -98,15 +98,13 @@ class GameManager(private val plugin: ZombieRun) {
 
         val alpha = alphaZombie ?: selectAlphaZombie()
         setPlayerTeam(alpha, Team.ZOMBIE_MAIN)
-        alpha.getAttribute(Attribute.MAX_HEALTH)?.baseValue = 500.0
-        alpha.health = 500.0
+        alpha.health = 20.0
 
         alpha.sendMessage(Component.text("你被选为母体！6秒后容器破裂，届时你可以行动。", NamedTextColor.LIGHT_PURPLE))
 
         Bukkit.getOnlinePlayers().forEach { player ->
             if (player != alpha) {
                 setPlayerTeam(player, Team.HUMAN)
-                player.getAttribute(Attribute.MAX_HEALTH)?.baseValue = 20.0
                 player.health = 20.0
                 player.gameMode = GameMode.ADVENTURE
                 plugin.miscManager.giveStarterKit(player)

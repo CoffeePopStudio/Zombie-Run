@@ -223,14 +223,9 @@ class StaminaManager(private val plugin: ZombieRun) {
 
     fun applyZombieEffects(player: Player) {
         val team = plugin.gameManager.getPlayerTeam(player)
-        val maxHealth = when (team) {
-            GameManager.Team.ZOMBIE -> 100.0
-            GameManager.Team.ZOMBIE_MAIN -> 500.0
-            else -> return
-        }
+        if (team != GameManager.Team.ZOMBIE && team != GameManager.Team.ZOMBIE_MAIN) return
+
         player.scheduler.run(plugin, { _ ->
-            player.getAttribute(Attribute.MAX_HEALTH)?.baseValue = maxHealth
-            player.health = maxHealth
             player.addPotionEffect(PotionEffect(PotionEffectType.STRENGTH, Int.MAX_VALUE, 0, false, false))
             player.addPotionEffect(PotionEffect(PotionEffectType.SPEED, Int.MAX_VALUE, 0, false, false))
             player.addPotionEffect(PotionEffect(PotionEffectType.JUMP_BOOST, Int.MAX_VALUE, 0, false, false))

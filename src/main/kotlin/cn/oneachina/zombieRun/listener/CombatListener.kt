@@ -23,6 +23,14 @@ class CombatListener(
     private val taskTracker: PlayerTaskTracker
 ) : Listener {
 
+    companion object {
+        fun getDamageScale(team: GameManager.Team): Double = when (team) {
+            GameManager.Team.ZOMBIE -> 0.2
+            GameManager.Team.ZOMBIE_MAIN -> 0.04
+            else -> 1.0
+        }
+    }
+
     @EventHandler
     fun onEntityDamageByEntity(event: EntityDamageByEntityEvent) {
         val attacker = event.damager as? Player ?: return
@@ -41,7 +49,7 @@ class CombatListener(
 
         if ((attackerTeam == GameManager.Team.ZOMBIE || attackerTeam == GameManager.Team.ZOMBIE_MAIN) &&
             victimTeam == GameManager.Team.HUMAN) {
-            event.damage = 3.0
+            event.damage = if (attackerTeam == GameManager.Team.ZOMBIE_MAIN) 10.0 else 6.0
             return
         }
 
