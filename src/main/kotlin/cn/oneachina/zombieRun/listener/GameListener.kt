@@ -19,7 +19,6 @@ import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockPlaceEvent
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.event.player.*
-import com.destroystokyo.paper.event.player.PlayerJumpEvent
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import java.time.Duration
 import java.util.UUID
@@ -98,20 +97,8 @@ class GameListener(
             event.from.blockY == to.blockY &&
             event.from.blockZ == to.blockZ) return
 
-        plugin.staminaManager.setMoving(player, true)
-        plugin.staminaManager.setSprinting(player, player.isSprinting)
-
         if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return
         val team = plugin.gameManager.getPlayerTeam(player)
-
-        if (team == GameManager.Team.HUMAN &&
-            player.isSprinting &&
-            !plugin.staminaManager.canSprintOrJump(player)
-        ) {
-            player.isSprinting = false
-            plugin.staminaManager.setSprinting(player, false)
-            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c体力耗尽！请等待体力恢复到100才能疾跑。"))
-        }
 
         if (team == GameManager.Team.SPECTATOR) return
         val currentDoorNumber = detectCurrentDoorNumber(player)
@@ -399,31 +386,6 @@ class GameListener(
         if (event.player.gameMode != GameMode.CREATIVE) {
             event.isCancelled = true
         }
-    }
-
-    @EventHandler(ignoreCancelled = true)
-    fun onPlayerToggleSprint(event: PlayerToggleSprintEvent) {
-        val player = event.player
-        plugin.staminaManager.setSprinting(player, event.isSprinting)
-        if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return
-        if (plugin.gameManager.getPlayerTeam(player) != GameManager.Team.HUMAN) return
-        if (event.isSprinting && !plugin.staminaManager.canSprintOrJump(player)) {
-            event.isCancelled = true
-            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c体力耗尽！请等待体力恢复到100才能疾跑。"))
-        }
-    }
-
-    @EventHandler(ignoreCancelled = true)
-    fun onPlayerJump(event: PlayerJumpEvent) {
-        val player = event.player
-        if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return
-        if (plugin.gameManager.getPlayerTeam(player) != GameManager.Team.HUMAN) return
-        if (!plugin.staminaManager.canSprintOrJump(player)) {
-            event.isCancelled = true
-            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c体力耗尽！请等待体力恢复到100才能跳跃。"))
-            return
-        }
-        plugin.staminaManager.addJumpCount(player)
     }
 
     @EventHandler

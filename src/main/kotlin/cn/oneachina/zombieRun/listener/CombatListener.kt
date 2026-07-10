@@ -23,14 +23,6 @@ class CombatListener(
     private val taskTracker: PlayerTaskTracker
 ) : Listener {
 
-    companion object {
-        fun getDamageScale(team: GameManager.Team): Double = when (team) {
-            GameManager.Team.ZOMBIE -> 0.2
-            GameManager.Team.ZOMBIE_MAIN -> 0.04
-            else -> 1.0
-        }
-    }
-
     @EventHandler
     fun onEntityDamageByEntity(event: EntityDamageByEntityEvent) {
         val attacker = event.damager as? Player ?: return
@@ -43,13 +35,19 @@ class CombatListener(
 
         if (attackerTeam == GameManager.Team.HUMAN &&
             (victimTeam == GameManager.Team.ZOMBIE || victimTeam == GameManager.Team.ZOMBIE_MAIN)) {
+            event.isCancelled = true
+            val swordDamage = 5.0
+            plugin.healthManager.damage(victim, swordDamage, attacker)
             victim.velocity = victim.velocity.add(attacker.location.direction.setY(-1.0).normalize().multiply(0.3))
+            attacker.sendActionBar(Component.text("造成伤害: ${String.format("%.1f", swordDamage)}").color(NamedTextColor.RED))
             return
         }
 
         if ((attackerTeam == GameManager.Team.ZOMBIE || attackerTeam == GameManager.Team.ZOMBIE_MAIN) &&
             victimTeam == GameManager.Team.HUMAN) {
-            event.damage = if (attackerTeam == GameManager.Team.ZOMBIE_MAIN) 10.0 else 6.0
+            event.isCancelled = true
+            val zombieDamage = if (attackerTeam == GameManager.Team.ZOMBIE_MAIN) 10.0 else 6.0
+            plugin.healthManager.damage(victim, zombieDamage, attacker)
             return
         }
 
@@ -63,6 +61,7 @@ class CombatListener(
         event.isCancelled = true
         val victim = event.entity
         val killer = victim.killer
+            ?: plugin.healthManager.getLastDamager(victim.uniqueId)?.let { Bukkit.getPlayer(it) }
 
         event.drops.clear()
         event.deathMessage(null)
@@ -158,12 +157,11 @@ class CombatListener(
                 task.cancel()
             }
         }, 1L, 20L)
-        if (scheduledTask != null) taskTracker.register(scheduledTask, victim)
+        taskTracker.register(scheduledTask, victim)
     }
 
     private fun scheduleZombieRespawn(victim: Player, message: Component) {
-        var scheduledTask: ScheduledTask? = null
-        scheduledTask = Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { task ->
+        val scheduledTask = Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { task ->
             taskTracker.unregister(task, victim.uniqueId)
             if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
                 return@runDelayed
@@ -173,7 +171,7 @@ class CombatListener(
             plugin.respawnManager.teleportToZombieRespawn(victim)
             victim.sendMessage(message)
         }, 100L)
-        if (scheduledTask != null) taskTracker.register(scheduledTask, victim)
+        taskTracker.register(scheduledTask, victim)
     }
 }
 

@@ -10,6 +10,7 @@ import cn.oneachina.zombieRun.listener.CombatListener
 import cn.oneachina.zombieRun.listener.GameListener
 import cn.oneachina.zombieRun.listener.PlayerTaskTracker
 import cn.oneachina.zombieRun.listener.ProgressionListener
+import cn.oneachina.zombieRun.listener.StaminaListener
 import cn.oneachina.zombieRun.listener.WeaponListener
 import cn.oneachina.zombieRun.manager.*
 import cn.oneachina.zombieRun.papi.ZombieRunExpansion
@@ -29,6 +30,7 @@ class ZombieRun : JavaPlugin() {
     lateinit var miscManager: MiscManager
     lateinit var startEffectManager: StartEffectManager
     lateinit var weaponManager: WeaponManager
+    lateinit var healthManager: HealthManager
     lateinit var coinManager: CoinManager
     lateinit var progressionManager: ProgressionManager
     lateinit var progressionListener: ProgressionListener
@@ -54,6 +56,7 @@ class ZombieRun : JavaPlugin() {
         miscManager = MiscManager(this)
         startEffectManager = StartEffectManager(this).apply { loadEffects() }
         weaponManager = WeaponManager(this).apply { loadWeapons() }
+        healthManager = HealthManager(this)
         coinManager = CoinManager(this).apply { init() }
         progressionManager = ProgressionManager(this).apply { init() }
         progressionListener = ProgressionListener(this)
@@ -72,6 +75,7 @@ class ZombieRun : JavaPlugin() {
         val taskTracker = PlayerTaskTracker()
         pm.registerEvents(GameListener(this, taskTracker), this)
         pm.registerEvents(CombatListener(this, taskTracker), this)
+        pm.registerEvents(StaminaListener(this), this)
         pm.registerEvents(WeaponListener(this), this)
         pm.registerEvents(shopGUI, this)
         pm.registerEvents(profileGUI, this)
@@ -105,11 +109,17 @@ class ZombieRun : JavaPlugin() {
         if (this::gameManager.isInitialized) {
             gameManager.clear()
         }
+        if (this::staminaManager.isInitialized) {
+            staminaManager.clear()
+        }
         if (this::progressionManager.isInitialized) {
             progressionManager.close()
         }
         if (this::buttonManager.isInitialized) {
             buttonManager.clear()
+        }
+        if (this::healthManager.isInitialized) {
+            healthManager.clearAll()
         }
     }
 }

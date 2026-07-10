@@ -393,6 +393,10 @@ class DoorManager(private val plugin: ZombieRun) {
             doors.values.forEach { door ->
                 if (door.isOpen) {
                     door.close(world)
+                    val center = door.getCenterLocation(world)
+                    Bukkit.getRegionScheduler().execute(plugin, center) {
+                        door.closeBlocks(world)
+                    }
                 }
             }
         }

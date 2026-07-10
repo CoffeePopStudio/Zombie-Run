@@ -23,7 +23,6 @@ class StaminaManager(private val plugin: ZombieRun) {
         var isMoving: Boolean = false,
         var staminastate: Int = 1,
         var sprintTicks: Int = 0,
-        var jumpCount: Int = 0,
         var isExhausted: Boolean = false
     ) {
         var stamina: Double
@@ -43,6 +42,7 @@ class StaminaManager(private val plugin: ZombieRun) {
 
     private val playerStamina: ConcurrentHashMap<Player, PlayerStamina> = ConcurrentHashMap()
     private val staminaTask: CopyOnWriteArrayList<ScheduledTask> = CopyOnWriteArrayList()
+    private val staminaEffectsTask: CopyOnWriteArrayList<ScheduledTask> = CopyOnWriteArrayList()
     private val actionBarTask: CopyOnWriteArrayList<ScheduledTask> = CopyOnWriteArrayList()
     private val zombieHealthBarTask: CopyOnWriteArrayList<ScheduledTask> = CopyOnWriteArrayList()
     private val zombieMainParticleTasks: ConcurrentHashMap<Player, ScheduledTask> = ConcurrentHashMap()
@@ -51,7 +51,7 @@ class StaminaManager(private val plugin: ZombieRun) {
         startStaminaRegenTask()
         startActionBarTask()
         startStaminaEffectsTask()
-        startZombieHealthBarTask()
+        startZombieSpeedTask()
         plugin.logger.info("体力系统初始化完成")
     }
 
@@ -94,10 +94,6 @@ class StaminaManager(private val plugin: ZombieRun) {
         return ps?.let { !it.isExhausted } ?: true
     }
 
-    fun addJumpCount(player: Player) {
-        playerStamina[player]?.let { it.jumpCount++ }
-    }
-
     fun setMoving(player: Player, moving: Boolean) {
         playerStamina[player]?.isMoving = moving
     }
@@ -127,11 +123,19 @@ class StaminaManager(private val plugin: ZombieRun) {
                         ps.isExhausted = false
                         player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a体力已完全恢复，可以跑跳了！"))
                     } else {
-                        var regen = 1.0
-                        if (!ps.isMoving) {
-                            regen += 1.0
+                        if (ps.isSprinting) {
+                            ps.sprintTicks += 1
+                            if (ps.sprintTicks >= 2) {
+                                ps.deductStamina(1.0)
+                                ps.sprintTicks -= 2
+                            }
+                        } else {
+                            var regen = 1.0
+                            if (!ps.isMoving) {
+                                regen += 1.0
+                            }
+                            ps.addStamina(regen)
                         }
-                        ps.addStamina(regen)
                     }
                 } else {
                     if (ps.isSprinting) {
@@ -149,11 +153,6 @@ class StaminaManager(private val plugin: ZombieRun) {
                         ps.addStamina(regen)
                     }
 
-                    if (ps.jumpCount >= 2) {
-                        ps.deductStamina(1.0)
-                        ps.jumpCount = 0
-                    }
-
                     if (ps.stamina <= 0) {
                         ps.isExhausted = true
                         player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c体力耗尽！请等待体力恢复到100才能跑跳。"))
@@ -161,7 +160,6 @@ class StaminaManager(private val plugin: ZombieRun) {
                 }
 
                 ps.staminastate = if (ps.stamina <= 0) 2 else 1
-                ps.isMoving = false
             }
         }, 1L, 2L)
         staminaTask.add(task)
@@ -180,13 +178,14 @@ class StaminaManager(private val plugin: ZombieRun) {
                 }
 
                 val staminaBar = buildStaminaBar(ps.stamina, ps.maxStamina, ps.staminastate)
+                if (plugin.weaponManager.isPlayerReloading(player)) continue
                 player.sendActionBar(staminaBar)
             }
         }, 1L, 2L)
         actionBarTask.add(task)
     }
 
-    private fun startZombieHealthBarTask() {
+    private fun startZombieSpeedTask() {
         val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { _ ->
             for (player in Bukkit.getOnlinePlayers()) {
                 val team = plugin.gameManager.getPlayerTeam(player)
@@ -229,7 +228,6 @@ class StaminaManager(private val plugin: ZombieRun) {
             player.addPotionEffect(PotionEffect(PotionEffectType.STRENGTH, Int.MAX_VALUE, 0, false, false))
             player.addPotionEffect(PotionEffect(PotionEffectType.SPEED, Int.MAX_VALUE, 0, false, false))
             player.addPotionEffect(PotionEffect(PotionEffectType.JUMP_BOOST, Int.MAX_VALUE, 0, false, false))
-            player.addPotionEffect(PotionEffect(PotionEffectType.REGENERATION, Int.MAX_VALUE, 1, false, false))
         }, null)
 
         zombieMainParticleTasks[player]?.cancel()
@@ -240,7 +238,7 @@ class StaminaManager(private val plugin: ZombieRun) {
                     t.cancel()
                     return@runAtFixedRate
                 }
-                player.world.spawnParticle(Particle.SPELL, player.location.clone().add(0.0, 0.5, 0.0), 3,
+                player.world.spawnParticle(Particle.ENTITY_EFFECT, player.location.clone().add(0.0, 0.5, 0.0), 3,
                     0.5, 1.0, 0.5, 0.0)
             }, 1L, 2L)
             zombieMainParticleTasks[player] = task
@@ -268,15 +266,17 @@ class StaminaManager(private val plugin: ZombieRun) {
                 }
             }
         }, 1L, 20L)
-        staminaTask.add(task)
+        staminaEffectsTask.add(task)
     }
 
     fun clear() {
         staminaTask.forEach { it.cancel() }
+        staminaEffectsTask.forEach { it.cancel() }
         actionBarTask.forEach { it.cancel() }
         zombieHealthBarTask.forEach { it.cancel() }
         zombieMainParticleTasks.values.forEach { it.cancel() }
         staminaTask.clear()
+        staminaEffectsTask.clear()
         actionBarTask.clear()
         zombieHealthBarTask.clear()
         zombieMainParticleTasks.clear()

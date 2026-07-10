@@ -50,14 +50,12 @@ class GameManager(private val plugin: ZombieRun) {
     fun addPlayer(player: Player) {
         playerTeams[player] = Team.HUMAN
         humans.add(player)
-        plugin.staminaManager.addPlayer(player)
         playerRooms[player] = 0
     }
 
     fun removePlayer(player: Player) {
         playerTeams.remove(player)
         playerRooms.remove(player)
-        plugin.staminaManager.removePlayer(player)
         humans.remove(player)
         zombies.remove(player)
         zombieMains.remove(player)
@@ -98,14 +96,14 @@ class GameManager(private val plugin: ZombieRun) {
 
         val alpha = alphaZombie ?: selectAlphaZombie()
         setPlayerTeam(alpha, Team.ZOMBIE_MAIN)
-        alpha.health = 20.0
+        plugin.healthManager.initPlayerHealth(alpha, Team.ZOMBIE_MAIN)
 
         alpha.sendMessage(Component.text("你被选为母体！6秒后容器破裂，届时你可以行动。", NamedTextColor.LIGHT_PURPLE))
 
         Bukkit.getOnlinePlayers().forEach { player ->
             if (player != alpha) {
                 setPlayerTeam(player, Team.HUMAN)
-                player.health = 20.0
+                plugin.healthManager.initPlayerHealth(player, Team.HUMAN)
                 player.gameMode = GameMode.ADVENTURE
                 plugin.miscManager.giveStarterKit(player)
             }
@@ -178,6 +176,11 @@ class GameManager(private val plugin: ZombieRun) {
             else -> {}
         }
 
+        // 切换队伍时重置自定义生命值
+        if (team == Team.ZOMBIE || team == Team.ZOMBIE_MAIN || team == Team.HUMAN) {
+            plugin.healthManager.initPlayerHealth(player, team)
+        }
+
         if (status == GameStatus.RUNNING && oldTeam == Team.HUMAN && team != Team.HUMAN) {
             checkGameEnd()
         }
@@ -209,12 +212,12 @@ class GameManager(private val plugin: ZombieRun) {
         Bukkit.getOnlinePlayers().forEach {
             it.showTitle(Title.title(title, Component.text("")))
             it.playSound(it.location, sound, 1f, 1f)
-            it.getAttribute(Attribute.MAX_HEALTH)?.baseValue = 20.0
-            it.health = 20.0
             it.gameMode = GameMode.SPECTATOR
             it.inventory.clear()
             it.clearActivePotionEffects()
         }
+
+        plugin.healthManager.clearAll()
 
         sendGameEndResult()
 

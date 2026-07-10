@@ -290,6 +290,7 @@ ammo-categories:
     sound: ENTITY_GENERIC_EXPLODE
     hit-sound: ENTITY_ARROW_HIT_PLAYER
     recoil: [1.0, 2.0, 2.0]
+    spread-per-shot: 0.03
   rifle:
     material: WOODEN_HOE
     custom-model-data: 10003

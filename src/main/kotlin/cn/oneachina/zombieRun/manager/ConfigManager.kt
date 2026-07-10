@@ -395,7 +395,7 @@ class ConfigManager(private val plugin: ZombieRun) {
                 material = ws.getString("material") ?: "WOODEN_HOE",
                 customModelData = CustomModelData.customModelData().addFloat(ws.getInt("custom-model-data", 0).toFloat()).build(),
                 name = ws.getString("name") ?: id,
-                lore = ws.getStringList("lore") ?: emptyList(),
+                lore = ws.getStringList("lore"),
                 damage = ws.getDouble("damage", 5.0),
                 ammoCategory = ws.getString("ammo-category") ?: "light",
                 magazineSize = ws.getInt("magazine-size", 12),
@@ -412,7 +412,7 @@ class ConfigManager(private val plugin: ZombieRun) {
                 pellets = ws.getInt("pellets", 1),
                 sound = ws.getString("sound"),
                 hitSound = ws.getString("hit-sound"),
-                recoil = ws.getDoubleList("recoil")?.toList() ?: listOf(0.5),
+                recoil = ws.getDoubleList("recoil").toList(),
                 automatic = ws.getBoolean("automatic", false),
                 spreadPerShot = ws.getDouble("spread-per-shot", 0.0)
             )

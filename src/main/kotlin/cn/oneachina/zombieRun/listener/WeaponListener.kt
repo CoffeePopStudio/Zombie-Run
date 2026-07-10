@@ -64,9 +64,9 @@ class WeaponListener(private val plugin: ZombieRun) : Listener {
         }
         val newItem = player.inventory.getItem(event.newSlot)
         if (newItem != null && plugin.weaponManager.isZombieRunWeapon(newItem)) {
-            val pdc = newItem.itemMeta?.persistentDataContainer
-            pdc?.set(NamespacedKey("zombie-run", "shot_count"), PersistentDataType.INTEGER, 0)
-            newItem.itemMeta = newItem.itemMeta
+            val meta = newItem.itemMeta ?: return
+            meta.persistentDataContainer.set(NamespacedKey("zombie-run", "shot_count"), PersistentDataType.INTEGER, 0)
+            newItem.itemMeta = meta
         }
     }
 
@@ -85,6 +85,9 @@ class WeaponListener(private val plugin: ZombieRun) : Listener {
 
         if (event.isSneaking) {
             wm.stopAutoFire(player)
+            wm.setAds(player, true)
+        } else {
+            wm.setAds(player, false)
         }
     }
 }

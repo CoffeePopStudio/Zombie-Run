@@ -82,17 +82,7 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
         }
 
         giveFallbackSword(player)
-        giveAmmoForWeapon(player, weaponId)
-    }
-
-    private fun giveAmmoForWeapon(player: Player, weaponId: String) {
-        val config = plugin.weaponManager.getWeaponConfig(weaponId) ?: return
-        val ammoItem = plugin.weaponManager.buildAmmoItem(config.ammoCategory, 64)
-        if (ammoItem != null) {
-            player.inventory.addItem(ammoItem.clone().apply { amount = 64 })
-            player.inventory.addItem(ammoItem.clone().apply { amount = 64 })
-            player.inventory.addItem(ammoItem.clone().apply { amount = 64 })
-        }
+        plugin.weaponManager.giveAmmoRespectingMaxReserve(player, weaponId)
     }
 
     private fun giveFallbackSword(player: Player) {
@@ -140,28 +130,9 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
                 val after = victim.health
                 val damage = before - after
                 if (damage > 0) {
-                    plugin.staminaManager.deductStamina(victim, 15.0 * damage)
+                    plugin.staminaManager.deductStamina(victim, 2.0 * damage)
                 }
             }, 1L)
-        }
-    }
-
-    @EventHandler
-    fun onCombat(event: EntityDamageByEntityEvent) {
-        val attacker = event.damager as? Player ?: return
-        val victim = event.entity as? Player ?: return
-
-        if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return
-
-        val attackerTeam = plugin.gameManager.getPlayerTeam(attacker)
-        val victimTeam = plugin.gameManager.getPlayerTeam(victim)
-
-        if (attackerTeam == GameManager.Team.HUMAN &&
-            (victimTeam == GameManager.Team.ZOMBIE || victimTeam == GameManager.Team.ZOMBIE_MAIN)) {
-
-            val damage = event.finalDamage * 2
-            attacker.sendActionBar(Component.text("造成伤害: ${String.format("%.1f", damage)}").color(NamedTextColor.RED))
-            plugin.progressionListener.onDealDamage(attacker, event.finalDamage)
         }
     }
 

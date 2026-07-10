@@ -101,7 +101,7 @@ class ZombieRunExpansion(private val plugin: ZombieRun) : PlaceholderExpansion()
                     "coins" -> plugin.coinManager.getCoins(p.uniqueId).toString()
                     "kills" -> plugin.miscManager.getKills(p).toString()
                     "infections" -> plugin.miscManager.getInfections(p).toString()
-                    "selected_weapon" -> plugin.miscManager.getSelectedWeapon(p)?.toString() ?: "0"
+                    "selected_weapon" -> plugin.miscManager.getSelectedWeapon(p) ?: "0"
                     "room" -> plugin.gameManager.getPlayerRoom(p).toString()
                     "team" -> plugin.gameManager.getPlayerTeam(p).name
                     "team_formatted" -> formatTeam(plugin.gameManager.getPlayerTeam(p))

@@ -9,6 +9,7 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.Particle
+import org.bukkit.Registry
 import org.bukkit.Sound
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
@@ -30,8 +31,10 @@ class WeaponManager(private val plugin: ZombieRun) {
     private val cooldowns = ConcurrentHashMap<UUID, Int>()
     private val adsState = ConcurrentHashMap<UUID, Boolean>()
     private val adsStartTime = ConcurrentHashMap<UUID, Long>()
+    private val adsOriginalSpeed = ConcurrentHashMap<UUID, Double>()
     private val autoFireTasks = ConcurrentHashMap<UUID, io.papermc.paper.threadedregions.scheduler.ScheduledTask?>()
     private val reloadTasks = ConcurrentHashMap<UUID, io.papermc.paper.threadedregions.scheduler.ScheduledTask?>()
+    private val headshotCooldowns = ConcurrentHashMap<String, Int>()
 
     fun loadWeapons() {
         weapons = plugin.configManager.loadWeaponConfigs()
@@ -133,8 +136,7 @@ class WeaponManager(private val plugin: ZombieRun) {
                     val dmg = config.damage * (if (isHeadshot) config.headshotMult else 1.0)
 
                     target.scheduler.run(plugin, { _ ->
-                        val scale = cn.oneachina.zombieRun.listener.CombatListener.getDamageScale(targetTeam)
-                        target.damage(dmg * scale)
+                        plugin.healthManager.damage(target, dmg, player)
                         if (config.knockback > 0) {
                             target.velocity = target.velocity.add(spreadDir.clone().multiply(config.knockback))
                         }
@@ -145,23 +147,28 @@ class WeaponManager(private val plugin: ZombieRun) {
 
                     target.sendActionBar(LegacyComponentSerializer.legacySection().deserialize("§c-${dmg.toInt()}"))
                     if (isHeadshot) {
-                        plugin.progressionManager.addXp(player, 5, "爆头")
+                        val key = "${player.uniqueId}:${target.uniqueId}"
+                        val lastHsTick = headshotCooldowns.getOrDefault(key, 0)
+                        if (now - lastHsTick >= config.cooldownTicks * 5) {
+                            headshotCooldowns[key] = now
+                            plugin.progressionManager.addXp(player, 5, "爆头")
+                        }
                     }
                 }
                 if (config.hitSound != null) {
-                    try {
-                        val s = Sound.valueOf(config.hitSound.uppercase())
+                    val s = NamespacedKey.fromString(config.hitSound.lowercase())?.let { Registry.SOUNDS.get(it) }
+                    if (s != null) {
                         player.playSound(player.location, s, 0.5f, 1.5f)
-                    } catch (_: IllegalArgumentException) {}
+                    }
                 }
             }
         }
 
         if (config.sound != null) {
-            try {
-                val s = Sound.valueOf(config.sound.uppercase())
+            val s = NamespacedKey.fromString(config.sound.lowercase())?.let { Registry.SOUNDS.get(it) }
+            if (s != null) {
                 player.playSound(player.location, s, 0.8f, 1.2f)
-            } catch (_: IllegalArgumentException) {}
+            }
         }
 
         magazine -= 1
@@ -195,22 +202,18 @@ class WeaponManager(private val plugin: ZombieRun) {
 
         val recoilIdx = (shotCount % config.recoil.size).coerceIn(0, config.recoil.size - 1)
         val recoilAngle = config.recoil[recoilIdx] * (if (ads) config.adsRecoilMult else 1.0)
+        val adsMultiplier = if (ads) config.adsRecoilMult else 1.0
         dir.y += Math.toRadians(recoilAngle)
-
-        if (multiPellet) {
-            val yawOffset = (Math.random() - 0.5) * spreadRad * 2
-            val pitchOffset = (Math.random() - 0.5) * spreadRad * 2
-            val loc = org.bukkit.Location(null, 0.0, 0.0, 0.0)
-            loc.direction = dir
-            loc.yaw += Math.toDegrees(yawOffset).toFloat()
-            loc.pitch += Math.toDegrees(pitchOffset).toFloat()
-            return loc.direction
-        }
-
-        val yawOffset = (Math.random() - 0.5) * spreadRad
-        val pitchOffset = (Math.random() - 0.5) * spreadRad
+        // 水平后坐力：随机左右偏移
+        val hRecoilBase = config.recoil[recoilIdx] * 0.3 * adsMultiplier
+        val hRecoil = (Math.random() - 0.5) * 2 * hRecoilBase
         val loc = org.bukkit.Location(null, 0.0, 0.0, 0.0)
         loc.direction = dir
+        loc.yaw += Math.toDegrees(hRecoil).toFloat()
+
+        val spreadMultiplier = if (multiPellet) 1.0 else 0.5
+        val yawOffset = (Math.random() - 0.5) * spreadRad * spreadMultiplier * 2
+        val pitchOffset = (Math.random() - 0.5) * spreadRad * spreadMultiplier * 2
         loc.yaw += Math.toDegrees(yawOffset).toFloat()
         loc.pitch += Math.toDegrees(pitchOffset).toFloat()
         return loc.direction
@@ -282,6 +285,7 @@ class WeaponManager(private val plugin: ZombieRun) {
 
                 curPdc.set(magazineKey, PersistentDataType.INTEGER, newMagazine)
                 curPdc.set(reloadKey, PersistentDataType.INTEGER, 0)
+                curPdc.set(shotCountKey, PersistentDataType.INTEGER, 0)
                 currentItem.itemMeta = curMeta
 
                 player.playSound(player.location, Sound.BLOCK_IRON_DOOR_CLOSE, 1f, 1.5f)
@@ -373,20 +377,59 @@ class WeaponManager(private val plugin: ZombieRun) {
         return item
     }
 
+    /**
+     * 按 maxReserve 限制发放弹药给玩家。只补充到 maxReserve 上限。
+     */
+    fun giveAmmoRespectingMaxReserve(player: Player, weaponId: String) {
+        val config = weapons[weaponId] ?: return
+        val existing = countAmmoInInventory(player, config.ammoCategory)
+        val needed = (config.maxReserve - existing).coerceAtLeast(0)
+        if (needed <= 0) return
+
+        var remaining = needed
+        val inv = player.inventory
+        // 先尝试堆叠到已有的弹药堆
+        for (i in 0 until inv.size) {
+            if (remaining <= 0) break
+            val item = inv.getItem(i) ?: continue
+            if (item.amount >= 64) continue
+            val meta = item.itemMeta ?: continue
+            if (meta.persistentDataContainer.has(weaponIdKey, PersistentDataType.STRING)) continue
+            val ammoCat = meta.persistentDataContainer.get(ammoCatKey, PersistentDataType.STRING)
+            if (ammoCat == config.ammoCategory) {
+                val space = 64 - item.amount
+                val add = min(remaining, space)
+                item.amount += add
+                remaining -= add
+            }
+        }
+        // 剩余的新建堆叠
+        while (remaining > 0) {
+            val stackSize = min(remaining, 64)
+            val ammoItem = buildAmmoItem(config.ammoCategory, stackSize) ?: break
+            if (inv.firstEmpty() == -1) break
+            inv.addItem(ammoItem)
+            remaining -= stackSize
+        }
+    }
+
     fun setAds(player: Player, ads: Boolean) {
         if (ads) {
             adsState[player.uniqueId] = true
             adsStartTime[player.uniqueId] = System.currentTimeMillis()
             player.scheduler.run(plugin, { _ ->
                 val attr = player.getAttribute(org.bukkit.attribute.Attribute.MOVEMENT_SPEED)
-                attr?.baseValue = (attr?.baseValue ?: 0.1) * 0.4
+                val current = attr?.baseValue ?: 0.1
+                adsOriginalSpeed.putIfAbsent(player.uniqueId, current)
+                attr?.baseValue = current * 0.4
                 player.addPotionEffect(org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.SLOWNESS, -1, 0, false, false))
             }, null)
         } else {
             adsState[player.uniqueId] = false
             player.scheduler.run(plugin, { _ ->
                 val attr = player.getAttribute(org.bukkit.attribute.Attribute.MOVEMENT_SPEED)
-                attr?.baseValue = 0.1
+                val original = adsOriginalSpeed.remove(player.uniqueId) ?: 0.1
+                attr?.baseValue = original
                 player.removePotionEffect(org.bukkit.potion.PotionEffectType.SLOWNESS)
             }, null)
         }
@@ -398,6 +441,8 @@ class WeaponManager(private val plugin: ZombieRun) {
     fun isReloading(item: ItemStack): Boolean {
         return (item.itemMeta?.persistentDataContainer?.get(reloadKey, PersistentDataType.INTEGER) ?: 0) > 0
     }
+
+    fun isPlayerReloading(player: Player): Boolean = reloadTasks.containsKey(player.uniqueId)
 
     fun getMagazine(item: ItemStack): Int {
         return item.itemMeta?.persistentDataContainer?.get(magazineKey, PersistentDataType.INTEGER) ?: 0
