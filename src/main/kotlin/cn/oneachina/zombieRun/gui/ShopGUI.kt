@@ -38,8 +38,8 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
             val item = ItemStack(material)
             val meta = item.itemMeta ?: return@forEachIndexed
             val customModelDataComponent = meta.customModelDataComponent
-            meta.displayName(Component.text(config.name.replace("&", "§")))
             val serializer = LegacyComponentSerializer.legacySection()
+            meta.displayName(serializer.deserialize(config.name.replace("&", "§")))
             val lore : MutableList<Component> = config.lore
                 .map { serializer.deserialize(it.replace("&", "§")) }
                 .toMutableList()
