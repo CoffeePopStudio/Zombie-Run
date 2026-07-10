@@ -87,8 +87,10 @@ class WeaponManager(private val plugin: ZombieRun) {
     }
 
     fun handleShoot(player: Player, item: ItemStack): Boolean {
-        if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return false
-        if (plugin.gameManager.getPlayerTeam(player) != GameManager.Team.HUMAN) return false
+        if (!plugin.debugMode) {
+            if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return false
+            if (plugin.gameManager.getPlayerTeam(player) != GameManager.Team.HUMAN) return false
+        }
 
         val meta = item.itemMeta ?: return false
         val pdc = meta.persistentDataContainer
