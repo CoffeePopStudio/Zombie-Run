@@ -420,6 +420,18 @@ class DoorManager(private val plugin: ZombieRun) {
         doors.remove(name)
     }
 
+    fun resetDoor(name: String) {
+        val door = doors[name] ?: return
+        val world = Bukkit.getWorlds().first()
+        if (door.isOpen) {
+            door.close(world)
+            val center = door.getCenterLocation(world)
+            Bukkit.getRegionScheduler().execute(plugin, center) {
+                door.closeBlocks(world)
+            }
+        }
+    }
+
     fun onPlayerEnterDoor(player: Player, doorNumber: Int) {
         val door = getDoorByNumber(doorNumber)
         if (door != null) {

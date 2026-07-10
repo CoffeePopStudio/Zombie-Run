@@ -2,8 +2,21 @@ package cn.oneachina.zombieRun.command
 
 import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.model.Respawn
+import org.bukkit.command.CommandSender
+import org.bukkit.entity.Player
 
 object TabCompleters {
+
+    private fun getTargetCoord(sender: CommandSender, axis: Char): String {
+        val player = sender as? Player ?: return "~"
+        val target = player.getTargetBlockExact(60) ?: return "~"
+        return when (axis) {
+            'x' -> target.x.toString()
+            'y' -> target.y.toString()
+            'z' -> target.z.toString()
+            else -> "~"
+        }
+    }
 
     fun spawn(plugin: ZombieRun, args: Array<out String>): MutableList<String> {
         if (args.size < 2) return mutableListOf()
@@ -33,12 +46,17 @@ object TabCompleters {
         }
     }
 
-    fun doors(plugin: ZombieRun, args: Array<out String>): MutableList<String> {
+    fun doors(plugin: ZombieRun, args: Array<out String>, sender: CommandSender): MutableList<String> {
         if (args.size < 2) return mutableListOf()
         return when (args[1].lowercase()) {
             "add" -> {
                 when (args.size) {
-                    in 3..8 -> mutableListOf("~")
+                    3 -> mutableListOf(getTargetCoord(sender, 'x'))
+                    4 -> mutableListOf(getTargetCoord(sender, 'y'))
+                    5 -> mutableListOf(getTargetCoord(sender, 'z'))
+                    6 -> mutableListOf(getTargetCoord(sender, 'x'))
+                    7 -> mutableListOf(getTargetCoord(sender, 'y'))
+                    8 -> mutableListOf(getTargetCoord(sender, 'z'))
                     9 -> {
                         listOf("normal", "player", "zombie", "start")
                             .filter { it.startsWith(args[7].lowercase()) }
@@ -54,11 +72,6 @@ object TabCompleters {
                             .filter { it.startsWith(args[9]) }
                             .toMutableList()
                     }
-                    12 -> {
-                        listOf("STONE", "IRON_BLOCK", "OBSERVER", "auto")
-                            .filter { it.startsWith(args[10].uppercase()) }
-                            .toMutableList()
-                    }
                     else -> mutableListOf()
                 }
             }
@@ -70,6 +83,13 @@ object TabCompleters {
                 } else mutableListOf()
             }
             "list" -> mutableListOf()
+            "reset" -> {
+                if (args.size == 3) {
+                    plugin.doorManager.getAllDoors().map { it.name }
+                        .filter { it.startsWith(args[2], ignoreCase = true) }
+                        .toMutableList()
+                } else mutableListOf()
+            }
             else -> mutableListOf()
         }
     }

@@ -168,9 +168,10 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr spawn add <名称> <类型> [门号] [房间号] - 添加重生点"))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr spawn remove <名称> - 删除重生点"))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr spawn list - 列出重生点"))
-        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr doors add <x1> <y1> <z1> <x2> <y2> <z2> [mode] [门号] [delay] [材质] - 添加门"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr doors add <x1> <y1> <z1> <x2> <y2> <z2> <mode> [门号] [delay] - 添加门（自动扫描方块）"))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr doors remove <名称> - 删除门"))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr doors list - 列出门"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr doors reset <名称> - 重置门为关闭状态"))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr buttons add <x> <y> <z> normal <门号> - 添加普通开门按钮"))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr buttons add <x> <y> <z> tp <playerX> <playerY> <playerZ> <zombieX> <zombieY> <zombieZ> <门号1> [门号2] [门号3] [门号4] [门号5] - 添加传送按钮（人类和僵尸目标，最多控制5个门）"))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr buttons add <x> <y> <z> escape - 添加撤离按钮"))
@@ -291,22 +292,24 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
 
     private fun handleDoors(sender: CommandSender, args: Array<out String>) {
         if (args.isEmpty()) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr doors <add|remove|list>"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr doors <add|remove|list|reset>"))
             return
         }
         when (args[0].lowercase()) {
             "add" -> handleDoorsAdd(sender, args.drop(1).toTypedArray())
             "remove" -> handleDoorsRemove(sender, args.drop(1).toTypedArray())
             "list" -> handleDoorsList(sender)
-            else -> sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c未知子命令，可用: add, remove, list"))
+            "reset" -> handleDoorsReset(sender, args.drop(1).toTypedArray())
+            else -> sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c未知子命令，可用: add, remove, list, reset"))
         }
     }
 
     private fun handleDoorsAdd(sender: CommandSender, args: Array<out String>) {
         if (args.size < 7) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr doors add <x1> <y1> <z1> <x2> <y2> <z2> [mode] [门号] [delay] [材质]"))
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§cmode: normal, player, zombie, start (默认为 normal)"))
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c材质可填具体材质名（如 STONE）或 auto（自动扫描当前方块）"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr doors add <x1> <y1> <z1> <x2> <y2> <z2> <mode>"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§cmode: normal, player, zombie, start"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§cnormal 模式额外参数: [门号] [delay]"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§cplayer/zombie/start 模式无需门号和 delay"))
             return
         }
         try {
@@ -324,12 +327,9 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                 return
             }
 
-            val doorNumber = if (args.size > 7) args[7].toIntOrNull() ?: 0 else 0
-            val delay = if (args.size > 8) args[8].toIntOrNull() ?: 30 else 30
-            val materialArg = if (args.size > 9) args[9] else "STONE"
-
-            val useScanData = materialArg.equals("auto", ignoreCase = true)
-            val material = if (useScanData) "" else materialArg
+            val isAutoMode = mode == "player" || mode == "zombie"
+            val doorNumber = if (isAutoMode) 0 else if (args.size > 7) (args[7].toIntOrNull() ?: 0) else 0
+            val delay = if (isAutoMode) 0 else if (args.size > 8) (args[8].toIntOrNull() ?: 30) else 30
 
             val minX = minOf(x1, x2)
             val minY = minOf(y1, y2)
@@ -339,18 +339,16 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
             val maxZ = maxOf(z1, z2)
 
             val blocks = mutableMapOf<String, String>()
-            if (useScanData) {
-                val world = if (sender is Player) sender.world else Bukkit.getWorlds().first()
-                for (x in minX..maxX) {
-                    for (y in minY..maxY) {
-                        for (z in minZ..maxZ) {
-                            val block = world.getBlockAt(x, y, z)
-                            blocks["$x,$y,$z"] = block.type.name
-                        }
+            val world = if (sender is Player) sender.world else Bukkit.getWorlds().first()
+            for (x in minX..maxX) {
+                for (y in minY..maxY) {
+                    for (z in minZ..maxZ) {
+                        val block = world.getBlockAt(x, y, z)
+                        blocks["$x,$y,$z"] = block.type.name
                     }
                 }
-                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已扫描门区域，共记录 ${blocks.size} 个方块。"))
             }
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已扫描门区域，共记录 ${blocks.size} 个方块。"))
 
             val doorName = "door_${System.currentTimeMillis()}"
 
@@ -364,17 +362,15 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                 maxZ = maxZ,
                 doorNumber = doorNumber,
                 delay = delay,
-                material = material,
+                material = "",
                 mode = Door.DoorMode.fromString(mode),
-                useScanData = useScanData,
+                useScanData = true,
                 blocks = blocks
             )
             plugin.configManager.addDoorFull(door)
             plugin.doorManager.addDoor(door)
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a门 '$doorName' 添加成功！模式: $mode"))
-            if (useScanData) {
-                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a使用自动扫描模式，关门时将恢复原始方块。"))
-            }
+            val modeLabel = if (isAutoMode) "$mode（自动分配门号和 delay）" else mode
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a门 '$doorName' 添加成功！模式: $modeLabel，自动扫描模式，关门时恢复原始方块。"))
         } catch (_: NumberFormatException) {
             sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c坐标必须是整数！"))
         }
@@ -399,6 +395,21 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         }
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a===== 门列表 ====="))
         doors.forEach { sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a- ${it.name} (#${it.doorNumber}, ${it.mode})")) }
+    }
+
+    private fun handleDoorsReset(sender: CommandSender, args: Array<out String>) {
+        if (args.isEmpty()) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr doors reset <名称>"))
+            return
+        }
+        val name = args[0]
+        val door = plugin.doorManager.getAllDoors().find { it.name == name }
+        if (door == null) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c未找到名为 '$name' 的门"))
+            return
+        }
+        plugin.doorManager.resetDoor(name)
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a门 '$name' 已重置为关闭状态！"))
     }
 
     private fun handleReload(sender: CommandSender) {
@@ -726,7 +737,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                     }
                     "doors" -> {
                         if (!isAdmin) return mutableListOf()
-                        TabCompleters.doors(plugin, args)
+                        TabCompleters.doors(plugin, args, sender)
                     }
                     "buttons" -> {
                         if (!isAdmin) return mutableListOf()
