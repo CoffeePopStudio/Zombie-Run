@@ -21,23 +21,17 @@ object TabCompleters {
     fun spawn(plugin: ZombieRun, args: Array<out String>): MutableList<String> {
         if (args.size < 2) return mutableListOf()
         return when (args[1].lowercase()) {
-            "add" -> {
-                when (args.size) {
-                    3 -> mutableListOf()
-                    4 -> {
-                        Respawn.RespawnType.entries.map { it.name.lowercase() }
-                            .filter { it.startsWith(args[3].lowercase()) }
-                            .toMutableList()
-                    }
-                    5 -> mutableListOf("~")
-                    6 -> mutableListOf("~")
-                    else -> mutableListOf()
-                }
-            }
             "remove" -> {
                 if (args.size == 3) {
                     plugin.respawnManager.getAllRespawns().map { it.name }
                         .filter { it.startsWith(args[2], ignoreCase = true) }
+                        .toMutableList()
+                } else mutableListOf()
+            }
+            "door-player", "door-zombie" -> {
+                if (args.size == 3) {
+                    plugin.doorManager.getAllDoors().map { it.doorNumber.toString() }
+                        .filter { it.startsWith(args[2]) }
                         .toMutableList()
                 } else mutableListOf()
             }

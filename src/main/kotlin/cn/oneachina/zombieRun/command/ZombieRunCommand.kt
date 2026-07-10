@@ -165,7 +165,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a===== 僵尸快跑命令 ====="))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr start - 开始游戏（需要管理员）"))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr door <门号> - 触发指定门"))
-        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr spawn add <名称> <类型> [门号] [房间号] - 添加重生点"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr spawn <wait|player|zombie|alpha|door-player|door-zombie> - 添加重生点"))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr spawn remove <名称> - 删除重生点"))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr spawn list - 列出重生点"))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr doors add <x1> <y1> <z1> <x2> <y2> <z2> <mode> [门号] [delay] - 添加门（自动扫描方块）"))
@@ -222,36 +222,41 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
 
     private fun handleSpawn(sender: CommandSender, args: Array<out String>) {
         if (args.isEmpty()) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr spawn <add|remove|list>"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr spawn <wait|player|zombie|alpha|door-player|door-zombie|remove|list>"))
             return
         }
         when (args[0].lowercase()) {
-            "add" -> handleSpawnAdd(sender, args.drop(1).toTypedArray())
+            "wait" -> handleSpawnQuick(sender, Respawn.RespawnType.WAIT, args.drop(1).toTypedArray())
+            "player" -> handleSpawnQuick(sender, Respawn.RespawnType.PLAYER, args.drop(1).toTypedArray())
+            "zombie" -> handleSpawnQuick(sender, Respawn.RespawnType.ZOMBIE, args.drop(1).toTypedArray())
+            "alpha" -> handleSpawnQuick(sender, Respawn.RespawnType.ZOMBIE_MAIN, args.drop(1).toTypedArray())
+            "door-player" -> handleSpawnQuick(sender, Respawn.RespawnType.DOOR_PLAYER, args.drop(1).toTypedArray())
+            "door-zombie" -> handleSpawnQuick(sender, Respawn.RespawnType.DOOR_ZOMBIE, args.drop(1).toTypedArray())
             "remove" -> handleSpawnRemove(sender, args.drop(1).toTypedArray())
             "list" -> handleSpawnList(sender)
-            else -> sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c未知子命令，可用: add, remove, list"))
+            else -> sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c未知子命令，可用: wait, player, zombie, alpha, door-player, door-zombie, remove, list"))
         }
     }
 
-    private fun handleSpawnAdd(sender: CommandSender, args: Array<out String>) {
+    private fun handleSpawnQuick(sender: CommandSender, type: Respawn.RespawnType, args: Array<out String>) {
         if (sender !is Player) {
             sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
             return
         }
-        if (args.size < 2) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr spawn add <名称> <类型> [门号] [房间号]"))
+        val doorNumber = if (args.isNotEmpty()) args[0].toIntOrNull() else null
+        if ((type == Respawn.RespawnType.DOOR_PLAYER || type == Respawn.RespawnType.DOOR_ZOMBIE) && doorNumber == null) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此类型需要指定门号！用法: /zr spawn ${type.name.lowercase().replace("_", "-")} <门号>"))
             return
         }
-        val name = args[0]
-        val typeStr = args[1].uppercase()
-        val type = try {
-            Respawn.RespawnType.valueOf(typeStr)
-        } catch (_: IllegalArgumentException) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c无效的类型！可用: ${Respawn.RespawnType.entries.joinToString(", ")}"))
-            return
-        }
-        val doorNumber = if (args.size > 2) args[2].toIntOrNull() else null
-        val roomNumber = if (args.size > 3) args[3].toIntOrNull() else null
+
+        val prefix = type.name.lowercase()
+        val existing = plugin.respawnManager.getAllRespawns()
+        var idx = 1
+        var name: String
+        do {
+            name = "${prefix}_$idx"
+            idx++
+        } while (existing.any { it.name.equals(name, ignoreCase = true) })
 
         val respawn = Respawn(
             name = name,
@@ -262,11 +267,11 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
             pitch = sender.location.pitch.toDouble(),
             type = type,
             doorNumber = doorNumber,
-            roomNumber = roomNumber
+            roomNumber = null
         )
         plugin.configManager.addRespawn(respawn)
         plugin.respawnManager.addRespawn(respawn)
-        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a重生点 '$name' 添加成功！"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a重生点 '$name' (${type.name}) 添加成功！"))
     }
 
     private fun handleSpawnRemove(sender: CommandSender, args: Array<out String>) {
@@ -696,9 +701,11 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                         (1..9).map { it.toString() }.filter { it.startsWith(args[1]) }.toMutableList()
                     }
                     "spawn" -> {
-                        if (!isAdmin) return mutableListOf()
-                        listOf("add", "remove", "list").filter { it.startsWith(args[1].lowercase()) }.toMutableList()
-                    }
+                    if (!isAdmin) return mutableListOf()
+                    listOf("wait", "player", "zombie", "alpha", "door-player", "door-zombie", "remove", "list")
+                        .filter { it.startsWith(args[1].lowercase()) }
+                        .toMutableList()
+                }
                     "doors" -> {
                         if (!isAdmin) return mutableListOf()
                         listOf("add", "remove", "list").filter { it.startsWith(args[1].lowercase()) }.toMutableList()
