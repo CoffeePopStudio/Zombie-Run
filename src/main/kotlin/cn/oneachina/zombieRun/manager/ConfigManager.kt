@@ -2,7 +2,6 @@ package cn.oneachina.zombieRun.manager
 
 import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.model.AmmoCategory
-import cn.oneachina.zombieRun.model.AmmoConfig
 import cn.oneachina.zombieRun.model.Door
 import cn.oneachina.zombieRun.model.Button
 import cn.oneachina.zombieRun.model.Respawn

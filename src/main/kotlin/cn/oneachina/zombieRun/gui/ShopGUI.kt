@@ -46,7 +46,7 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
             lore.add(Component.empty())
             lore.add(Component.text("价格: ", NamedTextColor.YELLOW)
                 .append(Component.text("${config.price} 硬币", NamedTextColor.GOLD)))
-            lore.add(Component.text("伤害: ${config.damage} | 弹容: ${config.maxAmmo}", NamedTextColor.GRAY))
+            lore.add(LegacyComponentSerializer.legacySection().deserialize("§7伤害: ${config.damage} | 弹匣: ${config.magazineSize} | 弹药: ${config.ammoCategory}"))
 
             meta.lore(lore)
             if (!config.customModelData.floats().isEmpty()) {

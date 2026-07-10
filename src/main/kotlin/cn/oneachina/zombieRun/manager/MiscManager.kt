@@ -87,7 +87,7 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
 
     private fun giveAmmoForWeapon(player: Player, weaponId: String) {
         val config = plugin.weaponManager.getWeaponConfig(weaponId) ?: return
-        val ammoItem = plugin.weaponManager.buildAmmoItem(config.ammoType, 64)
+        val ammoItem = plugin.weaponManager.buildAmmoItem(config.ammoCategory, 64)
         if (ammoItem != null) {
             player.inventory.addItem(ammoItem.clone().apply { amount = 64 })
             player.inventory.addItem(ammoItem.clone().apply { amount = 64 })
