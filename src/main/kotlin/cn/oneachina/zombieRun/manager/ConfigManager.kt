@@ -124,18 +124,7 @@ class ConfigManager(private val plugin: ZombieRun) {
             val delay = doorSection.getInt("delay", 30)
             val material = doorSection.getString("material", "STONE") ?: "STONE"
             val useScanData = doorSection.getBoolean("use-scan-data", false)
-            val blocks = mutableMapOf<String, String>()
-            if (useScanData) {
-                val blocksSection = doorSection.getConfigurationSection("blocks")
-                if (blocksSection != null) {
-                    for (key in blocksSection.getKeys(false)) {
-                        val mat = blocksSection.getString(key)
-                        if (mat != null) {
-                            blocks[key] = mat
-                        }
-                    }
-                }
-            }
+            val blocks = if (useScanData) loadDoorScanData(name) else emptyMap()
 
             val door = Door(
                 name = name,
@@ -161,6 +150,40 @@ class ConfigManager(private val plugin: ZombieRun) {
             doors.add(door)
         }
         return doors
+    }
+
+    private fun getDoorScanFile(name: String): File {
+        val dir = File(plugin.dataFolder, "config/doors")
+        if (!dir.exists()) dir.mkdirs()
+        return File(dir, "$name.scandata.yml")
+    }
+
+    private fun loadDoorScanData(name: String): Map<String, String> {
+        val scanFile = getDoorScanFile(name)
+        if (!scanFile.exists()) return emptyMap()
+
+        val scanYaml = YamlConfiguration.loadConfiguration(scanFile)
+        val blocks = mutableMapOf<String, String>()
+        for (key in scanYaml.getKeys(false)) {
+            val mat = scanYaml.getString(key)
+            if (mat != null) blocks[key] = mat
+        }
+        return blocks
+    }
+
+    private fun saveDoorScanData(name: String, blocks: Map<String, String>) {
+        val scanFile = getDoorScanFile(name)
+        val scanYaml = YamlConfiguration()
+        blocks.forEach { (pos, mat) -> scanYaml.set(pos, mat) }
+        try {
+            scanYaml.save(scanFile)
+        } catch (e: IOException) {
+            plugin.logger.severe("门扫描数据保存失败 ${name}: ${e.message}")
+        }
+    }
+
+    private fun deleteDoorScanData(name: String) {
+        getDoorScanFile(name).delete()
     }
 
     fun loadRespawns(): List<Respawn> {
@@ -392,11 +415,8 @@ class ConfigManager(private val plugin: ZombieRun) {
         doorSection.set("special-teleport", door.specialTeleport)
         doorSection.set("mode", door.mode.name.lowercase())
         doorSection.set("use-scan-data", door.useScanData)
-        if (door.blocks.isNotEmpty()) {
-            val blocksSection = doorSection.createSection("blocks")
-            door.blocks.forEach { (pos, mat) ->
-                blocksSection.set(pos, mat)
-            }
+        if (door.useScanData && door.blocks.isNotEmpty()) {
+            saveDoorScanData(door.name, door.blocks)
         }
         saveConfig()
     }
@@ -420,6 +440,7 @@ class ConfigManager(private val plugin: ZombieRun) {
 
     fun removeDoor(name: String) {
         config.set("doors.$name", null)
+        deleteDoorScanData(name)
         saveConfig()
     }
 
