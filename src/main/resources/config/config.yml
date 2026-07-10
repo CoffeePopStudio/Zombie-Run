@@ -6,16 +6,15 @@
 
 # ---------- 全局游戏参数 ----------
 game:
-  mode: zombie_run
-  world: world                # 游戏地图所在的世界名
-  start-delay: 30             # 达到最小人数后，等待多少秒自动开局
-  min-players: 8              # 自动开局所需的最小在线玩家数
-  max-players: 32             # 最大玩家数（用于占位符/提示）
-  max-duration: 1800          # 单局最大秒数（1800秒 = 30分钟），超时自动结束
+  mode: zombie_run             # （预留）游戏模式，当前仅 zombie_run，暂未启用
+  world: world                 # （预留）游戏地图所在的世界名，暂未启用
+  start-delay: 30              # 达到最小人数后，等待多少秒自动开局
+  min-players: 8               # 自动开局所需的最小在线玩家数
+  max-players: 32              # 最大显示玩家数（仅用于 PAPI 占位符，不限制实际加入）
+  max-duration: 1800           # 单局最大秒数（1800秒 = 30分钟），超时自动结束
 
-# ---------- 默认出生点（兜底） ----------
-# 当玩家加入时没有配置 RESPAWN_WAIT 类型的重生点时，
-# 会传送至此坐标
+# ---------- 默认出生点 ----------
+# 当世界不存在等极端情况下，作为重生点的最终兜底坐标
 spawn:
   x: 0
   y: 64
@@ -23,25 +22,36 @@ spawn:
   yaw: 0.0
   pitch: 0.0
 
+# ---------- 终点坐标 ----------
+# （预留）游戏终点坐标，暂未启用
+end:
+  x: 100
+  y: 64
+  z: 100
+
 # ---------- 门区域定义 ----------
 # 每扇门需要单独配置一个条目，键名可自定义（如 door_1）
 # 参数说明：
 #   x1/y1/z1, x2/y2/z2: 门的对角方块坐标（插件会自动计算 min/max）
-#   delay:      从按下按钮到开门所需的秒数（倒计时）
-#   duration:   门保持开启的秒数后自动关闭
+#   delay:       按下按钮后等待多少秒开门（开门前倒计时）
+#   close-time:  门开启后多少秒自动关闭（关门倒计时）
 #   door-number: 门的编号（房间号判定/传送逻辑的核心标识）
-#   mode:       门模式
+#   mode:        门模式
 #     - normal: 普通门，由玩家通过按钮触发（人类专用）
 #     - start:  起始门，游戏开始时自动开启
 #     - player: 开局时自动对玩家开启
 #     - zombie: 开局后延迟对僵尸开启
-#   material:   关门后恢复的方块材质（必须是 Bukkit Material 名）
-#   open-time:  开启倒计时秒数（已废弃，使用 delay 替代）
-#   close-time: 关门倒计时秒数
-#   use-scan-data / blocks: 启用后会在添加门时自动扫描方块并保存，
-#                           关门时恢复原始方块（而非统一 Material）
+#   material:    关门后恢复的方块材质（必须是 Bukkit Material 名，如 STONE）
+#   open-time:   （预留）门保持开启的时长，暂未启用，由 close-time 替代
+#   duration:    （预留）门开启持续时间，暂未启用
+#   use-scan-data: 启用后关门时恢复扫描到的原始方块（而非统一 material）
+#   blocks:      仅当 use-scan-data 为 true 时有效，保存原始方块快照
+#                （添加门后由插件自动扫描生成，无需手动填写）
+#   teleport-region:    （可选）WorldGuard 区域名，关门时传送门内玩家
+#   has-zombie-teleport:（可选）关门时僵尸是否也传送
+#   special-teleport:   （可选）启用特殊传送逻辑（如电梯、机场专线）
 #
-# 示例 - 普通门（编号1，延迟5秒开启，持续10秒后15秒内关闭）：
+# 示例 - 普通门（编号1，按下按钮后5秒开启，开启后15秒关闭）：
 # door_1:
 #   x1: 10
 #   y1: 64
@@ -50,14 +60,12 @@ spawn:
 #   y2: 66
 #   z2: 20
 #   delay: 5
-#   duration: 10
+#   close-time: 15
 #   door-number: 1
 #   mode: normal
 #   material: STONE
-#   open-time: 10
-#   close-time: 15
 #
-# 示例 - 使用扫描数据（自动保存原始方块）：
+# 示例 - 使用扫描数据（自动保存原始方块，关闭时精确恢复）：
 # door_scan:
 #   x1: 10
 #   y1: 64
@@ -66,16 +74,10 @@ spawn:
 #   y2: 66
 #   z2: 20
 #   delay: 5
-#   duration: 10
+#   close-time: 15
 #   door-number: 2
 #   mode: normal
-#   material: ""
-#   open-time: 10
-#   close-time: 15
 #   use-scan-data: true
-#   blocks:
-#     "10,64,10": STONE
-#     "10,64,11": AIR
 doors: {}
 
 # ---------- 按钮定义 ----------
@@ -146,13 +148,13 @@ tp-button:
 
 # ---------- 重生点定义 ----------
 # 键名可自定义，type 决定了重生点的用途
-# 可用类型：
-#   RESPAWN_WAIT:    等待大厅（玩家加入/游戏结束时的传送点）
-#   RESPAWN_PLAYER:  人类重生点
-#   RESPAWN_ZOMBIE:  僵尸重生点
-#   RESPAWN_ALPHA:   母体僵尸重生点
-#   RESPAWN_DOOR_PLAYER: 关在门外的玩家被传送的落点
-#   RESPAWN_DOOR_ZOMBIE: 关在门外的僵尸被传送的落点
+# 可用类型（必须与代码中 RespawnType 枚举名完全一致）：
+#   WAIT:        等待大厅（玩家加入/游戏结束时的传送点）
+#   PLAYER:      人类重生点
+#   ZOMBIE:      僵尸重生点
+#   ZOMBIE_MAIN: 母体僵尸重生点
+#   DOOR_PLAYER: 关在门外的玩家被传送的落点
+#   DOOR_ZOMBIE: 关在门外的僵尸被传送的落点
 # 参数：
 #   x/y/z:           重生点坐标（方块坐标）
 #   yaw/pitch:       传送后的视角朝向（可省略，默认为0）
@@ -167,39 +169,36 @@ tp-button:
 #   z: 0
 #   yaw: 0.0
 #   pitch: 0.0
-#   type: RESPAWN_WAIT
+#   type: WAIT
 respawns: {}
 
 # ---------- 僵尸属性 ----------
+# 注意：以下倍率当前版本暂未在游戏逻辑中启用，僵尸属性由代码硬编码
+# （母体僵尸伤害 10.0，普通僵尸伤害 6.0，速度/跳跃/力量为固定药水效果）
 zombie:
-  health-multiplier: 2.0     # 僵尸生命值倍率
-  speed-multiplier: 1.2     # 僵尸速度倍率
-  damage-multiplier: 1.5    # 僵尸伤害倍率
+  health-multiplier: 2.0     # （预留）僵尸生命值倍率
+  speed-multiplier: 1.2       # （预留）僵尸速度倍率
+  damage-multiplier: 1.5      # （预留）僵尸伤害倍率
 
 # ---------- 人类属性 ----------
+# 注意：以下倍率当前版本暂未在游戏逻辑中启用，人类属性由代码硬编码
 human:
-  speed-multiplier: 1.0     # 人类速度倍率
-  jump-multiplier: 1.0      # 人类跳跃倍率
-  stamina-regen: 0.1        # 人类体力恢复速度
+  speed-multiplier: 1.0       # （预留）人类速度倍率
+  jump-multiplier: 1.0        # （预留）人类跳跃倍率
+  stamina-regen: 0.1          # （预留）人类体力恢复速度
 
 # ---------- 体力系统 ----------
+# 注意：以下参数当前版本暂未在游戏逻辑中启用，体力值由代码硬编码
+# （最大体力 100，疾跑每 2 tick 消耗 1.0，站立恢复 1.0~2.0）
 stamina:
-  max: 100.0                 # 最大体力值
-  sprint-cost: 0.5           # 疾跑每 tick 消耗的体力
-  standing-regen: 0.2        # 站立不动时的体力恢复速度
+  max: 100.0                  # （预留）最大体力值
+  sprint-cost: 0.5            # （预留）疾跑每 tick 消耗的体力
+  standing-regen: 0.2         # （预留）站立不动时的体力恢复速度
 
 # ---------- 枪械价格 ----------
-# default-price: 所有枪械的默认价格（未在 prices 中单独配置的武器使用此价格）
-# prices:       按武器名覆写价格，键名是 WeaponMechanics 中的 weapon title
-#
-# 示例 - 不同枪械设置不同价格：
-# prices:
-#   Pistol: 300
-#   Shotgun: 800
-#   Rifle: 1000
-#   Sniper: 1500
-#
-# 武器名确认方式：在服务器使用 WM 指令查看已加载的武器列表
+# 注意：以下配置当前版本暂未启用，武器价格直接在 custom-weapons 中各自定义
+# default-price: 所有枪械的默认价格（预留，暂未在代码中读取）
+# prices:       按武器名覆写价格（预留，暂未在代码中读取）
 weapons:
   default-price: 600
   prices: {}
@@ -224,7 +223,31 @@ ammo-categories:
     custom-model-data: 30004
 
 # ---------- 自定义枪械 ----------
-custom-weapons:
+# 键名可自定义（如 pistol、shotgun），每个武器单独配置
+# 参数说明：
+#   material:          Bukkit 材质名（需配合资源包 custom-model-data 使用）
+#   custom-model-data: 资源包自定义模型数据 ID
+#   name:              武器显示名称（支持 & 颜色代码）
+#   lore:              武器描述文字（支持 & 颜色代码）
+#   damage:            单发基础伤害
+#   ammo-category:     使用的弹药类别（对应 ammo-categories 中的 key）
+#   magazine-size:     弹匣容量
+#   max-reserve:       最大备弹量
+#   reload-time-ticks: 换弹所需 tick 数（20 tick = 1 秒）
+#   price:             武器价格（硬币）
+#   cooldown-ticks:    射击冷却 tick 数
+#   spread:            基础散布值（越大越不准）
+#   ads-spread-mult:   瞄准时散布倍率（<1 表示瞄准更精准）
+#   ads-recoil-mult:   瞄准时后坐力倍率
+#   headshot-mult:     爆头伤害倍率
+#   knockback:         击退力度（0 = 无击退）
+#   range:             最大射程（方块数）
+#   pellets:           每次射击弹丸数（霰弹枪专用，默认为 1）
+#   sound:             射击音效（Bukkit Sound 名）
+#   hit-sound:         命中音效（Bukkit Sound 名）
+#   recoil:            后坐力值列表，按 shotCount 依次取用，超出则取最后一个
+#   automatic:         是否为全自动武器（按住右键连续射击）
+#   spread-per-shot:   连射时每发额外增加的散布值
   pistol:
     material: WOODEN_HOE
     custom-model-data: 10001
@@ -289,7 +312,9 @@ custom-weapons:
     automatic: true
 
 # ---------- 杂项 ----------
+# 注意：以下参数当前版本暂未在游戏逻辑中启用，相关值由代码硬编码
+# （爆炸伤害固定 0.05，近战击退固定 0.3，武器击退使用各自 config.knockback）
 misc:
-  explosion-damage-reduction: 0.5   # 爆炸伤害减免倍率（0.5 = 减半）
-  knockback-reduction: 0.3          # 击退效果减免
-  zombie-knockback-force: 0.8       # 僵尸被人类击退时的力度
+  explosion-damage-reduction: 0.5   # （预留）爆炸伤害减免倍率
+  knockback-reduction: 0.3          # （预留）击退效果减免
+  zombie-knockback-force: 0.8       # （预留）僵尸被人类击退时的力度
