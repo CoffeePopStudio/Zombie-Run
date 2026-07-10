@@ -95,7 +95,8 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
         if (weaponId != null) {
             val config = plugin.weaponManager.getWeaponConfig(weaponId) ?: return
             val coins = plugin.coinManager.getCoins(player.uniqueId)
-            if (coins < config.price) {
+
+            if (!plugin.debugMode && coins < config.price) {
                 player.sendMessage(Component.text("硬币不足！需要: ${config.price}，当前: $coins", NamedTextColor.RED))
                 player.closeInventory()
                 return
@@ -107,12 +108,22 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
                 return
             }
 
-            plugin.coinManager.takeCoins(player.uniqueId, config.price)
-            plugin.weaponManager.giveWeapon(player, weaponId)
-            player.sendMessage(Component.text(
-                "购买成功！${config.name.replace("&", "")} 花费: ${config.price} 硬币",
-                NamedTextColor.GREEN
-            ))
+            if (plugin.debugMode) {
+                plugin.weaponManager.giveWeapon(player, weaponId)
+                giveAmmoForWeapon(player, weaponId)
+                player.sendMessage(Component.text(
+                    "§e[Debug] §a免费获得！${config.name.replace("&", "")} (跳过硬币检查)",
+                    NamedTextColor.GREEN
+                ))
+            } else {
+                plugin.coinManager.takeCoins(player.uniqueId, config.price)
+                plugin.weaponManager.giveWeapon(player, weaponId)
+                giveAmmoForWeapon(player, weaponId)
+                player.sendMessage(Component.text(
+                    "购买成功！${config.name.replace("&", "")} 花费: ${config.price} 硬币",
+                    NamedTextColor.GREEN
+                ))
+            }
             player.closeInventory()
             return
         }
@@ -129,6 +140,16 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
 
         if (plainTitle == GUI_TITLE) {
             event.isCancelled = true
+        }
+    }
+
+    private fun giveAmmoForWeapon(player: Player, weaponId: String) {
+        val config = plugin.weaponManager.getWeaponConfig(weaponId) ?: return
+        val ammoItem = plugin.weaponManager.buildAmmoItem(config.ammoCategory, 64)
+        if (ammoItem != null) {
+            player.inventory.addItem(ammoItem.clone().apply { amount = 64 })
+            player.inventory.addItem(ammoItem.clone().apply { amount = 64 })
+            player.inventory.addItem(ammoItem.clone().apply { amount = 64 })
         }
     }
 }

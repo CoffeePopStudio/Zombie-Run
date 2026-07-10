@@ -22,7 +22,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         }
 
         when (args[0].lowercase()) {
-            "start", "spawn", "doors", "buttons", "reload", "open", "close", "reset" -> {
+            "start", "spawn", "doors", "buttons", "reload", "open", "close", "reset", "debug" -> {
                 if (!sender.hasPermission("zombie.run.admin")) {
                     sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有权限使用此命令！"))
                     return true
@@ -37,6 +37,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                     "close" -> handleClose()
                     "reset" -> handleReset(sender, args.drop(1).toTypedArray())
                     "weapon" -> WeaponCommands.handle(plugin, sender, args.drop(1).toTypedArray())
+                    "debug" -> handleDebug(sender)
                 }
             }
             "coins" -> CoinCommands.handle(plugin, sender, args.drop(1).toTypedArray())
@@ -182,6 +183,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr unselect - 取消选择"))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr randomgun - 随机获得枪械（仅人类）"))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr lobby - 返回大厅"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr debug - 切换 Debug 模式（管理员）"))
     }
 
     private fun handleStart(sender: CommandSender) {
@@ -191,6 +193,13 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         }
         plugin.gameManager.forceStartGame()
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a游戏开始！"))
+    }
+
+    private fun handleDebug(sender: CommandSender) {
+        plugin.debugMode = !plugin.debugMode
+        val status = if (plugin.debugMode) "§a开启" else "§c关闭"
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§eDebug 模式已${status}§e！"))
+        plugin.logger.info("Debug 模式已${if (plugin.debugMode) "开启" else "关闭"}（由 ${sender.name} 操作）")
     }
 
     private fun handleDoor(sender: CommandSender, args: Array<out String>) {
@@ -662,7 +671,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         args: Array<out String>
     ): MutableList<String>? {
         val isAdmin = sender.hasPermission("zombie.run.admin")
-        val adminCmds = listOf("start", "spawn", "doors", "buttons", "reload", "open", "close", "reset", "xp", "level")
+        val adminCmds = listOf("start", "spawn", "doors", "buttons", "reload", "open", "close", "reset", "debug", "xp", "level")
         val playerCmds = listOf("door", "select", "unselect", "randomgun", "lobby", "profile", "quest", "title", "transfer", "shop", "coins")
 
         return when (args.size) {

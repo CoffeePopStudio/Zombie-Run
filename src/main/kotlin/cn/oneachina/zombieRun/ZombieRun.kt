@@ -17,6 +17,8 @@ import org.bukkit.Bukkit
 import org.bukkit.plugin.java.JavaPlugin
 
 class ZombieRun : JavaPlugin() {
+    var debugMode = false
+
     lateinit var configManager: ConfigManager
     lateinit var doorManager: DoorManager
     lateinit var doorZoneManager: DoorZoneManager

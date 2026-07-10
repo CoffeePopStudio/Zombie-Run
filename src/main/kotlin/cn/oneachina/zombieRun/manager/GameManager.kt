@@ -74,7 +74,7 @@ class GameManager(private val plugin: ZombieRun) {
 
     fun forceStartGame() {
         if (status != GameStatus.WAITING && status != GameStatus.ENDED) return
-        if (Bukkit.getOnlinePlayers().isEmpty()) {
+        if (Bukkit.getOnlinePlayers().isEmpty() && !plugin.debugMode) {
             plugin.logger.warning("尝试开始游戏但没有玩家在线")
             return
         }
@@ -184,6 +184,7 @@ class GameManager(private val plugin: ZombieRun) {
     }
 
     fun checkGameEnd() {
+        if (plugin.debugMode) return
         if (status == GameStatus.RUNNING && humans.isEmpty()) {
             plugin.logger.info("人类数量为0，游戏结束")
             endGame(Team.ZOMBIE)
@@ -386,6 +387,8 @@ class GameManager(private val plugin: ZombieRun) {
 
     private fun checkAutoStartCondition() {
         if (status != GameStatus.WAITING && status != GameStatus.STARTING) return
+
+        if (plugin.debugMode) return
 
         val onlineCount = Bukkit.getOnlinePlayers().size
         val minPlayers = plugin.configManager.getMinPlayers()

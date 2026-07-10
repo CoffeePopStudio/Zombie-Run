@@ -29,7 +29,9 @@ class WeaponListener(private val plugin: ZombieRun) : Listener {
             if (wm.isReloading(item)) return
 
             if (player.isSneaking) {
-                if (wm.getMagazine(item) >= (wm.getWeaponConfig(wm.getWeaponId(item) ?: return) ?: return).magazineSize) {
+                val weaponId = wm.getWeaponId(item) ?: return
+                val config = wm.getWeaponConfig(weaponId) ?: return
+                if (wm.getMagazine(item) >= config.magazineSize) {
                     player.sendMessage(Component.text("弹匣已满", NamedTextColor.GREEN))
                     return
                 }
@@ -71,7 +73,9 @@ class WeaponListener(private val plugin: ZombieRun) : Listener {
         }
 
         if (event.isSneaking) {
-            if (wm.isReloading(item) && wm.getMagazine(item) < (wm.getWeaponConfig(wm.getWeaponId(item) ?: return) ?: return).magazineSize) {
+            val weaponId = wm.getWeaponId(item) ?: return
+            val config = wm.getWeaponConfig(weaponId) ?: return
+            if (wm.isReloading(item) && wm.getMagazine(item) < config.magazineSize) {
                 wm.handleReload(player, item)
             }
         } else {
