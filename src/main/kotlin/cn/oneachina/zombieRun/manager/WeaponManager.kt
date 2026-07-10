@@ -9,12 +9,11 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.Particle
-import org.bukkit.Registry
 import org.bukkit.Sound
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
-import java.util.UUID
+import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.min
 
@@ -156,7 +155,7 @@ class WeaponManager(private val plugin: ZombieRun) {
                     }
                 }
                 if (config.hitSound != null) {
-                    val s = NamespacedKey.fromString(config.hitSound.lowercase())?.let { Registry.SOUNDS.get(it) }
+                    val s = Sound.valueOf(config.hitSound.uppercase())
                     if (s != null) {
                         player.playSound(player.location, s, 0.5f, 1.5f)
                     }
@@ -165,7 +164,7 @@ class WeaponManager(private val plugin: ZombieRun) {
         }
 
         if (config.sound != null) {
-            val s = NamespacedKey.fromString(config.sound.lowercase())?.let { Registry.SOUNDS.get(it) }
+            val s = Sound.valueOf(config.sound.uppercase())
             if (s != null) {
                 player.playSound(player.location, s, 0.8f, 1.2f)
             }
