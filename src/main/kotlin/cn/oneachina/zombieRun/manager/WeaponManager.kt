@@ -431,7 +431,7 @@ class WeaponManager(private val plugin: ZombieRun) {
                 return@runAtFixedRate
             }
             handleShoot(player, currentItem)
-        }, null, 0L, config.cooldownTicks.toLong())
+        }, null, 1L, config.cooldownTicks.toLong())
 
         autoFireTasks[player.uniqueId] = task
     }
