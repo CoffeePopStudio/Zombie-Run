@@ -328,7 +328,9 @@ class WeaponManager(private val plugin: ZombieRun) {
         var total = 0
         for (item in player.inventory.contents) {
             if (item == null) continue
-            val ammoCat = item.itemMeta?.persistentDataContainer?.get(ammoCatKey, PersistentDataType.STRING)
+            val meta = item.itemMeta ?: continue
+            if (meta.persistentDataContainer.has(weaponIdKey, PersistentDataType.STRING)) continue
+            val ammoCat = meta.persistentDataContainer.get(ammoCatKey, PersistentDataType.STRING)
             if (ammoCat == category) total += item.amount
         }
         return total
@@ -340,7 +342,9 @@ class WeaponManager(private val plugin: ZombieRun) {
         for (i in 0 until inv.size) {
             if (remaining <= 0) break
             val item = inv.getItem(i) ?: continue
-            val ammoCat = item.itemMeta?.persistentDataContainer?.get(ammoCatKey, PersistentDataType.STRING)
+            val meta = item.itemMeta ?: continue
+            if (meta.persistentDataContainer.has(weaponIdKey, PersistentDataType.STRING)) continue
+            val ammoCat = meta.persistentDataContainer.get(ammoCatKey, PersistentDataType.STRING)
             if (ammoCat == category) {
                 val take = min(remaining, item.amount)
                 if (item.amount <= take) {
