@@ -88,6 +88,22 @@ object TabCompleters {
         }
     }
 
+    fun doorBehavior(plugin: ZombieRun, args: List<String>): MutableList<String> {
+        return when (args.size) {
+            1 -> listOf("set", "remove", "info")
+                .filter { it.startsWith(args[0].lowercase()) }.toMutableList()
+            2 -> plugin.doorManager.getAllDoors().map { it.name }
+                .filter { it.startsWith(args[1], ignoreCase = true) }.toMutableList()
+            3 -> {
+                if (args[0].lowercase() == "set") {
+                    listOf("elevator", "subway", "airport")
+                        .filter { it.startsWith(args[2].lowercase()) }.toMutableList()
+                } else mutableListOf()
+            }
+            else -> mutableListOf()
+        }
+    }
+
     fun buttons(plugin: ZombieRun, args: Array<out String>, sender: CommandSender): MutableList<String> {
         if (args.size < 2) return mutableListOf()
         return when (args[1].lowercase()) {
@@ -96,7 +112,7 @@ object TabCompleters {
                     3 -> mutableListOf(getTargetCoord(sender, 'x'))
                     4 -> mutableListOf(getTargetCoord(sender, 'y'))
                     5 -> {
-                        listOf("normal", "tp", "escape")
+                        listOf("normal", "escape")
                             .filter { it.startsWith(args[4].lowercase()) }
                             .toMutableList()
                     }
@@ -105,48 +121,7 @@ object TabCompleters {
                         val mode = args[4].lowercase()
                         when (mode) {
                             "normal" -> listOf("<门号>").filter { it.startsWith(args[5]) }
-                            "tp" -> mutableListOf(getTargetCoord(sender, 'x'))
                             "escape" -> mutableListOf()
-                            else -> mutableListOf()
-                        }
-                    }
-
-                    7 -> {
-                        val mode = args[4].lowercase()
-                        when (mode) {
-                            "tp" -> mutableListOf(getTargetCoord(sender, 'y'))
-                            else -> mutableListOf()
-                        }
-                    }
-
-                    8 -> {
-                        val mode = args[4].lowercase()
-                        when (mode) {
-                            "tp" -> mutableListOf(getTargetCoord(sender, 'z'))
-                            else -> mutableListOf()
-                        }
-                    }
-
-                    9 -> {
-                        val mode = args[4].lowercase()
-                        when (mode) {
-                            "tp" -> mutableListOf(getTargetCoord(sender, 'x'))
-                            else -> mutableListOf()
-                        }
-                    }
-
-                    10 -> {
-                        val mode = args[4].lowercase()
-                        when (mode) {
-                            "tp" -> mutableListOf(getTargetCoord(sender, 'y'))
-                            else -> mutableListOf()
-                        }
-                    }
-
-                    11 -> {
-                        val mode = args[4].lowercase()
-                        when (mode) {
-                            "tp" -> mutableListOf(getTargetCoord(sender, 'z'))
                             else -> mutableListOf()
                         }
                     }

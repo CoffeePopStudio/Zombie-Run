@@ -31,15 +31,6 @@ class GameListener(
 
     private val playerCurrentDoorZones = ConcurrentHashMap<UUID, Int>()
     private val playerDoorEntryPoints = ConcurrentHashMap<UUID, Pair<Int, Double>>()
-    private val activeTpSessions = ConcurrentHashMap<String, TpSession>()
-
-    private data class TpSession(
-        val button: Button,
-        val teleportedPlayers: MutableSet<UUID>
-    ) {
-        var countdownTask: ScheduledTask? = null
-        var forceDelayTask: ScheduledTask? = null
-    }
 
     @EventHandler
     fun onPlayerJoin(event: PlayerJoinEvent) {
@@ -103,7 +94,6 @@ class GameListener(
         if (team == GameManager.Team.SPECTATOR) return
         val currentDoorNumber = detectCurrentDoorNumber(player)
         handleDoorZoneEvents(player, currentDoorNumber)
-        handleTpSessionCheck(player, currentDoorNumber)
         handleBlackWoolDamage(player)
     }
 
@@ -188,68 +178,6 @@ class GameListener(
         }
     }
 
-    private fun handleTpSessionCheck(player: Player, currentDoorNumber: Int) {
-        if (currentDoorNumber == -1) return
-        for ((_, session) in activeTpSessions) {
-            val areaDoorNumber = session.button.areaDoorNumber ?: continue
-            if (currentDoorNumber == areaDoorNumber && player.uniqueId !in session.teleportedPlayers) {
-                tpPlayerToTarget(session, player)
-            }
-        }
-    }
-
-    private fun tpPlayerToTarget(session: TpSession, player: Player) {
-        val team = plugin.gameManager.getPlayerTeam(player)
-        val target = session.button.getTargetForTeam(team) ?: return
-        val (tx, ty, tz) = target
-        val loc = org.bukkit.Location(player.world, tx + 0.5, ty.toDouble(), tz + 0.5)
-
-        player.teleportAsync(loc)
-        player.showTitle(Title.title(
-            Component.text("传送完成", NamedTextColor.GREEN),
-            Component.text("你已被传送！", NamedTextColor.GREEN),
-            Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(1), Duration.ofMillis(500))
-        ))
-
-        val areaDoorNumber = session.button.areaDoorNumber
-        if (areaDoorNumber != null) {
-            val currentRoom = plugin.gameManager.getPlayerRoom(player)
-            if (areaDoorNumber > currentRoom) {
-                plugin.gameManager.setPlayerRoom(player, areaDoorNumber)
-                player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已传送到 ${areaDoorNumber} 号区域！"))
-            }
-        }
-
-        session.teleportedPlayers.add(player.uniqueId)
-    }
-
-    private fun startTpForceDelay(session: TpSession, forceDelay: Int) {
-        Bukkit.getOnlinePlayers().forEach { p ->
-            val alreadyTp = p.uniqueId in session.teleportedPlayers
-            if (!alreadyTp) {
-                p.showTitle(Title.title(
-                    Component.text("$forceDelay 秒后将强制传送", NamedTextColor.RED),
-                    Component.text("请立即进入传送区域！", NamedTextColor.GOLD),
-                    Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(1), Duration.ofMillis(500))
-                ))
-            }
-        }
-
-        val task = Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
-                if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
-                    activeTpSessions.remove(session.button.name)
-                    return@runDelayed
-                }
-                Bukkit.getOnlinePlayers().forEach { player ->
-                    if (player.uniqueId !in session.teleportedPlayers) {
-                        tpPlayerToTarget(session, player)
-                    }
-                }
-                activeTpSessions.remove(session.button.name)
-            }, (forceDelay * 20L).coerceAtLeast(1L))
-        session.forceDelayTask = task
-    }
-
     @EventHandler(ignoreCancelled = true)
     fun onPlayerInteract(event: PlayerInteractEvent) {
         if (event.action != Action.RIGHT_CLICK_BLOCK) return
@@ -274,64 +202,6 @@ class GameListener(
                         } else {
                             player.sendMessage(Component.text("此按钮配置错误：未指定门号", NamedTextColor.RED))
                         }
-                    }
-                    button.isTp() -> {
-                        val areaDoorNumber = button.areaDoorNumber
-                        if (areaDoorNumber == null) {
-                            player.sendMessage(Component.text("此按钮未配置 areaDoorNumber，无法使用", NamedTextColor.RED))
-                            return
-                        }
-                        if (activeTpSessions.containsKey(button.name)) {
-                            player.sendMessage(Component.text("此传送点已被激活，请等待", NamedTextColor.RED))
-                            return
-                        }
-                        if (button.getTargetForTeam(team) == null) {
-                            player.sendMessage(Component.text("此按钮没有为你所在队伍配置传送目标", NamedTextColor.RED))
-                            return
-                        }
-
-                        val countdown = plugin.configManager.getTpButtonCountdown()
-                        val forceDelay = plugin.configManager.getTpButtonForceDelay()
-                        val teleportedPlayers = ConcurrentHashMap.newKeySet<UUID>()
-                        val session = TpSession(button, teleportedPlayers)
-                        activeTpSessions[button.name] = session
-
-                        plugin.buttonManager.setButtonLit(button)
-
-                        Bukkit.getOnlinePlayers().forEach { p ->
-                            p.showTitle(Title.title(
-                                Component.empty(),
-                                Component.text("传送将在 $countdown 秒后执行，请前往 ${areaDoorNumber} 号门区域", NamedTextColor.YELLOW),
-                                Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(1), Duration.ofMillis(500))
-                            ))
-                        }
-
-                        var remaining = countdown
-                        val countdownTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { task ->
-                                if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
-                                    activeTpSessions.remove(button.name)
-                                    task.cancel()
-                                    return@runAtFixedRate
-                                }
-                                if (remaining > 0) {
-                                    if (remaining % 5 == 0 || remaining <= 3) {
-                                        Bukkit.getOnlinePlayers().forEach { p ->
-                                            val alreadyTp = p.uniqueId in teleportedPlayers
-                                            val msgStr = if (alreadyTp) "§a已传送" else "§c$remaining 秒"
-                                        p.showTitle(Title.title(
-                                            Component.empty(),
-                                            LegacyComponentSerializer.legacySection().deserialize("§e已传送: ${teleportedPlayers.size} | 剩余: $msgStr"),
-                                                Title.Times.times(Duration.ofMillis(300), Duration.ofMillis(700), Duration.ofMillis(300))
-                                            ))
-                                        }
-                                    }
-                                    remaining--
-                                } else {
-                                    task.cancel()
-                                    startTpForceDelay(session, forceDelay)
-                                }
-                            }, 1L, 20L)
-                        session.countdownTask = countdownTask
                     }
                     button.isEscape() -> {
                         if (team != GameManager.Team.HUMAN) {

@@ -49,7 +49,36 @@ end:
 #                （添加门后由插件自动扫描生成，无需手动填写）
 #   teleport-region:    （可选）WorldGuard 区域名，关门时传送门内玩家
 #   has-zombie-teleport:（可选）关门时僵尸是否也传送
-#   special-teleport:   （可选）启用特殊传送逻辑（如电梯、机场专线）
+#   special-behavior:  （可选）特殊传送行为，支持 elevator / subway / airport
+#     也可使用命令 /zr door behavior set <门名> <type> [args...] 配置
+#     电梯示例：
+#     special-behavior:
+#       type: ELEVATOR
+#       target-y: 48           # 目标 Y 坐标（保持玩家 X/Z 不变）
+#       countdown: 5           # 到达倒计时（秒），默认 5
+#       departure-msg: "&e电梯即将到达……"
+#       arrival-msg: "&a电梯已到达，祝您旅途愉快"
+#
+#     地铁示例：
+#     special-behavior:
+#       type: SUBWAY
+#       target-x: 500
+#       target-y: 20
+#       target-z: 500
+#       line-name: "1号线"       # 线路名，默认 1号线
+#       countdown: 10            # 发车倒计时（秒），默认 10
+#       departure-msg: "&b%s即将发车，请站稳扶好……"
+#       arrival-msg: "&a%s已到站，请有序下车"
+#
+#     机场专线示例：
+#     special-behavior:
+#       type: AIRPORT
+#       target-x: 110
+#       target-y: 35
+#       target-z: 112
+#       delay-ticks: 60          # 延迟 tick 后传送，默认 60
+#       departure-msg: "&a感谢乘坐机场专线"
+#       arrival-msg: "&e请拿好你的行李，有序下车"
 #
 # 示例 - 普通门（编号1，按下按钮后5秒开启，开启后15秒关闭）：
 # door_1:
@@ -81,7 +110,7 @@ end:
 doors: {}
 
 # ---------- 按钮定义 ----------
-# 按钮有三种模式：normal / tp / escape
+# 按钮有两种模式：normal / escape
 # 键名可自定义，但建议包含坐标以便识别
 #
 # === normal 模式（普通开门按钮） ===
@@ -99,33 +128,6 @@ doors: {}
 #   mode: normal
 #   door-number: 1
 #
-# === tp 模式（传送按钮） ===
-# 右键后10秒将玩家传送到指定坐标，
-# 人类/僵尸分别有不同目标点，还会触发关门和更新房间号
-# 参数：
-#   x/y/z:           按钮方块坐标
-#   mode: tp
-#   playerTargetX/Y/Z:  人类玩家的传送目标坐标
-#   zombieTargetX/Y/Z:  僵尸玩家的传送目标坐标
-#   door-numbers:    传送完成后要关闭的门编号列表
-#   door-number:     该按钮关联的区域门编号（用于更新房间号）
-#
-# 示例：
-# button_tp_1:
-#   x: 30
-#   y: 64
-#   z: 30
-#   mode: tp
-#   playerTargetX: 50
-#   playerTargetY: 64
-#   playerTargetZ: 50
-#   zombieTargetX: 40
-#   zombieTargetY: 64
-#   zombieTargetZ: 40
-#   door-numbers:
-#   - 1
-#   - 2
-#
 # === escape 模式（撤离按钮） ===
 # 人类玩家右键后启动直升机撤离倒计时（30秒），
 # 倒计时结束后人类获胜
@@ -138,13 +140,6 @@ doors: {}
 #   z: 100
 #   mode: escape
 buttons: {}
-
-# ---------- TP 按钮传送参数 ----------
-# countdown:  点击按钮后倒计时秒数，期间任何人踏入 areaDoorNumber 门区域立即传送
-# force-delay: 倒计时结束后再等多少秒强制传送未到的人
-tp-button:
-  countdown: 10
-  force-delay: 5
 
 # ---------- 重生点定义 ----------
 # 键名可自定义，type 决定了重生点的用途

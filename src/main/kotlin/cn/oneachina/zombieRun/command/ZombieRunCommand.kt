@@ -62,11 +62,20 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                 }
             }
             "door" -> {
-                if (sender !is Player) {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
-                    return true
+                val subArgs = args.drop(1).toTypedArray()
+                if (subArgs.isNotEmpty() && subArgs[0].lowercase() == "behavior") {
+                    if (!sender.hasPermission("zombie.run.admin")) {
+                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有权限使用此命令！"))
+                        return true
+                    }
+                    DoorBehaviorCommands.handle(plugin, sender, subArgs.drop(1).toTypedArray())
+                } else {
+                    if (sender !is Player) {
+                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
+                        return true
+                    }
+                    handleDoor(sender, subArgs)
                 }
-                handleDoor(sender, args.drop(1).toTypedArray())
             }
             "profile" -> {
                 if (sender !is Player) {
@@ -173,7 +182,6 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr doors list - 列出门"))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr doors reset <名称> - 重置门为关闭状态"))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr buttons add <x> <y> <z> normal <门号> - 添加普通开门按钮"))
-        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr buttons add <x> <y> <z> tp <playerX> <playerY> <playerZ> <zombieX> <zombieY> <zombieZ> <门号1> [门号2] [门号3] [门号4] [门号5] - 添加传送按钮（人类和僵尸目标，最多控制5个门）"))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr buttons add <x> <y> <z> escape - 添加撤离按钮"))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr buttons remove <名称> - 删除按钮"))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a/zr buttons list - 列出按钮"))
@@ -538,7 +546,6 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         if (args.size < 4) {
             sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr buttons add <x> <y> <z> <mode> [参数...]"))
             sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c模式 normal: /zr buttons add <x> <y> <z> normal <门号>"))
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c模式 tp: /zr buttons add <x> <y> <z> tp <playerX> <playerY> <playerZ> <zombieX> <zombieY> <zombieZ> <门号> [操控门号1] [操控门号2] [操控门号3] [操控门号4] [操控门号5] (操控门号可选)"))
             sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c模式 escape: /zr buttons add <x> <y> <z> escape"))
             return
         }
@@ -562,52 +569,12 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                     val name = "button_${x}_${y}_${z}_normal"
                     Button(name, x, y, z, mode, doorNumber = doorNumber)
                 }
-                "tp" -> {
-                    if (args.size < 11) {
-                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§ctp模式需要指定人类目标坐标、僵尸目标坐标和区域门号！"))
-                        return
-                    }
-                    val playerX = args[4].toIntOrNull()
-                    val playerY = args[5].toIntOrNull()
-                    val playerZ = args[6].toIntOrNull()
-                    val zombieX = args[7].toIntOrNull()
-                    val zombieY = args[8].toIntOrNull()
-                    val zombieZ = args[9].toIntOrNull()
-                    val areaDoorNumber = args[10].toIntOrNull()
-                    if (playerX == null || playerY == null || playerZ == null ||
-                        zombieX == null || zombieY == null || zombieZ == null ||
-                        areaDoorNumber == null) {
-                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c所有目标坐标和门号必须是整数！"))
-                        return
-                    }
-                    
-                    val doorNumbers = mutableListOf<Int>()
-                    for (i in 11 until minOf(args.size, 16)) {
-                        val doorNumber = args[i].toIntOrNull()
-                        if (doorNumber != null) {
-                            doorNumbers.add(doorNumber)
-                        }
-                    }
-                    
-                    val name = "button_${x}_${y}_${z}_tp"
-                    Button(
-                        name, x, y, z, mode,
-                        areaDoorNumber = areaDoorNumber,
-                        doorNumbers = if (doorNumbers.isNotEmpty()) doorNumbers else null,
-                        playerTargetX = playerX,
-                        playerTargetY = playerY,
-                        playerTargetZ = playerZ,
-                        zombieTargetX = zombieX,
-                        zombieTargetY = zombieY,
-                        zombieTargetZ = zombieZ
-                    )
-                }
                 "escape" -> {
                     val name = "button_${x}_${y}_${z}_escape"
                     Button(name, x, y, z, mode)
                 }
                 else -> {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c无效的模式！可用: normal, tp, escape"))
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c无效的模式！可用: normal, escape"))
                     return
                 }
             }
@@ -642,7 +609,6 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         buttons.forEach {
             val info = when {
                 it.isNormal() -> "门号: ${it.doorNumber}"
-                it.isTp() -> "人类目标: (${it.playerTargetX},${it.playerTargetY},${it.playerTargetZ}) 僵尸目标: (${it.zombieTargetX},${it.zombieTargetY},${it.zombieTargetZ}) 区域门: ${it.areaDoorNumber} ${if (it.doorNumbers != null) "控制门: ${it.doorNumbers.joinToString(", ")}" else ""}"
                 it.isEscape() -> "撤离按钮"
                 else -> ""
             }
@@ -698,7 +664,8 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
             2 -> {
                 when (args[0].lowercase()) {
                     "door" -> {
-                        (1..9).map { it.toString() }.filter { it.startsWith(args[1]) }.toMutableList()
+                        (listOf("behavior") + (1..9).map { it.toString() })
+                            .filter { it.startsWith(args[1]) }.toMutableList()
                     }
                     "spawn" -> {
                     if (!isAdmin) return mutableListOf()
@@ -738,6 +705,11 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
             }
             else -> {
                 when (args[0].lowercase()) {
+                    "door" -> {
+                        if (args.size >= 3 && args[1].lowercase() == "behavior") {
+                            TabCompleters.doorBehavior(plugin, args.drop(2).toList())
+                        } else mutableListOf()
+                    }
                     "spawn" -> {
                         if (!isAdmin) return mutableListOf()
                         TabCompleters.spawn(plugin, args)

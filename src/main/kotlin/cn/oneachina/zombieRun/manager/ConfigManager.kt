@@ -5,6 +5,7 @@ import cn.oneachina.zombieRun.model.AmmoCategory
 import cn.oneachina.zombieRun.model.Door
 import cn.oneachina.zombieRun.model.Button
 import cn.oneachina.zombieRun.model.Respawn
+import cn.oneachina.zombieRun.model.SpecialDoorBehavior
 import cn.oneachina.zombieRun.model.WeaponConfig
 import io.papermc.paper.datacomponent.item.CustomModelData
 import org.bukkit.configuration.file.YamlConfiguration
@@ -133,6 +134,8 @@ class ConfigManager(private val plugin: ZombieRun) {
                 }
             } else emptyMap()
 
+            val specialBehavior = loadSpecialBehavior(name, doorSection)
+
             val door = Door(
                 name = name,
                 minX = minOf(x1, x2),
@@ -149,7 +152,7 @@ class ConfigManager(private val plugin: ZombieRun) {
                 material = material,
                 teleportRegion = doorSection.getString("teleport-region"),
                 hasZombieTeleport = doorSection.getBoolean("has-zombie-teleport", false),
-                specialTeleport = doorSection.getBoolean("special-teleport", false),
+                specialBehavior = specialBehavior,
                 mode = Door.DoorMode.fromString(modeStr),
                 useScanData = useScanData,
                 blocks = blocks
@@ -176,6 +179,40 @@ class ConfigManager(private val plugin: ZombieRun) {
             if (mat != null) blocks[key] = mat
         }
         return blocks
+    }
+
+    private fun loadSpecialBehavior(name: String, section: org.bukkit.configuration.ConfigurationSection): SpecialDoorBehavior? {
+        val sb = section.getConfigurationSection("special-behavior") ?: return null
+        val type = (sb.getString("type") ?: "").uppercase()
+        return when (type) {
+            "ELEVATOR" -> SpecialDoorBehavior.Elevator(
+                targetY = sb.getInt("target-y"),
+                countdown = sb.getInt("countdown", 5),
+                departureMsg = sb.getString("departure-msg") ?: "&e电梯即将到达……",
+                arrivalMsg = sb.getString("arrival-msg") ?: "&a电梯已到达，祝您旅途愉快"
+            )
+            "SUBWAY" -> SpecialDoorBehavior.Subway(
+                targetX = sb.getInt("target-x"),
+                targetY = sb.getInt("target-y"),
+                targetZ = sb.getInt("target-z"),
+                lineName = sb.getString("line-name") ?: "1号线",
+                countdown = sb.getInt("countdown", 10),
+                departureMsg = sb.getString("departure-msg") ?: "&b%s即将发车，请站稳扶好……".format(sb.getString("line-name") ?: "1号线"),
+                arrivalMsg = sb.getString("arrival-msg") ?: "&a%s已到站，请有序下车".format(sb.getString("line-name") ?: "1号线")
+            )
+            "AIRPORT" -> SpecialDoorBehavior.Airport(
+                targetX = sb.getInt("target-x"),
+                targetY = sb.getInt("target-y"),
+                targetZ = sb.getInt("target-z"),
+                delayTicks = sb.getLong("delay-ticks", 60),
+                departureMsg = sb.getString("departure-msg") ?: "&a感谢乘坐机场专线",
+                arrivalMsg = sb.getString("arrival-msg") ?: "&e请拿好你的行李，有序下车"
+            )
+            else -> {
+                plugin.logger.warning("门 $name 的 special-behavior.type 未知: $type")
+                null
+            }
+        }
     }
 
     private fun saveDoorScanData(name: String, blocks: Map<String, String>) {
@@ -248,13 +285,6 @@ class ConfigManager(private val plugin: ZombieRun) {
             val section = buttonsSection.getConfigurationSection(name) ?: continue
             val mode = section.getString("mode") ?: "normal"
             val doorNumber = if (section.contains("door-number")) section.getInt("door-number") else null
-            val doorNumbers = if (section.contains("door-numbers")) section.getIntegerList("door-numbers") else null
-            val playerTargetX = if (section.contains("playerTargetX")) section.getInt("playerTargetX") else null
-            val playerTargetY = if (section.contains("playerTargetY")) section.getInt("playerTargetY") else null
-            val playerTargetZ = if (section.contains("playerTargetZ")) section.getInt("playerTargetZ") else null
-            val zombieTargetX = if (section.contains("zombieTargetX")) section.getInt("zombieTargetX") else null
-            val zombieTargetY = if (section.contains("zombieTargetY")) section.getInt("zombieTargetY") else null
-            val zombieTargetZ = if (section.contains("zombieTargetZ")) section.getInt("zombieTargetZ") else null
 
             val button = Button(
                 name = name,
@@ -262,14 +292,7 @@ class ConfigManager(private val plugin: ZombieRun) {
                 y = section.getInt("y"),
                 z = section.getInt("z"),
                 mode = mode,
-                doorNumber = doorNumber,
-                doorNumbers = doorNumbers,
-                playerTargetX = playerTargetX,
-                playerTargetY = playerTargetY,
-                playerTargetZ = playerTargetZ,
-                zombieTargetX = zombieTargetX,
-                zombieTargetY = zombieTargetY,
-                zombieTargetZ = zombieTargetZ
+                doorNumber = doorNumber
             )
             buttons.add(button)
         }
@@ -284,27 +307,6 @@ class ConfigManager(private val plugin: ZombieRun) {
         section.set("mode", button.mode)
         if (button.doorNumber != null) {
             section.set("door-number", button.doorNumber)
-        }
-        if (button.doorNumbers != null && button.doorNumbers.isNotEmpty()) {
-            section.set("door-numbers", button.doorNumbers)
-        }
-        if (button.playerTargetX != null) {
-            section.set("playerTargetX", button.playerTargetX)
-        }
-        if (button.playerTargetY != null) {
-            section.set("playerTargetY", button.playerTargetY)
-        }
-        if (button.playerTargetZ != null) {
-            section.set("playerTargetZ", button.playerTargetZ)
-        }
-        if (button.zombieTargetX != null) {
-            section.set("zombieTargetX", button.zombieTargetX)
-        }
-        if (button.zombieTargetY != null) {
-            section.set("zombieTargetY", button.zombieTargetY)
-        }
-        if (button.zombieTargetZ != null) {
-            section.set("zombieTargetZ", button.zombieTargetZ)
         }
         saveConfig()
     }
@@ -360,14 +362,6 @@ class ConfigManager(private val plugin: ZombieRun) {
 
     fun getZombieKnockbackForce(): Double {
         return config.getDouble("misc.zombie-knockback-force", 0.8)
-    }
-
-    fun getTpButtonCountdown(): Int {
-        return config.getInt("tp-button.countdown", 10)
-    }
-
-    fun getTpButtonForceDelay(): Int {
-        return config.getInt("tp-button.force-delay", 5)
     }
 
     fun loadAmmoCategories(): Map<String, AmmoCategory> {
@@ -437,9 +431,40 @@ class ConfigManager(private val plugin: ZombieRun) {
         doorSection.set("material", door.material)
         doorSection.set("teleport-region", door.teleportRegion)
         doorSection.set("has-zombie-teleport", door.hasZombieTeleport)
-        doorSection.set("special-teleport", door.specialTeleport)
+        doorSection.set("special-teleport", null) // 清理旧字段
         doorSection.set("mode", door.mode.name.lowercase())
         doorSection.set("use-scan-data", door.useScanData)
+        if (door.specialBehavior != null) {
+            val sb = doorSection.createSection("special-behavior")
+            when (val b = door.specialBehavior!!) {
+                is SpecialDoorBehavior.Elevator -> {
+                    sb.set("type", "ELEVATOR")
+                    sb.set("target-y", b.targetY)
+                    sb.set("countdown", b.countdown)
+                    sb.set("departure-msg", b.departureMsg)
+                    sb.set("arrival-msg", b.arrivalMsg)
+                }
+                is SpecialDoorBehavior.Subway -> {
+                    sb.set("type", "SUBWAY")
+                    sb.set("target-x", b.targetX)
+                    sb.set("target-y", b.targetY)
+                    sb.set("target-z", b.targetZ)
+                    sb.set("line-name", b.lineName)
+                    sb.set("countdown", b.countdown)
+                    sb.set("departure-msg", b.departureMsg)
+                    sb.set("arrival-msg", b.arrivalMsg)
+                }
+                is SpecialDoorBehavior.Airport -> {
+                    sb.set("type", "AIRPORT")
+                    sb.set("target-x", b.targetX)
+                    sb.set("target-y", b.targetY)
+                    sb.set("target-z", b.targetZ)
+                    sb.set("delay-ticks", b.delayTicks)
+                    sb.set("departure-msg", b.departureMsg)
+                    sb.set("arrival-msg", b.arrivalMsg)
+                }
+            }
+        }
         if (door.useScanData && door.blocks.isNotEmpty()) {
             saveDoorScanData(door.name, door.blocks)
         }

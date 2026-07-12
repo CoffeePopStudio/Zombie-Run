@@ -21,7 +21,7 @@ class Door(
     val material: String = "STONE",
     val teleportRegion: String? = null,
     val hasZombieTeleport: Boolean = false,
-    val specialTeleport: Boolean = false,
+    var specialBehavior: SpecialDoorBehavior? = null,
     val mode: DoorMode = DoorMode.NORMAL,
     val useScanData: Boolean = false,
     val blocks: Map<String, String> = emptyMap()
@@ -124,9 +124,7 @@ class Door(
         return elapsedTime >= duration * 1000L
     }
 
-    fun needsSpecialTeleport(): Boolean {
-        return specialTeleport
-    }
+    fun hasSpecialBehavior(): Boolean = specialBehavior != null
 
     override fun toString(): String {
         return "Door(name='$name', doorNumber=$doorNumber, mode='$mode', delay=$delay, useScanData=$useScanData, blocks=${blocks.size})"

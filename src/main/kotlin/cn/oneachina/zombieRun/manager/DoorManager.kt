@@ -2,6 +2,7 @@ package cn.oneachina.zombieRun.manager
 
 import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.model.Door
+import cn.oneachina.zombieRun.model.SpecialDoorBehavior
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -259,9 +260,7 @@ class DoorManager(private val plugin: ZombieRun) {
             }
         }
 
-        if (door.needsSpecialTeleport()) {
-            handleSpecialDoorClose(door)
-        }
+        handleSpecialDoorClose(door)
     }
 
     private fun startTransferCountdown(player: Player) {
@@ -282,51 +281,26 @@ class DoorManager(private val plugin: ZombieRun) {
         transferTasks[player] = taskId
     }
 
+    fun getDoorByName(name: String): Door? = doors[name]
+
     private fun handleSpecialDoorClose(door: Door) {
+        val behavior = door.specialBehavior ?: return
         val world = Bukkit.getWorlds().first()
-        when (door.doorNumber) {
-            6 -> {
-                Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
-                    Bukkit.getOnlinePlayers().forEach { player ->
-                        if (plugin.gameManager.getPlayerRoom(player) == 6) {
-                            player.showTitle(Title.title(
-                                LegacyComponentSerializer.legacySection().deserialize("§a感谢乘坐机场专线"),
-                                LegacyComponentSerializer.legacySection().deserialize("§e请拿好你的行李，有序下车")
-                            ))
-                            player.teleportAsync(world.getBlockAt(110, 35, 112).location.add(0.5, 0.0, 0.5))
-                        }
-                    }
-                }, 60L)
-            }
-            7 -> {
-                var count = 5
-                val elevatorTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
-                    if (count > 0) {
-                        Bukkit.getOnlinePlayers().forEach { player ->
-                            if (plugin.gameManager.getPlayerRoom(player) == 7) {
-                                player.showTitle(Title.title(
-                                    LegacyComponentSerializer.legacySection().deserialize("§a$count"),
-                                    LegacyComponentSerializer.legacySection().deserialize("§e电梯即将到达……")
-                                ))
-                            }
-                        }
-                        count--
-                    } else {
-                        Bukkit.getOnlinePlayers().forEach { player ->
-                            if (plugin.gameManager.getPlayerRoom(player) == 7) {
-                                player.showTitle(Title.title(
-                                    LegacyComponentSerializer.legacySection().deserialize("§a电梯已到达"),
-                                    LegacyComponentSerializer.legacySection().deserialize("§e祝您旅途愉快")
-                                ))
-                                player.teleportAsync(player.location.add(0.0, 13.0, 0.0))
-                            }
-                        }
-                        schedTask.cancel()
-                    }
-                }, 1L, 20L)
-                doorTasks.add(elevatorTask)
-            }
+        val players = Bukkit.getOnlinePlayers().filter {
+            plugin.gameManager.getPlayerRoom(it) == door.doorNumber
         }
+        if (players.isEmpty()) return
+
+        val task = behavior.execute(
+            SpecialDoorBehavior.ExecuteContext(
+                plugin = plugin,
+                door = door,
+                players = players,
+                world = world,
+                doorTasks = doorTasks
+            )
+        )
+        doorTasks.add(task)
     }
 
     fun startHelicopterEscape() {
