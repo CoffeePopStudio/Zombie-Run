@@ -124,6 +124,8 @@ class WeaponManager(private val plugin: ZombieRun) {
         val eyeLoc = player.eyeLocation
         val baseDir = eyeLoc.direction
 
+        var totalHitDmg = 0.0
+        var hitHeadshot = false
         for (i in 0 until config.pellets) {
             val spreadDir = applySpreadAndRecoil(baseDir, config, shotCount, ads, finalSpread, config.pellets > 1)
             val rayTrace = player.world.rayTraceEntities(eyeLoc, spreadDir, config.range.toDouble(), 0.1) { it is Player && it != player }
@@ -133,6 +135,8 @@ class WeaponManager(private val plugin: ZombieRun) {
                 if (targetTeam == GameManager.Team.ZOMBIE || targetTeam == GameManager.Team.ZOMBIE_MAIN) {
                     val isHeadshot = checkHeadshot(target, rayTrace.hitPosition.y)
                     val dmg = config.damage * (if (isHeadshot) config.headshotMult else 1.0)
+                    totalHitDmg += dmg
+                    if (isHeadshot) hitHeadshot = true
 
                     target.scheduler.run(plugin, { _ ->
                         plugin.healthManager.damage(target, dmg, player)
@@ -144,7 +148,6 @@ class WeaponManager(private val plugin: ZombieRun) {
                         }
                     }, null)
 
-                    target.sendActionBar(LegacyComponentSerializer.legacySection().deserialize("§c-${dmg.toInt()}"))
                     if (isHeadshot) {
                         val key = "${player.uniqueId}:${target.uniqueId}"
                         val lastHsTick = headshotCooldowns.getOrDefault(key, 0)
@@ -181,8 +184,17 @@ class WeaponManager(private val plugin: ZombieRun) {
             magazine.toDouble() / config.magazineSize > 0.25 -> NamedTextColor.YELLOW
             else -> NamedTextColor.RED
         }
+        val hitMsg = if (totalHitDmg > 0) {
+            val hsTag = if (hitHeadshot) " §e爆头" else ""
+            Component.text("命中 ${totalHitDmg.toInt()}", NamedTextColor.RED)
+                .append(LegacyComponentSerializer.legacySection().deserialize(hsTag))
+                .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
+        } else {
+            Component.empty()
+        }
         player.sendActionBar(
-            Component.text(magazine, barColor)
+            hitMsg
+                .append(Component.text(magazine, barColor))
                 .append(Component.text(" / ", NamedTextColor.GRAY))
                 .append(Component.text(config.magazineSize))
         )

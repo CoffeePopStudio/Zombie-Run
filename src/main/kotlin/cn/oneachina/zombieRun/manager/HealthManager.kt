@@ -1,6 +1,7 @@
 package cn.oneachina.zombieRun.manager
 
 import cn.oneachina.zombieRun.ZombieRun
+import org.bukkit.Sound
 import org.bukkit.entity.Player
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -35,6 +36,16 @@ class HealthManager(private val plugin: ZombieRun) {
         val current = healthMap.getOrDefault(player.uniqueId, 0.0)
         val newHealth = (current - amount).coerceAtLeast(0.0)
         healthMap[player.uniqueId] = newHealth
+
+        // 受击音效
+        player.world.playSound(player.location, Sound.ENTITY_PLAYER_HURT, 1.0f, 1.0f)
+
+        // 受击红屏动画：扣减微量原版血量触发客户端红闪，随后恢复
+        val vanillaHealth = player.health
+        if (vanillaHealth > 0.5) {
+            player.damage(0.01)
+            player.health = vanillaHealth
+        }
 
         if (newHealth <= 0.0) {
             player.health = 0.0
