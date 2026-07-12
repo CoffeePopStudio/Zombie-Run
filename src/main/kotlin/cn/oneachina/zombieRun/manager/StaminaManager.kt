@@ -122,20 +122,15 @@ class StaminaManager(private val plugin: ZombieRun) {
                     if (ps.stamina >= 100.0) {
                         ps.isExhausted = false
                         player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a体力已完全恢复，可以跑跳了！"))
+                    } else if (ps.isSprinting) {
+                        // 体力耗尽时仍在疾跑：不扣除、不恢复，等待玩家停止疾跑
+                        continue
                     } else {
-                        if (ps.isSprinting) {
-                            ps.sprintTicks += 1
-                            if (ps.sprintTicks >= 2) {
-                                ps.deductStamina(1.0)
-                                ps.sprintTicks -= 2
-                            }
-                        } else {
-                            var regen = 1.0
-                            if (!ps.isMoving) {
-                                regen += 1.0
-                            }
-                            ps.addStamina(regen)
+                        var regen = 1.0
+                        if (!ps.isMoving) {
+                            regen += 1.0
                         }
+                        ps.addStamina(regen)
                     }
                 } else {
                     if (ps.isSprinting) {
@@ -238,8 +233,8 @@ class StaminaManager(private val plugin: ZombieRun) {
                     t.cancel()
                     return@runAtFixedRate
                 }
-                player.world.spawnParticle(Particle.ENTITY_EFFECT, player.location.clone().add(0.0, 0.5, 0.0), 3,
-                    0.5, 1.0, 0.5, 0.0)
+//                player.world.spawnParticle(Particle.ENTITY_EFFECT, player.location.clone().add(0.0, 0.5, 0.0), 3,
+//                    0.5, 1.0, 0.5, 0.0)
             }, 1L, 2L)
             zombieMainParticleTasks[player] = task
         }

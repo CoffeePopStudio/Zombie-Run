@@ -25,9 +25,9 @@ class StaminaListener(private val plugin: ZombieRun) : Listener {
         if (plugin.gameManager.getPlayerTeam(player) != GameManager.Team.HUMAN) return
 
         if (player.isSprinting && !plugin.staminaManager.canSprintOrJump(player)) {
+            event.to = event.from
             player.isSprinting = false
             plugin.staminaManager.setSprinting(player, false)
-            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c体力耗尽！请等待体力恢复到100才能疾跑。"))
         }
     }
 
