@@ -57,7 +57,6 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
             giveFallbackSword(player)
             return
         }
-        player.inventory.clear()
 
         val selected = selectedWeapon[player]
         val weaponId = if (selected != null && weaponIds.contains(selected)) {

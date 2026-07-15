@@ -93,36 +93,19 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
         val weaponId = pdc.get(shopKey, PersistentDataType.STRING)
 
         if (weaponId != null) {
-            val config = plugin.weaponManager.getWeaponConfig(weaponId) ?: return
-            val coins = plugin.coinManager.getCoins(player.uniqueId)
-
-            if (!plugin.debugMode && coins < config.price) {
-                player.sendMessage(Component.text("硬币不足！需要: ${config.price}，当前: $coins", NamedTextColor.RED))
+            val weapons = plugin.miscManager.getSelectableWeapons()
+            val weaponIndex = weapons.indexOf(weaponId) + 1
+            if (weaponIndex <= 0) {
+                player.sendMessage(Component.text("此武器暂不可选", NamedTextColor.RED))
                 player.closeInventory()
                 return
             }
-
-            if (player.inventory.firstEmpty() == -1) {
-                player.sendMessage(Component.text("背包已满，请清理后重试", NamedTextColor.RED))
-                player.closeInventory()
-                return
-            }
-
-            if (plugin.debugMode) {
-                plugin.weaponManager.giveWeapon(player, weaponId)
-                plugin.weaponManager.giveAmmoRespectingMaxReserve(player, weaponId)
-                player.sendMessage(LegacyComponentSerializer.legacySection().deserialize(
-                    "§e[Debug] §a免费获得！${config.name.replace("&", "")} (跳过硬币检查)"
-                ))
-            } else {
-                plugin.coinManager.takeCoins(player.uniqueId, config.price)
-                plugin.weaponManager.giveWeapon(player, weaponId)
-                plugin.weaponManager.giveAmmoRespectingMaxReserve(player, weaponId)
-                player.sendMessage(Component.text(
-                    "购买成功！${config.name.replace("&", "")} 花费: ${config.price} 硬币",
-                    NamedTextColor.GREEN
-                ))
-            }
+            plugin.miscManager.setSelectedWeapon(player, weaponIndex)
+            val config = plugin.weaponManager.getWeaponConfig(weaponId)
+            val price = config?.price ?: 0
+            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize(
+                "§a已预购 ${weaponId}（${price} 硬币），游戏开始自动发放。§7/zr unselect 可取消"
+            ))
             player.closeInventory()
             return
         }
