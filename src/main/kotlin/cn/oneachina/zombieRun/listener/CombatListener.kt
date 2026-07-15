@@ -30,12 +30,15 @@ class CombatListener(
 
         if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return
 
+        event.isCancelled = true
+
         val attackerTeam = plugin.gameManager.getPlayerTeam(attacker)
         val victimTeam = plugin.gameManager.getPlayerTeam(victim)
 
+        if (attackerTeam == victimTeam) return
+
         if (attackerTeam == GameManager.Team.HUMAN &&
             (victimTeam == GameManager.Team.ZOMBIE || victimTeam == GameManager.Team.ZOMBIE_MAIN)) {
-            event.isCancelled = true
             val swordDamage = 5.0
             plugin.healthManager.damage(victim, swordDamage, attacker)
             victim.velocity = victim.velocity.add(attacker.location.direction.setY(-1.0).normalize().multiply(0.3))
@@ -45,14 +48,8 @@ class CombatListener(
 
         if ((attackerTeam == GameManager.Team.ZOMBIE || attackerTeam == GameManager.Team.ZOMBIE_MAIN) &&
             victimTeam == GameManager.Team.HUMAN) {
-            event.isCancelled = true
             val zombieDamage = if (attackerTeam == GameManager.Team.ZOMBIE_MAIN) 10.0 else 6.0
             plugin.healthManager.damage(victim, zombieDamage, attacker)
-            return
-        }
-
-        if (attackerTeam == victimTeam) {
-            event.isCancelled = true
         }
     }
 
