@@ -36,6 +36,7 @@ class ZombieRun : JavaPlugin() {
     lateinit var progressionListener: ProgressionListener
     lateinit var questManager: QuestManager
     lateinit var titleManager: TitleManager
+    lateinit var nametagManager: NametagManager
     lateinit var shopGUI: ShopGUI
     lateinit var profileGUI: ProfileGUI
     lateinit var questGUI: QuestGUI
@@ -62,6 +63,7 @@ class ZombieRun : JavaPlugin() {
         progressionListener = ProgressionListener(this)
         questManager = QuestManager(this).apply { init() }
         titleManager = TitleManager(this)
+        nametagManager = NametagManager(this).apply { init() }
         shopGUI = ShopGUI(this)
         profileGUI = ProfileGUI(this)
         questGUI = QuestGUI(this)
@@ -117,6 +119,9 @@ class ZombieRun : JavaPlugin() {
         }
         if (this::buttonManager.isInitialized) {
             buttonManager.clear()
+        }
+        if (this::nametagManager.isInitialized) {
+            nametagManager.clearAll()
         }
         if (this::healthManager.isInitialized) {
             healthManager.clearAll()
