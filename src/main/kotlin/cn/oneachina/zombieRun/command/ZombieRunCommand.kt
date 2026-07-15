@@ -545,7 +545,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         }
         if (args.size < 4) {
             sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr buttons add <x> <y> <z> <mode> [参数...]"))
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c模式 normal: /zr buttons add <x> <y> <z> normal <门号>"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c模式 normal: /zr buttons add <x> <y> <z> normal <门号>  或  <门号1,门号2,...> 多门"))
             sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c模式 escape: /zr buttons add <x> <y> <z> escape"))
             return
         }
@@ -561,13 +561,18 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§cnormal模式需要指定门号！"))
                         return
                     }
-                    val doorNumber = args[4].toIntOrNull()
-                    if (doorNumber == null) {
+                    // 支持逗号分隔的多门号，如 "7,8,9"
+                    val parts = args[4].split(",").map { it.trim() }
+                    val nums = parts.mapNotNull { it.toIntOrNull() }
+                    if (nums.isEmpty()) {
                         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c门号必须是整数！"))
                         return
                     }
                     val name = "button_${x}_${y}_${z}_normal"
-                    Button(name, x, y, z, mode, doorNumber = doorNumber)
+                    Button(name, x, y, z, mode,
+                        doorNumber = if (nums.size == 1) nums[0] else null,
+                        doorNumbers = if (nums.size > 1) nums else null
+                    )
                 }
                 "escape" -> {
                     val name = "button_${x}_${y}_${z}_escape"
@@ -608,7 +613,11 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a===== 按钮列表 ====="))
         buttons.forEach {
             val info = when {
-                it.isNormal() -> "门号: ${it.doorNumber}"
+                it.isNormal() -> {
+                    val all = it.getAllDoorNumbers()
+                    if (all.size > 1) "门号: ${all.joinToString(", ")}"
+                    else "门号: ${it.doorNumber}"
+                }
                 it.isEscape() -> "撤离按钮"
                 else -> ""
             }

@@ -196,11 +196,11 @@ class GameListener(
                             event.isCancelled = true
                             return
                         }
-                        val doorNumber = button.doorNumber
-                        if (doorNumber != null) {
-                            plugin.doorManager.triggerDoor(doorNumber, player)
-                        } else {
+                        val doorNumbers = button.getAllDoorNumbers()
+                        if (doorNumbers.isEmpty()) {
                             player.sendMessage(Component.text("此按钮配置错误：未指定门号", NamedTextColor.RED))
+                        } else {
+                            doorNumbers.forEach { plugin.doorManager.triggerDoor(it, player) }
                         }
                     }
                     button.isEscape() -> {

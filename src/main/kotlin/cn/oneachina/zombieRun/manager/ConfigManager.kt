@@ -285,6 +285,7 @@ class ConfigManager(private val plugin: ZombieRun) {
             val section = buttonsSection.getConfigurationSection(name) ?: continue
             val mode = section.getString("mode") ?: "normal"
             val doorNumber = if (section.contains("door-number")) section.getInt("door-number") else null
+            val doorNumbers = if (section.contains("door-numbers")) section.getIntegerList("door-numbers") else null
 
             val button = Button(
                 name = name,
@@ -292,7 +293,8 @@ class ConfigManager(private val plugin: ZombieRun) {
                 y = section.getInt("y"),
                 z = section.getInt("z"),
                 mode = mode,
-                doorNumber = doorNumber
+                doorNumber = doorNumber,
+                doorNumbers = doorNumbers
             )
             buttons.add(button)
         }
@@ -307,6 +309,13 @@ class ConfigManager(private val plugin: ZombieRun) {
         section.set("mode", button.mode)
         if (button.doorNumber != null) {
             section.set("door-number", button.doorNumber)
+        } else {
+            section.set("door-number", null)
+        }
+        if (button.doorNumbers != null && button.doorNumbers.isNotEmpty()) {
+            section.set("door-numbers", button.doorNumbers)
+        } else {
+            section.set("door-numbers", null)
         }
         saveConfig()
     }
