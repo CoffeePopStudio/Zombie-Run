@@ -98,7 +98,7 @@ class DoorManager(private val plugin: ZombieRun) {
     }
 
     private fun startOpenCountdown(door: Door) {
-        var lastDisplay = -1
+        val lastDisplay = intArrayOf(-1)
         val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
             if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
                 opentime = -1.0
@@ -108,7 +108,7 @@ class DoorManager(private val plugin: ZombieRun) {
 
             if (opentime > 0) {
                 val currentDisplay = opentime.toInt()
-                if (currentDisplay != lastDisplay) {
+                if (currentDisplay != lastDisplay[0]) {
                     val title = Title.title(
                         Component.empty(),
                         Component.text()
@@ -122,7 +122,7 @@ class DoorManager(private val plugin: ZombieRun) {
                         player.showTitle(title)
                         player.playSound(player.location, Sound.BLOCK_DISPENSER_FAIL, 0.2f, 2f)
                     }
-                    lastDisplay = currentDisplay
+                    lastDisplay[0] = currentDisplay
                 }
                 opentime -= 1.0
             } else {
@@ -135,7 +135,7 @@ class DoorManager(private val plugin: ZombieRun) {
     }
 
     private fun startCloseCountdown(door: Door) {
-        var lastDisplay = -1.0
+        val lastDisplay = doubleArrayOf(-1.0)
         val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
             if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
                 closetime = -1.0
@@ -158,7 +158,7 @@ class DoorManager(private val plugin: ZombieRun) {
                     closetime = 3.1
                 }
 
-                if (currentDisplay != lastDisplay) {
+                if (currentDisplay != lastDisplay[0]) {
                     val displayStr = if (currentDisplay % 1 == 0.0) currentDisplay.toInt().toString() else String.format("%.1f", currentDisplay)
 
                     Bukkit.getOnlinePlayers().forEach { player ->
@@ -182,7 +182,7 @@ class DoorManager(private val plugin: ZombieRun) {
                         }
                         player.showTitle(title)
                     }
-                    lastDisplay = currentDisplay
+                    lastDisplay[0] = currentDisplay
                 }
 
                 when (closetime.toInt()) {
@@ -308,7 +308,7 @@ class DoorManager(private val plugin: ZombieRun) {
         endtime = 30.0
         Bukkit.broadcast(LegacyComponentSerializer.legacySection().deserialize("§c\n直升机已启动！\n人类将在 30 秒后撤离！\n"))
 
-        var lastDisplay = -1.0
+        val lastDisplay = doubleArrayOf(-1.0)
         val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
             if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
                 endtime = -1.0
@@ -319,7 +319,7 @@ class DoorManager(private val plugin: ZombieRun) {
             if (endtime > 0) {
                 val currentDisplay = if (endtime % 1 == 0.0) endtime.toInt().toDouble() else Math.floor(endtime * 10) / 10
 
-                if (currentDisplay != lastDisplay) {
+                if (currentDisplay != lastDisplay[0]) {
                     val displayStr = if (currentDisplay % 1 == 0.0) currentDisplay.toInt().toString() else String.format("%.1f", currentDisplay)
                     Bukkit.getOnlinePlayers().forEach { player ->
                         player.showTitle(Title.title(
@@ -328,7 +328,7 @@ class DoorManager(private val plugin: ZombieRun) {
                         ))
                         player.playSound(player.location, Sound.BLOCK_DISPENSER_FAIL, 0.2f, 2f)
                     }
-                    lastDisplay = currentDisplay
+                    lastDisplay[0] = currentDisplay
                 }
                 endtime -= 0.1
             } else {
