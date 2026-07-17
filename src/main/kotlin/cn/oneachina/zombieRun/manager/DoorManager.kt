@@ -61,6 +61,10 @@ class DoorManager(private val plugin: ZombieRun) {
     }
 
     fun triggerDoor(doorNumber: Int, player: Player? = null) {
+        triggerDoor(doorNumber, player, guardActive = true)
+    }
+
+    fun triggerDoor(doorNumber: Int, player: Player?, guardActive: Boolean) {
         val door = getDoorByNumber(doorNumber) ?: return
 
         if (door.mode == Door.DoorMode.START) {
@@ -74,13 +78,15 @@ class DoorManager(private val plugin: ZombieRun) {
             return
         }
 
-        if (forbidden) {
-            player?.sendMessage(Component.text("你急啥急？！", NamedTextColor.RED))
-            return
-        }
-        if (opentime >= 0 || closetime >= 0) {
-            player?.sendMessage(Component.text("你需要等上一道门关闭才可以开这道门！", NamedTextColor.RED))
-            return
+        if (guardActive) {
+            if (forbidden) {
+                player?.sendMessage(Component.text("你急啥急？！", NamedTextColor.RED))
+                return
+            }
+            if (opentime >= 0 || closetime >= 0) {
+                player?.sendMessage(Component.text("你需要等上一道门关闭才可以开这道门！", NamedTextColor.RED))
+                return
+            }
         }
 
         currentDoorNumber = doorNumber

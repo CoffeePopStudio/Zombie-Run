@@ -200,7 +200,9 @@ class GameListener(
                         if (doorNumbers.isEmpty()) {
                             player.sendMessage(Component.text("此按钮配置错误：未指定门号", NamedTextColor.RED))
                         } else {
-                            doorNumbers.forEach { plugin.doorManager.triggerDoor(it, player) }
+                            doorNumbers.forEachIndexed { index, dn ->
+                                plugin.doorManager.triggerDoor(dn, player, guardActive = index == 0)
+                            }
                         }
                     }
                     button.isEscape() -> {
