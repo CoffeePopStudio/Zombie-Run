@@ -71,44 +71,27 @@ sealed class SpecialDoorBehavior {
         }
     }
 
-    /** 地铁：传送到固定目标坐标 */
+    /** 地铁：门关闭立即传送到目标坐标 */
     data class Subway(
         val targetX: Int,
         val targetY: Int,
         val targetZ: Int,
         val lineName: String = "1号线",
-        val countdown: Int = 10,
-        val departureMsg: String = "&b%s即将发车，请站稳扶好……".format(lineName),
+        val departureMsg: String = "&b%s即将发车……".format(lineName),
         val arrivalMsg: String = "&a%s已到站，请有序下车".format(lineName)
     ) : SpecialDoorBehavior() {
         override fun execute(context: ExecuteContext): ScheduledTask {
-            var remaining = countdown
-            val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(context.plugin, { schedTask ->
-                if (context.plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
-                    schedTask.cancel()
-                    return@runAtFixedRate
-                }
-                if (remaining > 0) {
-                    context.players.forEach { p ->
-                        p.showTitle(Title.title(
-                            Component.text("$remaining", NamedTextColor.AQUA),
-                            LegacyComponentSerializer.legacySection().deserialize(departureMsg),
-                            Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(1), Duration.ofMillis(500))
-                        ))
-                    }
-                    remaining--
-                } else {
-                    val target = Location(context.world, targetX + 0.5, targetY.toDouble(), targetZ + 0.5)
-                    context.players.forEach { p ->
-                        p.teleportAsync(target)
-                        p.showTitle(Title.title(
-                            LegacyComponentSerializer.legacySection().deserialize(arrivalMsg),
-                            Component.empty()
-                        ))
-                    }
-                    schedTask.cancel()
-                }
-            }, 1L, 20L)
+            context.players.forEach { p ->
+                p.showTitle(Title.title(
+                    LegacyComponentSerializer.legacySection().deserialize(departureMsg),
+                    LegacyComponentSerializer.legacySection().deserialize(arrivalMsg)
+                ))
+            }
+            val target = Location(context.world, targetX + 0.5, targetY.toDouble(), targetZ + 0.5)
+            context.players.forEach { p -> p.teleportAsync(target) }
+            // 返回一个已取消的空 task（无需倒计时）
+            val task = Bukkit.getGlobalRegionScheduler().runDelayed(context.plugin, { _ -> }, 1L)
+            task.cancel()
             return task
         }
     }

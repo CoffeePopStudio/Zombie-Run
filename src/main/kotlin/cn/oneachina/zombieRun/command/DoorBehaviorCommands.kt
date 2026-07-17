@@ -24,7 +24,7 @@ object DoorBehaviorCommands {
         if (args.size < 2) {
             sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c用法:"))
             sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c/zr door behavior set <门名> elevator <target-y> [countdown]"))
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c/zr door behavior set <门名> subway <target-x> <target-y> <target-z> [line-name] [countdown]"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c/zr door behavior set <门名> subway <target-x> <target-y> <target-z> [line-name]"))
             sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c/zr door behavior set <门名> airport <target-x> <target-y> <target-z> [delay-ticks]"))
             return
         }
@@ -50,15 +50,14 @@ object DoorBehaviorCommands {
                 }
                 "subway" -> {
                     if (args.size < 5) {
-                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c用法: ... subway <target-x> <target-y> <target-z> [line-name] [countdown]"))
+                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c用法: ... subway <target-x> <target-y> <target-z> [line-name]"))
                         return
                     }
                     SpecialDoorBehavior.Subway(
                         targetX = args[2].toInt(),
                         targetY = args[3].toInt(),
                         targetZ = args[4].toInt(),
-                        lineName = args.getOrNull(5) ?: "1号线",
-                        countdown = args.getOrNull(6)?.toIntOrNull() ?: 10
+                        lineName = args.getOrNull(5) ?: "1号线"
                     )
                 }
                 "airport" -> {
@@ -127,7 +126,6 @@ object DoorBehaviorCommands {
                 sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&b类型: 地铁"))
                 sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&b线路: ${b.lineName}"))
                 sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&b目标: (${b.targetX}, ${b.targetY}, ${b.targetZ})"))
-                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&b发车倒计时: ${b.countdown}s"))
             }
             is SpecialDoorBehavior.Airport -> {
                 sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&6类型: 机场专线"))

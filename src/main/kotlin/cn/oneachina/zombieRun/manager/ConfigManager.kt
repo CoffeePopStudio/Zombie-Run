@@ -196,8 +196,7 @@ class ConfigManager(private val plugin: ZombieRun) {
                 targetY = sb.getInt("target-y"),
                 targetZ = sb.getInt("target-z"),
                 lineName = sb.getString("line-name") ?: "1号线",
-                countdown = sb.getInt("countdown", 10),
-                departureMsg = sb.getString("departure-msg") ?: "&b%s即将发车，请站稳扶好……".format(sb.getString("line-name") ?: "1号线"),
+                departureMsg = sb.getString("departure-msg") ?: "&b%s即将发车……".format(sb.getString("line-name") ?: "1号线"),
                 arrivalMsg = sb.getString("arrival-msg") ?: "&a%s已到站，请有序下车".format(sb.getString("line-name") ?: "1号线")
             )
             "AIRPORT" -> SpecialDoorBehavior.Airport(
@@ -459,7 +458,6 @@ class ConfigManager(private val plugin: ZombieRun) {
                     sb.set("target-y", b.targetY)
                     sb.set("target-z", b.targetZ)
                     sb.set("line-name", b.lineName)
-                    sb.set("countdown", b.countdown)
                     sb.set("departure-msg", b.departureMsg)
                     sb.set("arrival-msg", b.arrivalMsg)
                 }
