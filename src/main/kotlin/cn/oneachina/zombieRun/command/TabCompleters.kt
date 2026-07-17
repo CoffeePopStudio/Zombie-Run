@@ -118,7 +118,7 @@ object TabCompleters {
                             .toMutableList()
                     }
 
-                    6 -> {
+                    args.size == 6 -> {
                         val mode = args[4].lowercase()
                         when (mode) {
                             "normal" -> listOf("<门号>").filter { it.startsWith(args[5]) }
