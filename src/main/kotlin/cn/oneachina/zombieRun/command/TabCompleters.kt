@@ -108,10 +108,11 @@ object TabCompleters {
         if (args.size < 2) return mutableListOf()
         return when (args[1].lowercase()) {
             "add" -> {
-                when (args.size) {
-                    3 -> mutableListOf(getTargetCoord(sender, 'x'))
-                    4 -> mutableListOf(getTargetCoord(sender, 'y'))
-                    5 -> {
+                when {
+                    args.size == 3 -> mutableListOf(getTargetCoord(sender, 'x'))
+                    args.size == 4 -> mutableListOf(getTargetCoord(sender, 'y'))
+                    args.size == 5 && args[4].isBlank() -> mutableListOf(getTargetCoord(sender, 'z'))
+                    args.size == 5 -> {
                         listOf("normal", "escape")
                             .filter { it.startsWith(args[4].lowercase()) }
                             .toMutableList()
