@@ -188,24 +188,24 @@ class ConfigManager(private val plugin: ZombieRun) {
             "ELEVATOR" -> SpecialDoorBehavior.Elevator(
                 targetY = sb.getInt("target-y"),
                 countdown = sb.getInt("countdown", 5),
-                departureMsg = sb.getString("departure-msg") ?: "&e电梯即将到达……",
-                arrivalMsg = sb.getString("arrival-msg") ?: "&a电梯已到达，祝您旅途愉快"
+                departureMsg = sb.getString("departure-msg") ?: "<yellow>电梯即将到达……</yellow>",
+                arrivalMsg = sb.getString("arrival-msg") ?: "<green>电梯已到达，祝您旅途愉快</green>"
             )
             "SUBWAY" -> SpecialDoorBehavior.Subway(
                 targetX = sb.getInt("target-x"),
                 targetY = sb.getInt("target-y"),
                 targetZ = sb.getInt("target-z"),
                 lineName = sb.getString("line-name") ?: "1号线",
-                departureMsg = sb.getString("departure-msg") ?: "&b%s即将发车……".format(sb.getString("line-name") ?: "1号线"),
-                arrivalMsg = sb.getString("arrival-msg") ?: "&a%s已到站，请有序下车".format(sb.getString("line-name") ?: "1号线")
+                departureMsg = sb.getString("departure-msg") ?: "<aqua>%s即将发车……</aqua>".format(sb.getString("line-name") ?: "1号线"),
+                arrivalMsg = sb.getString("arrival-msg") ?: "<green>%s已到站，请有序下车</green>".format(sb.getString("line-name") ?: "1号线")
             )
             "AIRPORT" -> SpecialDoorBehavior.Airport(
                 targetX = sb.getInt("target-x"),
                 targetY = sb.getInt("target-y"),
                 targetZ = sb.getInt("target-z"),
                 delayTicks = sb.getLong("delay-ticks", 60),
-                departureMsg = sb.getString("departure-msg") ?: "&a感谢乘坐机场专线",
-                arrivalMsg = sb.getString("arrival-msg") ?: "&e请拿好你的行李，有序下车"
+                departureMsg = sb.getString("departure-msg") ?: "<green>感谢乘坐机场专线</green>",
+                arrivalMsg = sb.getString("arrival-msg") ?: "<yellow>请拿好你的行李，有序下车</yellow>"
             )
             else -> {
                 plugin.logger.warning("门 $name 的 special-behavior.type 未知: $type")

@@ -5,7 +5,7 @@ import cn.oneachina.zombieRun.manager.GameManager
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.title.Title
 import org.bukkit.Bukkit
 import org.bukkit.Location
@@ -36,10 +36,11 @@ sealed class SpecialDoorBehavior {
     data class Elevator(
         val targetY: Int,
         val countdown: Int = 5,
-        val departureMsg: String = "&e电梯即将到达……",
-        val arrivalMsg: String = "&a电梯已到达，祝您旅途愉快"
+        val departureMsg: String = "<yellow>电梯即将到达……</yellow>",
+        val arrivalMsg: String = "<green>电梯已到达，祝您旅途愉快</green>"
     ) : SpecialDoorBehavior() {
         override fun execute(context: ExecuteContext): ScheduledTask {
+            val mm = MiniMessage.miniMessage()
             var remaining = countdown
             val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(context.plugin, { schedTask ->
                 if (context.plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
@@ -50,7 +51,7 @@ sealed class SpecialDoorBehavior {
                     context.players.forEach { p ->
                         p.showTitle(Title.title(
                             Component.text("$remaining", NamedTextColor.GREEN),
-                            LegacyComponentSerializer.legacySection().deserialize(departureMsg),
+                            mm.deserialize(departureMsg),
                             Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(1), Duration.ofMillis(500))
                         ))
                     }
@@ -60,7 +61,7 @@ sealed class SpecialDoorBehavior {
                         val target = Location(context.world, p.location.x, targetY.toDouble(), p.location.z)
                         p.teleportAsync(target)
                         p.showTitle(Title.title(
-                            LegacyComponentSerializer.legacySection().deserialize(arrivalMsg),
+                            mm.deserialize(arrivalMsg),
                             Component.empty()
                         ))
                     }
@@ -77,19 +78,19 @@ sealed class SpecialDoorBehavior {
         val targetY: Int,
         val targetZ: Int,
         val lineName: String = "1号线",
-        val departureMsg: String = "&b%s即将发车……".format(lineName),
-        val arrivalMsg: String = "&a%s已到站，请有序下车".format(lineName)
+        val departureMsg: String = "<aqua>${lineName}即将发车……</aqua>",
+        val arrivalMsg: String = "<green>${lineName}已到站，请有序下车</green>"
     ) : SpecialDoorBehavior() {
         override fun execute(context: ExecuteContext): ScheduledTask {
+            val mm = MiniMessage.miniMessage()
             context.players.forEach { p ->
                 p.showTitle(Title.title(
-                    LegacyComponentSerializer.legacySection().deserialize(departureMsg),
-                    LegacyComponentSerializer.legacySection().deserialize(arrivalMsg)
+                    mm.deserialize(departureMsg),
+                    mm.deserialize(arrivalMsg)
                 ))
             }
             val target = Location(context.world, targetX + 0.5, targetY.toDouble(), targetZ + 0.5)
             context.players.forEach { p -> p.teleportAsync(target) }
-            // 返回一个已取消的空 task（无需倒计时）
             val task = Bukkit.getGlobalRegionScheduler().runDelayed(context.plugin, { _ -> }, 1L)
             task.cancel()
             return task
@@ -102,14 +103,15 @@ sealed class SpecialDoorBehavior {
         val targetY: Int,
         val targetZ: Int,
         val delayTicks: Long = 60,
-        val departureMsg: String = "&a感谢乘坐机场专线",
-        val arrivalMsg: String = "&e请拿好你的行李，有序下车"
+        val departureMsg: String = "<green>感谢乘坐机场专线</green>",
+        val arrivalMsg: String = "<yellow>请拿好你的行李，有序下车</yellow>"
     ) : SpecialDoorBehavior() {
         override fun execute(context: ExecuteContext): ScheduledTask {
+            val mm = MiniMessage.miniMessage()
             context.players.forEach { p ->
                 p.showTitle(Title.title(
-                    LegacyComponentSerializer.legacySection().deserialize(departureMsg),
-                    LegacyComponentSerializer.legacySection().deserialize(arrivalMsg)
+                    mm.deserialize(departureMsg),
+                    mm.deserialize(arrivalMsg)
                 ))
             }
             val target = Location(context.world, targetX + 0.5, targetY.toDouble(), targetZ + 0.5)
