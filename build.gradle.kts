@@ -18,8 +18,15 @@ repositories {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.+")
     compileOnly("me.clip:placeholderapi:2.12.2")
-    implementation(kotlin("stdlib"))
+    implementation(kotlin("stdlib-jdk8"))
     implementation("com.zaxxer:HikariCP:7.0.2")
+}
+
+tasks.shadowJar {
+    dependencies {
+        include(dependency("org.jetbrains.kotlin:.*"))
+    }
+    mergeServiceFiles()
 }
 
 runPaper {
