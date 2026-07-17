@@ -228,11 +228,15 @@ class GameManager(private val plugin: ZombieRun) {
 
         Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
             Bukkit.getOnlinePlayers().forEach { player ->
+                plugin.nametagManager.clear(player)
+                player.displayName(null)
                 plugin.respawnManager.teleportToWaitRespawn(player)
                 player.gameMode = GameMode.ADVENTURE
+                player.clearActivePotionEffects()
                 setPlayerRoom(player, 0)
                 setPlayerTeam(player, Team.HUMAN)
             }
+            plugin.healthManager.clearAll()
             status = GameStatus.WAITING
         }, 80L)
     }
