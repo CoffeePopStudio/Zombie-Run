@@ -24,7 +24,9 @@ class Door(
     var specialBehavior: SpecialDoorBehavior? = null,
     val mode: DoorMode = DoorMode.NORMAL,
     val useScanData: Boolean = false,
-    val blocks: Map<String, String> = emptyMap()
+    val blocks: Map<String, String> = emptyMap(),
+    /** 门组：同一组的门联动开/关（用于地铁等多入口场景） */
+    val group: String? = null
 ) {
 
     enum class DoorMode {
@@ -127,6 +129,6 @@ class Door(
     fun hasSpecialBehavior(): Boolean = specialBehavior != null
 
     override fun toString(): String {
-        return "Door(name='$name', doorNumber=$doorNumber, mode='$mode', delay=$delay, useScanData=$useScanData, blocks=${blocks.size})"
+        return "Door(name='$name', doorNumber=$doorNumber, mode='$mode', group=${group ?: "-"}, delay=$delay, useScanData=$useScanData, blocks=${blocks.size})"
     }
 }

@@ -3,6 +3,7 @@ package cn.oneachina.zombieRun.listener
 import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.manager.GameManager
 import cn.oneachina.zombieRun.model.Button
+import cn.oneachina.zombieRun.model.Door
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
@@ -10,6 +11,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import net.kyori.adventure.title.Title
 import org.bukkit.Bukkit
 import org.bukkit.GameMode
+import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
@@ -30,7 +32,7 @@ class GameListener(
 ) : Listener {
 
     private val playerCurrentDoorZones = ConcurrentHashMap<UUID, Int>()
-    private val playerDoorEntryPoints = ConcurrentHashMap<UUID, Pair<Int, Double>>()
+    private val playerDoorEntryPoints = ConcurrentHashMap<UUID, Pair<Int, Location>>()
 
     @EventHandler
     fun onPlayerJoin(event: PlayerJoinEvent) {
@@ -126,13 +128,17 @@ class GameListener(
         if (previousDoorNumber != null && previousDoorNumber != currentDoorNumber) {
             plugin.doorManager.onPlayerLeaveDoor(player, previousDoorNumber)
 
+            // A1: 方向向量法 — 判断玩家是否真正穿过了门
             val entryPoint = playerDoorEntryPoints[playerId]
             if (entryPoint != null && entryPoint.first == previousDoorNumber) {
-                val currentRoom = plugin.gameManager.getPlayerRoom(player)
-                if (previousDoorNumber > currentRoom) {
-                    plugin.gameManager.setPlayerRoom(player, previousDoorNumber)
-                    player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已通过 ${previousDoorNumber} 号门，房间号更新为 ${previousDoorNumber}！"))
-                    plugin.progressionListener.onPassDoor(player)
+                val door = plugin.doorManager.getDoorByNumber(previousDoorNumber)
+                if (door != null && hasCrossedDoor(door, entryPoint.second, player.location)) {
+                    val currentRoom = plugin.gameManager.getPlayerRoom(player)
+                    if (previousDoorNumber > currentRoom) {
+                        plugin.gameManager.setPlayerRoom(player, previousDoorNumber)
+                        player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已通过 ${previousDoorNumber} 号门，房间号更新为 ${previousDoorNumber}！"))
+                        plugin.progressionListener.onPassDoor(player)
+                    }
                 }
                 playerDoorEntryPoints.remove(playerId)
             }
@@ -141,22 +147,35 @@ class GameListener(
         if (currentDoorNumber != -1 && previousDoorNumber != currentDoorNumber) {
             plugin.doorManager.onPlayerEnterDoor(player, currentDoorNumber)
 
-            val location = player.location
-            val door = plugin.doorManager.getDoorByNumber(currentDoorNumber)
-            if (door != null) {
-                val entryPosition = if (door.maxX - door.minX > door.maxZ - door.minZ) {
-                    location.x
-                } else {
-                    location.z
-                }
-                playerDoorEntryPoints[playerId] = Pair(currentDoorNumber, entryPosition)
-            }
+            // 记录进入位置，用于离开时判断穿越方向
+            playerDoorEntryPoints[playerId] = Pair(currentDoorNumber, player.location.clone())
         }
 
         if (currentDoorNumber == -1) {
             playerCurrentDoorZones.remove(playerId)
         } else {
             playerCurrentDoorZones[playerId] = currentDoorNumber
+        }
+    }
+
+    /** A1: 判断玩家是否穿过了门（从一侧穿越到另一侧） */
+    private fun hasCrossedDoor(door: Door, entryLoc: Location, exitLoc: Location): Boolean {
+        // 门的朝向：长边是墙，短边是穿越方向
+        val xLen = door.maxX - door.minX
+        val zLen = door.maxZ - door.minZ
+
+        if (xLen > zLen) {
+            // 东西向墙 → 穿越方向是 Z 轴
+            val center = (door.minZ + door.maxZ) / 2.0
+            val entryZ = entryLoc.z
+            val exitZ = exitLoc.z
+            return (entryZ <= center && exitZ >= center) || (entryZ >= center && exitZ <= center)
+        } else {
+            // 南北向墙 → 穿越方向是 X 轴
+            val center = (door.minX + door.maxX) / 2.0
+            val entryX = entryLoc.x
+            val exitX = exitLoc.x
+            return (entryX <= center && exitX >= center) || (entryX >= center && exitX <= center)
         }
     }
 
@@ -200,9 +219,8 @@ class GameListener(
                         if (doorNumbers.isEmpty()) {
                             player.sendMessage(Component.text("此按钮配置错误：未指定门号", NamedTextColor.RED))
                         } else {
-                            doorNumbers.forEachIndexed { index, dn ->
-                                plugin.doorManager.triggerDoor(dn, player, guardActive = index == 0)
-                            }
+                            // 触发首个门号，门组联动由 DoorManager 自动处理
+                            plugin.doorManager.triggerDoor(doorNumbers.first(), player)
                         }
                     }
                     button.isEscape() -> {

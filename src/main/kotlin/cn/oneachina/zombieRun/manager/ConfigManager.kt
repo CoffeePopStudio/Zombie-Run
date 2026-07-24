@@ -135,6 +135,7 @@ class ConfigManager(private val plugin: ZombieRun) {
             } else emptyMap()
 
             val specialBehavior = loadSpecialBehavior(name, doorSection)
+            val group = doorSection.getString("group")
 
             val door = Door(
                 name = name,
@@ -155,7 +156,8 @@ class ConfigManager(private val plugin: ZombieRun) {
                 specialBehavior = specialBehavior,
                 mode = Door.DoorMode.fromString(modeStr),
                 useScanData = useScanData,
-                blocks = blocks
+                blocks = blocks,
+                group = group
             )
             doors.add(door)
         }
@@ -442,6 +444,7 @@ class ConfigManager(private val plugin: ZombieRun) {
         doorSection.set("special-teleport", null) // 清理旧字段
         doorSection.set("mode", door.mode.name.lowercase())
         doorSection.set("use-scan-data", door.useScanData)
+        doorSection.set("group", door.group)
         if (door.specialBehavior != null) {
             val sb = doorSection.createSection("special-behavior")
             when (val b = door.specialBehavior!!) {
@@ -505,4 +508,87 @@ class ConfigManager(private val plugin: ZombieRun) {
         config.set("respawns.$name", null)
         saveConfig()
     }
+
+    // ---- 新增配置文件加载 ----
+
+    fun loadCombatConfig(): CombatConfig {
+        val file = File(plugin.dataFolder, "config/combat.yml")
+        if (!file.exists()) plugin.saveResource("config/combat.yml", false)
+        val cfg = YamlConfiguration.loadConfiguration(file)
+        return CombatConfig(
+            swordDamage = cfg.getDouble("sword-damage", 5.0),
+            zombieDamage = cfg.getDouble("zombie-damage", 6.0),
+            zombieMainDamage = cfg.getDouble("zombie-main-damage", 10.0),
+            zombieMaxHealth = cfg.getDouble("zombie-max-health", 200.0),
+            zombieMainMaxHealth = cfg.getDouble("zombie-main-max-health", 500.0),
+            humanMaxHealth = cfg.getDouble("human-max-health", 20.0)
+        )
+    }
+
+    fun loadEconomyConfig(): EconomyConfig {
+        val file = File(plugin.dataFolder, "config/economy.yml")
+        if (!file.exists()) plugin.saveResource("config/economy.yml", false)
+        val cfg = YamlConfiguration.loadConfiguration(file)
+        return EconomyConfig(
+            killZombieCoins = cfg.getInt("kill-zombie-coins", 50),
+            killZombieMainCoins = cfg.getInt("kill-zombie-main-coins", 150),
+            infectHumanCoins = cfg.getInt("infect-human-coins", 50),
+            surviveHumanCoins = cfg.getInt("survive-human-coins", 200),
+            headshotXp = cfg.getInt("headshot-xp", 5),
+            killZombieXp = cfg.getInt("kill-zombie-xp", 30),
+            killZombieMainXp = cfg.getInt("kill-zombie-main-xp", 10),
+            infectHumanXp = cfg.getInt("infect-human-xp", 20),
+            passDoorXp = cfg.getInt("pass-door-xp", 5),
+            humanWinXp = cfg.getInt("human-win-xp", 100),
+            participateXp = cfg.getInt("participate-xp", 50)
+        )
+    }
+
+    fun loadBalanceConfig(): BalanceConfig {
+        val file = File(plugin.dataFolder, "config/balance.yml")
+        if (!file.exists()) plugin.saveResource("config/balance.yml", false)
+        val cfg = YamlConfiguration.loadConfiguration(file)
+        return BalanceConfig(
+            doorOpenCooldownMs = cfg.getLong("door-open-cooldown-ms", 3000L),
+            transferCountdownSec = cfg.getInt("transfer-countdown-sec", 10),
+            helicopterCountdownSec = cfg.getInt("helicopter-countdown-sec", 30),
+            infectCountdownSec = cfg.getInt("infect-countdown-sec", 5),
+            respawnDelayTicks = cfg.getLong("respawn-delay-ticks", 100L),
+            adsSpeedMultiplier = cfg.getDouble("ads-speed-multiplier", 0.4),
+            defaultMoveSpeed = cfg.getDouble("default-move-speed", 0.1)
+        )
+    }
 }
+
+data class CombatConfig(
+    val swordDamage: Double,
+    val zombieDamage: Double,
+    val zombieMainDamage: Double,
+    val zombieMaxHealth: Double,
+    val zombieMainMaxHealth: Double,
+    val humanMaxHealth: Double
+)
+
+data class EconomyConfig(
+    val killZombieCoins: Int,
+    val killZombieMainCoins: Int,
+    val infectHumanCoins: Int,
+    val surviveHumanCoins: Int,
+    val headshotXp: Int,
+    val killZombieXp: Int,
+    val killZombieMainXp: Int,
+    val infectHumanXp: Int,
+    val passDoorXp: Int,
+    val humanWinXp: Int,
+    val participateXp: Int
+)
+
+data class BalanceConfig(
+    val doorOpenCooldownMs: Long,
+    val transferCountdownSec: Int,
+    val helicopterCountdownSec: Int,
+    val infectCountdownSec: Int,
+    val respawnDelayTicks: Long,
+    val adsSpeedMultiplier: Double,
+    val defaultMoveSpeed: Double
+)

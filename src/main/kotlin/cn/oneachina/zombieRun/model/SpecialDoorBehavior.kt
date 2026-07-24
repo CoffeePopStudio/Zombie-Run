@@ -21,8 +21,8 @@ import java.util.concurrent.CopyOnWriteArrayList
  */
 sealed class SpecialDoorBehavior {
 
-    /** 执行传送行为，返回可取消的 ScheduledTask */
-    abstract fun execute(context: ExecuteContext): ScheduledTask
+    /** 执行传送行为，返回可取消的 ScheduledTask（即时行为返回 null） */
+    abstract fun execute(context: ExecuteContext): ScheduledTask?
 
     data class ExecuteContext(
         val plugin: ZombieRun,
@@ -81,7 +81,7 @@ sealed class SpecialDoorBehavior {
         val departureMsg: String = "<aqua>${lineName}即将发车……</aqua>",
         val arrivalMsg: String = "<green>${lineName}已到站，请有序下车</green>"
     ) : SpecialDoorBehavior() {
-        override fun execute(context: ExecuteContext): ScheduledTask {
+        override fun execute(context: ExecuteContext): ScheduledTask? {
             val mm = MiniMessage.miniMessage()
             context.players.forEach { p ->
                 p.showTitle(Title.title(
@@ -91,9 +91,7 @@ sealed class SpecialDoorBehavior {
             }
             val target = Location(context.world, targetX + 0.5, targetY.toDouble(), targetZ + 0.5)
             context.players.forEach { p -> p.teleportAsync(target) }
-            val task = Bukkit.getGlobalRegionScheduler().runDelayed(context.plugin, { _ -> }, 1L)
-            task.cancel()
-            return task
+            return null
         }
     }
 
