@@ -90,19 +90,56 @@ class WeaponManager(private val plugin: ZombieRun) {
     }
 
     fun handleShoot(player: Player, item: ItemStack): Boolean {
-        if (!plugin.debugMode) {
-            if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return false
-            if (plugin.gameManager.getPlayerTeam(player) != GameManager.Team.HUMAN) return false
-        }
-
         val meta = item.itemMeta ?: return false
         val pdc = meta.persistentDataContainer
         val weaponId = pdc.get(weaponIdKey, PersistentDataType.STRING) ?: return false
         val config = weapons[weaponId] ?: return false
-        var magazine = pdc.get(magazineKey, PersistentDataType.INTEGER) ?: 0
-        var shotCount = pdc.get(shotCountKey, PersistentDataType.INTEGER) ?: 0
+        val magazine = pdc.get(magazineKey, PersistentDataType.INTEGER) ?: 0
+        val shotCount = pdc.get(shotCountKey, PersistentDataType.INTEGER) ?: 0
         val reloading = (pdc.get(reloadKey, PersistentDataType.INTEGER) ?: 0) > 0
 
+        if (!canShoot(player, magazine, reloading, config)) return false
+
+        val ads = adsState.getOrDefault(player.uniqueId, false)
+        val finalSpread = (config.spread + shotCount * config.spreadPerShot) * (if (ads) config.adsSpreadMult else 1.0)
+        val shotResult = performShots(player, player.eyeLocation, player.eyeLocation.direction, config, shotCount, ads, finalSpread)
+
+        if (config.sound != null) {
+            val s = Sound.valueOf(config.sound.uppercase())
+            if (s != null) player.playSound(player.location, s, 0.8f, 1.2f)
+        }
+
+        pdc.set(magazineKey, PersistentDataType.INTEGER, magazine - 1)
+        pdc.set(shotCountKey, PersistentDataType.INTEGER, shotCount + 1)
+        item.itemMeta = meta
+
+        val newMag = magazine - 1
+        val barColor = when {
+            newMag.toDouble() / config.magazineSize > 0.5 -> NamedTextColor.GREEN
+            newMag.toDouble() / config.magazineSize > 0.25 -> NamedTextColor.YELLOW
+            else -> NamedTextColor.RED
+        }
+        val hitMsg = if (shotResult.totalHitDmg > 0) {
+            val hsTag = if (shotResult.hitHeadshot) " §e爆头" else ""
+            Component.text("命中 ${shotResult.totalHitDmg.toInt()}", NamedTextColor.RED)
+                .append(LegacyComponentSerializer.legacySection().deserialize(hsTag))
+                .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
+        } else {
+            Component.empty()
+        }
+        player.sendActionBar(
+            hitMsg.append(Component.text(newMag, barColor))
+                .append(Component.text(" / ", NamedTextColor.GRAY))
+                .append(Component.text(config.magazineSize))
+        )
+        return true
+    }
+
+    private fun canShoot(player: Player, magazine: Int, reloading: Boolean, config: WeaponConfig): Boolean {
+        if (!plugin.debugMode) {
+            if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return false
+            if (plugin.gameManager.getPlayerTeam(player) != GameManager.Team.HUMAN) return false
+        }
         if (reloading || magazine <= 0) {
             if (magazine <= 0 && !reloading) {
                 player.playSound(player.location, Sound.BLOCK_DISPENSER_FAIL, 0.5f, 1.5f)
@@ -110,22 +147,28 @@ class WeaponManager(private val plugin: ZombieRun) {
             }
             return false
         }
-
         val now = plugin.server.currentTick
         val lastShot = cooldowns.getOrDefault(player.uniqueId, 0)
         if (now - lastShot < config.cooldownTicks) return false
         cooldowns[player.uniqueId] = now
+        return true
+    }
 
-        val ads = adsState.getOrDefault(player.uniqueId, false)
-        val currentSpreadMultiplier = if (ads) config.adsSpreadMult else 1.0
-        val spreadFromRecoil = shotCount * config.spreadPerShot
-        val finalSpread = (config.spread + spreadFromRecoil) * currentSpreadMultiplier
+    private data class ShotResult(val totalHitDmg: Double, val hitHeadshot: Boolean)
 
-        val eyeLoc = player.eyeLocation
-        val baseDir = eyeLoc.direction
-
+    private fun performShots(
+        player: Player,
+        eyeLoc: org.bukkit.Location,
+        baseDir: org.bukkit.util.Vector,
+        config: WeaponConfig,
+        shotCount: Int,
+        ads: Boolean,
+        finalSpread: Double
+    ): ShotResult {
         var totalHitDmg = 0.0
         var hitHeadshot = false
+        val now = plugin.server.currentTick
+
         for (i in 0 until config.pellets) {
             val spreadDir = applySpreadAndRecoil(baseDir, config, shotCount, ads, finalSpread, config.pellets > 1)
             val rayTrace = player.world.rayTraceEntities(eyeLoc, spreadDir, config.range.toDouble(), 0.1) { it is Player && it != player }
@@ -153,52 +196,17 @@ class WeaponManager(private val plugin: ZombieRun) {
                         val lastHsTick = headshotCooldowns.getOrDefault(key, 0)
                         if (now - lastHsTick >= config.cooldownTicks * 5) {
                             headshotCooldowns[key] = now
-                            plugin.progressionManager.addXp(player, 5, "爆头")
+                            plugin.progressionManager.addXp(player, plugin.economyConfig.headshotXp, "爆头")
                         }
                     }
                 }
                 if (config.hitSound != null) {
                     val s = Sound.valueOf(config.hitSound.uppercase())
-                    if (s != null) {
-                        player.playSound(player.location, s, 0.5f, 1.5f)
-                    }
+                    if (s != null) player.playSound(player.location, s, 0.5f, 1.5f)
                 }
             }
         }
-
-        if (config.sound != null) {
-            val s = Sound.valueOf(config.sound.uppercase())
-            if (s != null) {
-                player.playSound(player.location, s, 0.8f, 1.2f)
-            }
-        }
-
-        magazine -= 1
-        shotCount += 1
-        pdc.set(magazineKey, PersistentDataType.INTEGER, magazine)
-        pdc.set(shotCountKey, PersistentDataType.INTEGER, shotCount)
-        item.itemMeta = meta
-
-        val barColor = when {
-            magazine.toDouble() / config.magazineSize > 0.5 -> NamedTextColor.GREEN
-            magazine.toDouble() / config.magazineSize > 0.25 -> NamedTextColor.YELLOW
-            else -> NamedTextColor.RED
-        }
-        val hitMsg = if (totalHitDmg > 0) {
-            val hsTag = if (hitHeadshot) " §e爆头" else ""
-            Component.text("命中 ${totalHitDmg.toInt()}", NamedTextColor.RED)
-                .append(LegacyComponentSerializer.legacySection().deserialize(hsTag))
-                .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
-        } else {
-            Component.empty()
-        }
-        player.sendActionBar(
-            hitMsg
-                .append(Component.text(magazine, barColor))
-                .append(Component.text(" / ", NamedTextColor.GRAY))
-                .append(Component.text(config.magazineSize))
-        )
-        return true
+        return ShotResult(totalHitDmg, hitHeadshot)
     }
 
     private fun applySpreadAndRecoil(
@@ -430,16 +438,16 @@ class WeaponManager(private val plugin: ZombieRun) {
             adsStartTime[player.uniqueId] = System.currentTimeMillis()
             player.scheduler.run(plugin, { _ ->
                 val attr = player.getAttribute(org.bukkit.attribute.Attribute.MOVEMENT_SPEED)
-                val current = attr?.baseValue ?: 0.1
+                val current = attr?.baseValue ?: plugin.balanceConfig.defaultMoveSpeed
                 adsOriginalSpeed.putIfAbsent(player.uniqueId, current)
-                attr?.baseValue = current * 0.4
+                attr?.baseValue = current * plugin.balanceConfig.adsSpeedMultiplier
                 player.addPotionEffect(org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.SLOWNESS, -1, 0, false, false))
             }, null)
         } else {
             adsState[player.uniqueId] = false
             player.scheduler.run(plugin, { _ ->
                 val attr = player.getAttribute(org.bukkit.attribute.Attribute.MOVEMENT_SPEED)
-                val original = adsOriginalSpeed.remove(player.uniqueId) ?: 0.1
+                val original = adsOriginalSpeed.remove(player.uniqueId) ?: plugin.balanceConfig.defaultMoveSpeed
                 attr?.baseValue = original
                 player.removePotionEffect(org.bukkit.potion.PotionEffectType.SLOWNESS)
             }, null)

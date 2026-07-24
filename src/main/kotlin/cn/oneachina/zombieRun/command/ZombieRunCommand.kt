@@ -22,151 +22,179 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         }
 
         when (args[0].lowercase()) {
-            "start", "spawn", "doors", "buttons", "reload", "open", "close", "reset", "debug" -> {
-                if (!sender.hasPermission("zombie.run.admin")) {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有权限使用此命令！"))
-                    return true
-                }
-                when (args[0].lowercase()) {
-                    "start" -> handleStart(sender)
-                    "spawn" -> handleSpawn(sender, args.drop(1).toTypedArray())
-                    "doors" -> handleDoors(sender, args.drop(1).toTypedArray())
-                    "buttons" -> handleButtons(sender, args.drop(1).toTypedArray())
-                    "reload" -> handleReload(sender)
-                    "open" -> handleOpen()
-                    "close" -> handleClose()
-                    "reset" -> handleReset(sender, args.drop(1).toTypedArray())
-                    "weapon" -> WeaponCommands.handle(plugin, sender, args.drop(1).toTypedArray())
-                    "debug" -> handleDebug(sender)
-                }
-            }
+            "start", "spawn", "doors", "buttons", "reload", "open", "close", "reset", "debug" ->
+                handleAdminCommand(sender, args)
             "coins" -> CoinCommands.handle(plugin, sender, args.drop(1).toTypedArray())
-            "shop" -> {
-                if (sender !is Player) {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
-                    return true
-                }
-                plugin.shopGUI.open(sender)
-            }
-            "select", "unselect", "randomgun", "lobby", "transfer" -> {
-                if (sender !is Player) {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
-                    return true
-                }
-                when (args[0].lowercase()) {
-                    "select" -> handleSelect(sender, args.drop(1).toTypedArray())
-                    "unselect" -> handleUnselect(sender)
-                    "randomgun" -> handleRandomgun(sender)
-                    "lobby" -> handleLobby(sender)
-                    "transfer" -> handleTransfer(sender, args.drop(1).toTypedArray())
-                }
-            }
-            "door" -> {
-                val subArgs = args.drop(1).toTypedArray()
-                if (subArgs.isNotEmpty() && subArgs[0].lowercase() == "behavior") {
-                    if (!sender.hasPermission("zombie.run.admin")) {
-                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有权限使用此命令！"))
-                        return true
-                    }
-                    DoorBehaviorCommands.handle(plugin, sender, subArgs.drop(1).toTypedArray())
-                } else {
-                    if (sender !is Player) {
-                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
-                        return true
-                    }
-                    handleDoor(sender, subArgs)
-                }
-            }
-            "profile" -> {
-                if (sender !is Player) {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
-                    return true
-                }
-                val target = if (args.size > 1) Bukkit.getPlayer(args[1]) else sender
-                if (target == null) {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c玩家不在线！"))
-                    return true
-                }
-                plugin.profileGUI.open(sender, target)
-            }
-            "quest" -> {
-                if (sender !is Player) {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
-                    return true
-                }
-                plugin.questGUI.open(sender)
-            }
-            "title" -> {
-                if (sender !is Player) {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
-                    return true
-                }
-                if (args.size == 1) {
-                    plugin.titleGUI.open(sender)
-                } else {
-                    val titleName = args.drop(1).joinToString(" ")
-                    if (plugin.titleManager.equipTitle(sender, titleName)) {
-                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已装备称号：§e$titleName"))
-                    } else {
-                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有解锁这个称号！"))
-                    }
-                }
-            }
-            "xp" -> {
-                if (!sender.hasPermission("zombie.run.admin")) {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有权限使用此命令！"))
-                    return true
-                }
-                if (args.size < 4) {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr xp <add|set> <玩家> <数量>"))
-                    return true
-                }
-                val amount = args.getOrNull(3)?.toIntOrNull()
-                if (amount == null || amount <= 0) {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c数量必须是正整数！"))
-                    return true
-                }
-                val target = Bukkit.getPlayer(args[2])
-                if (target == null) {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c玩家不在线！"))
-                    return true
-                }
-                when (args[1].lowercase()) {
-                    "add" -> {
-                        plugin.progressionManager.addXp(target, amount, "管理员操作")
-                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已给 ${target.name} 增加 $amount XP"))
-                    }
-                    "set" -> {
-                        plugin.progressionManager.setXp(target.uniqueId, amount)
-                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已将 ${target.name} 的 XP 设置为 $amount"))
-                    }
-                    else -> sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr xp <add|set> <玩家> <数量>"))
-                }
-            }
-            "level" -> {
-                if (!sender.hasPermission("zombie.run.admin")) {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有权限使用此命令！"))
-                    return true
-                }
-                if (args.size < 4 || args[1].lowercase() != "set") {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr level set <玩家> <等级>"))
-                    return true
-                }
-                val level = args.getOrNull(3)?.toIntOrNull()
-                if (level == null || level < 1 || level > cn.oneachina.zombieRun.manager.ProgressionManager.MAX_LEVEL) {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c等级必须在 1-${cn.oneachina.zombieRun.manager.ProgressionManager.MAX_LEVEL} 之间！"))
-                    return true
-                }
-                val target = Bukkit.getPlayer(args[2])
-                if (target == null) {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c玩家不在线！"))
-                    return true
-                }
-                plugin.progressionManager.setLevel(target.uniqueId, level)
-                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已将 ${target.name} 的等级设置为 $level"))
-            }
+            "shop" -> handleShop(sender)
+            "select", "unselect", "randomgun", "lobby", "transfer" ->
+                handlePlayerCommand(sender, args)
+            "door" -> handleDoorCommand(sender, args)
+            "profile" -> handleProfile(sender, args)
+            "quest" -> handleQuest(sender)
+            "title" -> handleTitle(sender, args)
+            "xp" -> handleXp(sender, args)
+            "level" -> handleLevel(sender, args)
             else -> sendHelp(sender)
         }
+        return true
+    }
+
+    private fun handleAdminCommand(sender: CommandSender, args: Array<out String>): Boolean {
+        if (!sender.hasPermission("zombie.run.admin")) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有权限使用此命令！"))
+            return true
+        }
+        return when (args[0].lowercase()) {
+            "start" -> { handleStart(sender); true }
+            "spawn" -> { handleSpawn(sender, args.drop(1).toTypedArray()); true }
+            "doors" -> { handleDoors(sender, args.drop(1).toTypedArray()); true }
+            "buttons" -> { handleButtons(sender, args.drop(1).toTypedArray()); true }
+            "reload" -> { handleReload(sender); true }
+            "open" -> { handleOpen(); true }
+            "close" -> { handleClose(); true }
+            "reset" -> { handleReset(sender, args.drop(1).toTypedArray()); true }
+            "debug" -> { handleDebug(sender); true }
+            else -> { sendHelp(sender); true }
+        }
+    }
+
+    private fun handlePlayerCommand(sender: CommandSender, args: Array<out String>): Boolean {
+        if (sender !is Player) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
+            return true
+        }
+        return when (args[0].lowercase()) {
+            "select" -> { handleSelect(sender, args.drop(1).toTypedArray()); true }
+            "unselect" -> { handleUnselect(sender); true }
+            "randomgun" -> { handleRandomgun(sender); true }
+            "lobby" -> { handleLobby(sender); true }
+            "transfer" -> { handleTransfer(sender, args.drop(1).toTypedArray()); true }
+            else -> { sendHelp(sender); true }
+        }
+    }
+
+    private fun handleDoorCommand(sender: CommandSender, args: Array<out String>): Boolean {
+        val subArgs = args.drop(1).toTypedArray()
+        if (subArgs.isNotEmpty() && subArgs[0].lowercase() == "behavior") {
+            if (!sender.hasPermission("zombie.run.admin")) {
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有权限使用此命令！"))
+                return true
+            }
+            DoorBehaviorCommands.handle(plugin, sender, subArgs.drop(1).toTypedArray())
+        } else {
+            if (sender !is Player) {
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
+                return true
+            }
+            handleDoor(sender, subArgs)
+        }
+        return true
+    }
+
+    private fun handleShop(sender: CommandSender): Boolean {
+        if (sender !is Player) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
+            return true
+        }
+        plugin.shopGUI.open(sender)
+        return true
+    }
+
+    private fun handleProfile(sender: CommandSender, args: Array<out String>): Boolean {
+        if (sender !is Player) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
+            return true
+        }
+        val target = if (args.size > 1) Bukkit.getPlayer(args[1]) else sender
+        if (target == null) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c玩家不在线！"))
+            return true
+        }
+        plugin.profileGUI.open(sender, target)
+        return true
+    }
+
+    private fun handleQuest(sender: CommandSender): Boolean {
+        if (sender !is Player) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
+            return true
+        }
+        plugin.questGUI.open(sender)
+        return true
+    }
+
+    private fun handleTitle(sender: CommandSender, args: Array<out String>): Boolean {
+        if (sender !is Player) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
+            return true
+        }
+        if (args.size == 1) {
+            plugin.titleGUI.open(sender)
+        } else {
+            val titleName = args.drop(1).joinToString(" ")
+            if (plugin.titleManager.equipTitle(sender, titleName)) {
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已装备称号：§e$titleName"))
+            } else {
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有解锁这个称号！"))
+            }
+        }
+        return true
+    }
+
+    private fun handleXp(sender: CommandSender, args: Array<out String>): Boolean {
+        if (!sender.hasPermission("zombie.run.admin")) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有权限使用此命令！"))
+            return true
+        }
+        if (args.size < 4) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr xp <add|set> <玩家> <数量>"))
+            return true
+        }
+        val amount = args.getOrNull(3)?.toIntOrNull()
+        if (amount == null || amount <= 0) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c数量必须是正整数！"))
+            return true
+        }
+        val target = Bukkit.getPlayer(args[2])
+        if (target == null) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c玩家不在线！"))
+            return true
+        }
+        when (args[1].lowercase()) {
+            "add" -> {
+                plugin.progressionManager.addXp(target, amount, "管理员操作")
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已给 ${target.name} 增加 $amount XP"))
+            }
+            "set" -> {
+                plugin.progressionManager.setXp(target.uniqueId, amount)
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已将 ${target.name} 的 XP 设置为 $amount"))
+            }
+            else -> sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr xp <add|set> <玩家> <数量>"))
+        }
+        return true
+    }
+
+    private fun handleLevel(sender: CommandSender, args: Array<out String>): Boolean {
+        if (!sender.hasPermission("zombie.run.admin")) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有权限使用此命令！"))
+            return true
+        }
+        if (args.size < 4 || args[1].lowercase() != "set") {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr level set <玩家> <等级>"))
+            return true
+        }
+        val level = args.getOrNull(3)?.toIntOrNull()
+        if (level == null || level < 1 || level > cn.oneachina.zombieRun.manager.ProgressionManager.MAX_LEVEL) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c等级必须在 1-${cn.oneachina.zombieRun.manager.ProgressionManager.MAX_LEVEL} 之间！"))
+            return true
+        }
+        val target = Bukkit.getPlayer(args[2])
+        if (target == null) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c玩家不在线！"))
+            return true
+        }
+        plugin.progressionManager.setLevel(target.uniqueId, level)
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已将 ${target.name} 的等级设置为 $level"))
         return true
     }
 

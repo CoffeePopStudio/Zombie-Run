@@ -39,7 +39,7 @@ class CombatListener(
 
         if (attackerTeam == GameManager.Team.HUMAN &&
             (victimTeam == GameManager.Team.ZOMBIE || victimTeam == GameManager.Team.ZOMBIE_MAIN)) {
-            val swordDamage = 5.0
+            val swordDamage = plugin.combatConfig.swordDamage
             plugin.healthManager.damage(victim, swordDamage, attacker)
             victim.velocity = victim.velocity.add(attacker.location.direction.setY(-1.0).normalize().multiply(0.3))
             attacker.sendActionBar(Component.text("造成伤害: ${String.format("%.1f", swordDamage)}").color(NamedTextColor.RED))
@@ -48,7 +48,8 @@ class CombatListener(
 
         if ((attackerTeam == GameManager.Team.ZOMBIE || attackerTeam == GameManager.Team.ZOMBIE_MAIN) &&
             victimTeam == GameManager.Team.HUMAN) {
-            val zombieDamage = if (attackerTeam == GameManager.Team.ZOMBIE_MAIN) 10.0 else 6.0
+            val zombieDamage = if (attackerTeam == GameManager.Team.ZOMBIE_MAIN)
+                plugin.combatConfig.zombieMainDamage else plugin.combatConfig.zombieDamage
             plugin.healthManager.damage(victim, zombieDamage, attacker)
         }
     }
@@ -77,7 +78,8 @@ class CombatListener(
                 if (killer != null && plugin.gameManager.getPlayerTeam(killer) == GameManager.Team.HUMAN) {
                     plugin.miscManager.addKill(killer)
                     plugin.progressionListener.onKillZombie(killer, victim, victimTeam == GameManager.Team.ZOMBIE_MAIN)
-                    val reward = if (victimTeam == GameManager.Team.ZOMBIE_MAIN) 150 else 50
+                    val reward = if (victimTeam == GameManager.Team.ZOMBIE_MAIN)
+                        plugin.economyConfig.killZombieMainCoins else plugin.economyConfig.killZombieCoins
                     plugin.coinManager.addCoins(killer.uniqueId, reward)
                     killer.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§6+ $reward 硬币!"))
                     val teamColorCode = if (victimTeam == GameManager.Team.ZOMBIE_MAIN) "5" else "2"
@@ -120,7 +122,7 @@ class CombatListener(
     private fun infectPlayer(attacker: Player, victim: Player) {
         plugin.miscManager.addInfection(attacker)
         plugin.progressionListener.onInfectHuman(attacker, victim)
-        plugin.coinManager.addCoins(attacker.uniqueId, 50)
+        plugin.coinManager.addCoins(attacker.uniqueId, plugin.economyConfig.infectHumanCoins)
 
         val attackerColor = if (plugin.gameManager.getPlayerTeam(attacker) == GameManager.Team.ZOMBIE_MAIN) "5" else "2"
         Bukkit.broadcast(LegacyComponentSerializer.legacySection().deserialize("§${attackerColor}${attacker.name} §c感染了 §b${victim.name}"))
@@ -129,7 +131,7 @@ class CombatListener(
         plugin.gameManager.setPlayerTeam(victim, GameManager.Team.ZOMBIE)
         victim.gameMode = GameMode.SPECTATOR
 
-        var countdown = 5
+        var countdown = plugin.balanceConfig.infectCountdownSec
         var scheduledTask: ScheduledTask? = null
         scheduledTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { task ->
             if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
@@ -167,7 +169,7 @@ class CombatListener(
             plugin.staminaManager.applyZombieEffects(victim)
             plugin.respawnManager.teleportToZombieRespawn(victim)
             victim.sendMessage(message)
-        }, 100L)
+        }, plugin.balanceConfig.respawnDelayTicks)
         taskTracker.register(scheduledTask, victim)
     }
 }

@@ -20,54 +20,36 @@ import org.bukkit.plugin.java.JavaPlugin
 class ZombieRun : JavaPlugin() {
     var debugMode = false
 
-    lateinit var configManager: ConfigManager
-    lateinit var doorManager: DoorManager
-    lateinit var doorZoneManager: DoorZoneManager
-    lateinit var buttonManager: ButtonManager
-    lateinit var respawnManager: RespawnManager
-    lateinit var gameManager: GameManager
-    lateinit var staminaManager: StaminaManager
-    lateinit var miscManager: MiscManager
-    lateinit var startEffectManager: StartEffectManager
-    lateinit var weaponManager: WeaponManager
-    lateinit var healthManager: HealthManager
-    lateinit var coinManager: CoinManager
-    lateinit var progressionManager: ProgressionManager
-    lateinit var progressionListener: ProgressionListener
-    lateinit var questManager: QuestManager
-    lateinit var titleManager: TitleManager
-    lateinit var nametagManager: NametagManager
-    lateinit var shopGUI: ShopGUI
-    lateinit var profileGUI: ProfileGUI
-    lateinit var questGUI: QuestGUI
-    lateinit var titleGUI: TitleGUI
+    val configManager: ConfigManager by lazy { ConfigManager(this).apply { loadConfig() } }
+    val doorManager: DoorManager by lazy { DoorManager(this).apply { loadDoors() } }
+    val doorZoneManager: DoorZoneManager by lazy { DoorZoneManager() }
+    val buttonManager: ButtonManager by lazy { ButtonManager(this).apply { loadButtons() } }
+    val respawnManager: RespawnManager by lazy { RespawnManager(this).apply { loadRespawns() } }
+    val gameManager: GameManager by lazy { GameManager(this) }
+    val staminaManager: StaminaManager by lazy { StaminaManager(this).apply { init() } }
+    val miscManager: MiscManager by lazy { MiscManager(this) }
+    val startEffectManager: StartEffectManager by lazy { StartEffectManager(this).apply { loadEffects() } }
+    val weaponManager: WeaponManager by lazy { WeaponManager(this).apply { loadWeapons() } }
+    val healthManager: HealthManager by lazy { HealthManager(this) }
+    val coinManager: CoinManager by lazy { CoinManager(this).apply { init() } }
+    val progressionManager: ProgressionManager by lazy { ProgressionManager(this).apply { init() } }
+    val progressionListener: ProgressionListener by lazy { ProgressionListener(this) }
+    val questManager: QuestManager by lazy { QuestManager(this).apply { init() } }
+    val titleManager: TitleManager by lazy { TitleManager(this) }
+    val nametagManager: NametagManager by lazy { NametagManager(this).apply { init() } }
+    val shopGUI: ShopGUI by lazy { ShopGUI(this) }
+    val profileGUI: ProfileGUI by lazy { ProfileGUI(this) }
+    val questGUI: QuestGUI by lazy { QuestGUI(this) }
+    val titleGUI: TitleGUI by lazy { TitleGUI(this) }
+
+    val combatConfig: CombatConfig by lazy { configManager.loadCombatConfig() }
+    val economyConfig: EconomyConfig by lazy { configManager.loadEconomyConfig() }
+    val balanceConfig: BalanceConfig by lazy { configManager.loadBalanceConfig() }
 
     override fun onEnable() {
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
             ZombieRunExpansion(this).register()
         }
-
-        configManager = ConfigManager(this).apply { loadConfig() }
-        doorZoneManager = DoorZoneManager()
-        doorManager = DoorManager(this).apply { loadDoors() }
-        buttonManager = ButtonManager(this).apply { loadButtons() }
-        respawnManager = RespawnManager(this).apply { loadRespawns() }
-        gameManager = GameManager(this)
-        staminaManager = StaminaManager(this).apply { init() }
-        miscManager = MiscManager(this)
-        startEffectManager = StartEffectManager(this).apply { loadEffects() }
-        weaponManager = WeaponManager(this).apply { loadWeapons() }
-        healthManager = HealthManager(this)
-        coinManager = CoinManager(this).apply { init() }
-        progressionManager = ProgressionManager(this).apply { init() }
-        progressionListener = ProgressionListener(this)
-        questManager = QuestManager(this).apply { init() }
-        titleManager = TitleManager(this)
-        nametagManager = NametagManager(this).apply { init() }
-        shopGUI = ShopGUI(this)
-        profileGUI = ProfileGUI(this)
-        questGUI = QuestGUI(this)
-        titleGUI = TitleGUI(this)
 
         Bukkit.getGlobalRegionScheduler().runDelayed(this, { _ ->
             doorManager.reset()
@@ -99,32 +81,14 @@ class ZombieRun : JavaPlugin() {
             player.health = 20.0
             player.clearActivePotionEffects()
         }
-        if (this::coinManager.isInitialized) {
-            coinManager.close()
-        }
-        if (this::doorManager.isInitialized) {
-            doorManager.reset()
-        }
-        if (this::respawnManager.isInitialized) {
-            respawnManager.clear()
-        }
-        if (this::gameManager.isInitialized) {
-            gameManager.clear()
-        }
-        if (this::staminaManager.isInitialized) {
-            staminaManager.clear()
-        }
-        if (this::progressionManager.isInitialized) {
-            progressionManager.close()
-        }
-        if (this::buttonManager.isInitialized) {
-            buttonManager.clear()
-        }
-        if (this::nametagManager.isInitialized) {
-            nametagManager.clearAll()
-        }
-        if (this::healthManager.isInitialized) {
-            healthManager.clearAll()
-        }
+        coinManager.close()
+        doorManager.reset()
+        respawnManager.clear()
+        gameManager.clear()
+        staminaManager.clear()
+        progressionManager.close()
+        buttonManager.clear()
+        nametagManager.clearAll()
+        healthManager.clearAll()
     }
 }

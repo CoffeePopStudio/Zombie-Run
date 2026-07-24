@@ -1,0 +1,12 @@
+# 门系统
+door-open-cooldown-ms: 3000
+transfer-countdown-sec: 10
+helicopter-countdown-sec: 30
+
+# 死亡/感染
+infect-countdown-sec: 5
+respawn-delay-ticks: 100
+
+# 武器/移动
+ads-speed-multiplier: 0.4
+default-move-speed: 0.1

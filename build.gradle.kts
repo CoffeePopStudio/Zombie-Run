@@ -25,6 +25,7 @@ dependencies {
 tasks.shadowJar {
     dependencies {
         include(dependency("org.jetbrains.kotlin:.*"))
+        include(dependency("com.zaxxer:HikariCP:.*"))
     }
     mergeServiceFiles()
 }
@@ -36,6 +37,7 @@ runPaper {
 tasks {
     runServer {
         minecraftVersion("26.1.2")
+        dependsOn("shadowJar")
     }
 }
 

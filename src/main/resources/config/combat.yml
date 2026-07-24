@@ -1,0 +1,9 @@
+# 战斗伤害配置
+sword-damage: 5.0
+zombie-damage: 6.0
+zombie-main-damage: 10.0
+
+# 生命值配置
+zombie-max-health: 200.0
+zombie-main-max-health: 500.0
+human-max-health: 20.0

@@ -12,12 +12,10 @@ class HealthManager(private val plugin: ZombieRun) {
     private val maxHealthMap = ConcurrentHashMap<UUID, Double>()
     private val lastDamager = ConcurrentHashMap<UUID, UUID>()
 
-    companion object {
-        fun maxHealthForTeam(team: GameManager.Team): Double = when (team) {
-            GameManager.Team.ZOMBIE_MAIN -> 500.0
-            GameManager.Team.ZOMBIE -> 200.0
-            else -> 20.0
-        }
+    fun maxHealthForTeam(team: GameManager.Team): Double = when (team) {
+        GameManager.Team.ZOMBIE_MAIN -> plugin.combatConfig.zombieMainMaxHealth
+        GameManager.Team.ZOMBIE -> plugin.combatConfig.zombieMaxHealth
+        else -> plugin.combatConfig.humanMaxHealth
     }
 
     fun initPlayerHealth(player: Player, team: GameManager.Team) {
