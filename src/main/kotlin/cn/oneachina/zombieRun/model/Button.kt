@@ -16,12 +16,12 @@ class Button(
     fun isNormal(): Boolean = mode.equals("normal", ignoreCase = true)
     fun isEscape(): Boolean = mode.equals("escape", ignoreCase = true)
 
-    /** 返回所有要触发的门号集合（单门 + 多门） */
+    /** 返回所有要触发的门号集合（单门 + 多门，去重） */
     fun getAllDoorNumbers(): List<Int> {
         val list = mutableListOf<Int>()
         doorNumber?.let { list.add(it) }
         doorNumbers?.let { list.addAll(it) }
-        return list
+        return list.distinct()
     }
 
     override fun toString(): String {
