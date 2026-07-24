@@ -223,6 +223,7 @@ class DoorManager(private val plugin: ZombieRun) {
         val door = session.door
         val doorNum = door.doorNumber
         val lastDisplay = doubleArrayOf(-1.0)
+        val sb = door.specialBehavior
         val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
             if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
                 session.closetime = -1.0
@@ -241,28 +242,41 @@ class DoorManager(private val plugin: ZombieRun) {
                 }
 
                 if (session.closetime > 3.1 && humansBehind == 0) {
-                    Bukkit.broadcast(Component.text("所有人类都已进入，大门即将关闭……", NamedTextColor.GREEN))
+                    val enteredMsg = when (sb) {
+                        is SpecialDoorBehavior.Subway -> "所有人类都已上车，${sb.lineName}即将发车……"
+                        else -> "所有人类都已进入，大门即将关闭……"
+                    }
+                    Bukkit.broadcast(Component.text(enteredMsg, NamedTextColor.GREEN))
                     session.closetime = 3.1
                 }
 
                 if (currentDisplay != lastDisplay[0]) {
                     val displayStr = if (currentDisplay % 1 == 0.0) currentDisplay.toInt().toString() else String.format("%.1f", currentDisplay)
 
+                    val (behindMsg, aheadMsg) = when (sb) {
+                        is SpecialDoorBehavior.Subway -> Pair(
+                            "${sb.lineName}列车将在 {sec} 秒后发车，请立即上车！",
+                            "${sb.lineName}列车将在 {sec} 秒后发车……"
+                        )
+                        else -> Pair(
+                            "$doorNum 号大门即将关闭，请立即进入！",
+                            "$doorNum 号大门将在 {sec} 秒后关闭……"
+                        )
+                    }
+
                     Bukkit.getOnlinePlayers().forEach { player ->
                         val room = plugin.gameManager.getPlayerRoom(player)
                         val title = if (room < doorNum) {
                             Title.title(
                                 Component.text(displayStr, NamedTextColor.RED),
-                                Component.text("$doorNum 号大门即将关闭，请立即进入！", NamedTextColor.GOLD),
+                                Component.text(behindMsg.replace("{sec}", displayStr), NamedTextColor.GOLD),
                                 Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(1), Duration.ofMillis(500))
                             )
                         } else {
                             Title.title(
                                 Component.empty(),
                                 Component.text()
-                                    .append(Component.text("$doorNum 号大门将在 ", NamedTextColor.GRAY))
-                                    .append(Component.text(displayStr, NamedTextColor.RED))
-                                    .append(Component.text(" 秒后关闭……", NamedTextColor.GRAY))
+                                    .append(Component.text(aheadMsg.replace("{sec}", displayStr), NamedTextColor.GRAY))
                                     .build(),
                                 Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(1), Duration.ofMillis(500))
                             )
@@ -308,22 +322,29 @@ class DoorManager(private val plugin: ZombieRun) {
         world.playSound(soundLoc, Sound.BLOCK_ANVIL_LAND, 1f, 0.5f)
         world.playSound(soundLoc, Sound.ENTITY_ZOMBIE_ATTACK_IRON_DOOR, 1f, 1f)
 
-        val hasSpecial = door.hasSpecialBehavior() && !isGroupMemberDoor(door)
+        val isGroupSpecialDoor = door.group != null && door.hasSpecialBehavior()
 
-        Bukkit.getOnlinePlayers().forEach { player ->
-            val room = plugin.gameManager.getPlayerRoom(player)
-            val isInsideDoor = door.containsLocation(player.location)
-
-            if (isInsideDoor) {
-                // C3: 在门区域内的玩家 → 视为未通过，传送出去
-                if (!hasSpecial) {
-                    plugin.respawnManager.teleportPlayerByDoorClose(player, doorNum)
+        if (isGroupSpecialDoor) {
+            // 组门 + 特殊行为：不单独做 room 判定，统一交给 handleSpecialDoorClose
+            Bukkit.getOnlinePlayers().forEach { player ->
+                if (door.containsLocation(player.location)) {
+                    // 卡在门方块里 — 特殊行为触发时会一并处理
                 }
-            } else if (room < doorNum) {
-                // 落后于门的玩家 → 10 秒传送倒计时
-                startTransferCountdown(player, doorNum)
             }
-            // room >= doorNum 且不在门内 → 已通过，不做任何事
+        } else {
+            val hasSpecial = door.hasSpecialBehavior()
+            Bukkit.getOnlinePlayers().forEach { player ->
+                val room = plugin.gameManager.getPlayerRoom(player)
+                val isInsideDoor = door.containsLocation(player.location)
+
+                if (isInsideDoor) {
+                    if (!hasSpecial) {
+                        plugin.respawnManager.teleportPlayerByDoorClose(player, doorNum)
+                    }
+                } else if (room < doorNum) {
+                    startTransferCountdown(player, doorNum)
+                }
+            }
         }
 
         // 门组：仅当同组门全部关闭时才触发特殊行为
@@ -340,13 +361,6 @@ class DoorManager(private val plugin: ZombieRun) {
         val group = door.group ?: return true
         val groupDoors = doorGroups[group] ?: return true
         return groupDoors.none { it.isOpen }
-    }
-
-    /** 该门是否属于门组且组内还有其他门开着（用于抑制重复的特殊行为触发） */
-    private fun isGroupMemberDoor(door: Door): Boolean {
-        val group = door.group ?: return false
-        val groupDoors = doorGroups[group] ?: return false
-        return groupDoors.size > 1 && groupDoors.any { it.isOpen }
     }
 
     // ==================== 落后传送倒计时 ====================
@@ -380,9 +394,11 @@ class DoorManager(private val plugin: ZombieRun) {
         val behavior = door.specialBehavior ?: return
         val world = Bukkit.getWorlds().first()
         val groupDoors = if (!door.group.isNullOrBlank()) doorGroups[door.group] ?: listOf(door) else listOf(door)
-        // 收集所有同组门内的玩家（用实际位置检测）
+        val groupDoorNumbers = groupDoors.map { it.doorNumber }.toSet()
+        // 收集"已上车"的玩家：在任一扇门区域内，或已经通过同组任一扇门（playerRoom 被更新）
         val players = Bukkit.getOnlinePlayers().filter { player ->
-            groupDoors.any { it.containsLocation(player.location) }
+            groupDoors.any { it.containsLocation(player.location) } ||
+            plugin.gameManager.getPlayerRoom(player) in groupDoorNumbers
         }
         if (players.isEmpty()) return
 
