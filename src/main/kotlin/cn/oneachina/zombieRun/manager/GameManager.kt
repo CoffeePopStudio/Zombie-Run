@@ -248,121 +248,65 @@ class GameManager(private val plugin: ZombieRun) {
         val kills = plugin.miscManager.getAllKills()
         val infections = plugin.miscManager.getAllInfections()
 
-        val killList = kills.entries.sortedByDescending { it.value }.take(3)
-        val infectList = infections.entries.sortedByDescending { it.value }.take(3)
-
-        fun formatEntry(entry: Map.Entry<Player, Int>?) = entry?.let { "${it.key.name} ${it.value}" } ?: "none"
-
-        val killFirst = formatEntry(killList.getOrNull(0))
-        val killSecond = formatEntry(killList.getOrNull(1))
-        val killThird = formatEntry(killList.getOrNull(2))
-
-        val infectFirst = formatEntry(infectList.getOrNull(0))
-        val infectSecond = formatEntry(infectList.getOrNull(1))
-        val infectThird = formatEntry(infectList.getOrNull(2))
-
-        val line1 = Component.text("==========================================", NamedTextColor.GREEN)
-        Bukkit.broadcast(line1)
-
-        val line2 = Component.text()
+        val separator = Component.text("==========================================", NamedTextColor.GREEN)
+        val header = Component.text()
             .append(Component.text("                           ", NamedTextColor.YELLOW))
             .append(Component.text("游戏结算", NamedTextColor.YELLOW, TextDecoration.BOLD))
             .build()
-        Bukkit.broadcast(line2)
 
+        Bukkit.broadcast(separator)
+        Bukkit.broadcast(header)
         Bukkit.broadcast(Component.empty())
 
-        val line4 = Component.text()
-            .append(Component.text("  ", NamedTextColor.GRAY))
-            .append(Component.text("击杀 ", NamedTextColor.AQUA))
-            .append(Component.text("第 1 名", NamedTextColor.YELLOW))
-            .append(Component.text(" - ", NamedTextColor.GRAY))
-            .append(Component.text("[", NamedTextColor.GRAY))
-            .append(Component.text(killFirst, NamedTextColor.WHITE))
-            .append(Component.text("] ", NamedTextColor.GRAY))
-            .append(Component.text("+ 200 硬币!", NamedTextColor.GOLD))
-            .build()
-        Bukkit.broadcast(line4)
-
-        val line5 = Component.text()
-            .append(Component.text("  ", NamedTextColor.GRAY))
-            .append(Component.text("击杀 ", NamedTextColor.AQUA))
-            .append(Component.text("第 2 名", NamedTextColor.WHITE))
-            .append(Component.text(" - ", NamedTextColor.GRAY))
-            .append(Component.text("[", NamedTextColor.GRAY))
-            .append(Component.text(killSecond, NamedTextColor.WHITE))
-            .append(Component.text("] ", NamedTextColor.GRAY))
-            .append(Component.text("+ 150 硬币!", NamedTextColor.GOLD))
-            .build()
-        Bukkit.broadcast(line5)
-
-        val line6 = Component.text()
-            .append(Component.text("  ", NamedTextColor.GRAY))
-            .append(Component.text("击杀 ", NamedTextColor.AQUA))
-            .append(Component.text("第 3 名", NamedTextColor.GOLD))
-            .append(Component.text(" - ", NamedTextColor.GRAY))
-            .append(Component.text("[", NamedTextColor.GRAY))
-            .append(Component.text(killThird, NamedTextColor.WHITE))
-            .append(Component.text("] ", NamedTextColor.GRAY))
-            .append(Component.text("+ 100 硬币!", NamedTextColor.GOLD))
-            .build()
-        Bukkit.broadcast(line6)
-
+        val killRanking = formatRanking(kills, "击杀", NamedTextColor.AQUA)
+        killRanking.forEach { Bukkit.broadcast(it) }
         Bukkit.broadcast(Component.empty())
 
-        val line8 = Component.text()
-            .append(Component.text("  ", NamedTextColor.GRAY))
-            .append(Component.text("感染 ", NamedTextColor.DARK_GREEN))
-            .append(Component.text("第 1 名", NamedTextColor.YELLOW))
-            .append(Component.text(" - ", NamedTextColor.GRAY))
-            .append(Component.text("[", NamedTextColor.GRAY))
-            .append(Component.text(infectFirst, NamedTextColor.WHITE))
-            .append(Component.text("] ", NamedTextColor.GRAY))
-            .append(Component.text("+ 200 硬币!", NamedTextColor.GOLD))
-            .build()
-        Bukkit.broadcast(line8)
-
-        val line9 = Component.text()
-            .append(Component.text("  ", NamedTextColor.GRAY))
-            .append(Component.text("感染 ", NamedTextColor.DARK_GREEN))
-            .append(Component.text("第 2 名", NamedTextColor.WHITE))
-            .append(Component.text(" - ", NamedTextColor.GRAY))
-            .append(Component.text("[", NamedTextColor.GRAY))
-            .append(Component.text(infectSecond, NamedTextColor.WHITE))
-            .append(Component.text("] ", NamedTextColor.GRAY))
-            .append(Component.text("+ 150 硬币!", NamedTextColor.GOLD))
-            .build()
-        Bukkit.broadcast(line9)
-
-        val line10 = Component.text()
-            .append(Component.text("  ", NamedTextColor.GRAY))
-            .append(Component.text("感染 ", NamedTextColor.DARK_GREEN))
-            .append(Component.text("第 3 名", NamedTextColor.GOLD))
-            .append(Component.text(" - ", NamedTextColor.GRAY))
-            .append(Component.text("[", NamedTextColor.GRAY))
-            .append(Component.text(infectThird, NamedTextColor.WHITE))
-            .append(Component.text("] ", NamedTextColor.GRAY))
-            .append(Component.text("+ 100 硬币!", NamedTextColor.GOLD))
-            .build()
-        Bukkit.broadcast(line10)
-
+        val infectRanking = formatRanking(infections, "感染", NamedTextColor.DARK_GREEN)
+        infectRanking.forEach { Bukkit.broadcast(it) }
         Bukkit.broadcast(Component.empty())
-        Bukkit.broadcast(line1)
+        Bukkit.broadcast(separator)
 
-        val killRewards = mapOf(0 to 200, 1 to 150, 2 to 100)
-        killList.forEachIndexed { index, (player, _) ->
-            val reward = killRewards[index] ?: 0
-            plugin.coinManager.addCoins(player.uniqueId, reward)
-            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§6+ $reward 硬币! (击杀第 ${index+1} 名)"))
-        }
+        val rankRewards = listOf(200, 150, 100)
+        awardRankingRewards(kills, rankRewards, "击杀")
+        awardRankingRewards(infections, rankRewards, "感染")
+    }
 
-        val infectRewards = mapOf(0 to 200, 1 to 150, 2 to 100)
-        infectList.forEachIndexed { index, (player, _) ->
-            val reward = infectRewards[index] ?: 0
-            plugin.coinManager.addCoins(player.uniqueId, reward)
-            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§6+ $reward 硬币! (感染第 ${index+1} 名)"))
+    private fun formatRanking(
+        entries: Map<Player, Int>,
+        label: String,
+        labelColor: NamedTextColor
+    ): List<Component> {
+        val topThree = entries.entries.sortedByDescending { it.value }.take(3)
+        val medals = listOf(
+            Pair(NamedTextColor.YELLOW, "第 1 名"),
+            Pair(NamedTextColor.WHITE, "第 2 名"),
+            Pair(NamedTextColor.GOLD, "第 3 名")
+        )
+        return topThree.mapIndexed { index, (player, value) ->
+            val (medalColor, medalText) = medals[index]
+            Component.text()
+                .append(Component.text("  ", NamedTextColor.GRAY))
+                .append(Component.text(label, labelColor))
+                .append(Component.text(" ", NamedTextColor.GRAY))
+                .append(Component.text(medalText, medalColor))
+                .append(Component.text(" - ", NamedTextColor.GRAY))
+                .append(Component.text("[${player.name} $value]", NamedTextColor.WHITE))
+                .append(Component.text(" + ${rankRewards()[index]} 硬币!", NamedTextColor.GOLD))
+                .build()
         }
     }
+
+    private fun awardRankingRewards(entries: Map<Player, Int>, rewards: List<Int>, label: String) {
+        val topThree = entries.entries.sortedByDescending { it.value }.take(3)
+        topThree.forEachIndexed { index, (player, _) ->
+            val reward = rewards.getOrNull(index) ?: 0
+            plugin.coinManager.addCoins(player.uniqueId, reward)
+            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§6+ $reward 硬币! ($label 第 ${index + 1} 名)"))
+        }
+    }
+
+    private fun rankRewards(): List<Int> = listOf(200, 150, 100)
 
     fun getPlayerTeam(player: Player?) = playerTeams.getOrDefault(player, Team.SPECTATOR)
     fun getPlayerRoom(player: Player) = playerRooms.getOrDefault(player, 0)
