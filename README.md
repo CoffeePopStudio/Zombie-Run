@@ -24,23 +24,30 @@
 ## 快速开始
 
 ```bash
-# 1. 创建门
-/zr doors add 10 64 10 10 66 20 normal 1 5
+# 1. 选区
+/zr postool                          # 拿到选区棒，左键角1，右键角2
 
-# 2. 创建按钮
-/zr buttons add 5 64 5 normal 1
+# 2. 创建门
+/zr doors add normal                 # 普通门（自动分配门号，duration=15）
+/zr doors add normal -g subway_l1    # 地铁门组（同名组自动继承门号）
+/zr doors add player                 # 人类起始门
+/zr doors add zombie                 # 僵尸起始门
 
-# 3. 创建重生点
+# 3. 创建按钮
+/zr buttons add <x> <y> <z> normal <门号>
+
+# 4. 创建重生点
 /zr spawn wait          # 等待大厅
 /zr spawn player        # 人类出生点
 /zr spawn zombie        # 僵尸出生点
 /zr spawn alpha         # 母体出生点
 
-# 4. （可选）电梯/地铁传送
-/zr door behavior set door_xxx elevator 48 5
-/zr door behavior set door_xxx subway 500 20 500 "1号线" 10
+# 5. （可选）设置特殊传送 — postool 选区后直接生效
+/zr door behavior set <门号> subway "线路名"     # pos1=人类目标, pos2=僵尸目标
+/zr door behavior set <门号> elevator            # pos1.y=人类Y, pos2.y=僵尸Y
+/zr door behavior set <门号> airport             # pos1=人类目标, pos2=僵尸目标
 
-# 5. 开始游戏
+# 6. 开始游戏
 /zr start
 ```
 
