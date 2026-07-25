@@ -118,19 +118,19 @@ class Door(
     }
 
     /** 关门时判断玩家是否已通过门（正坐标方向为"前方"，reverseDirection=true 则反转） */
-    fun isPlayerPastDoor(location: Location): Boolean {
-        // 高度对齐（允许 ±10 容差）
-        if (location.y < minY - 10 || location.y > maxY + 10) return false
+    fun isPlayerPastDoor(location: Location, crossingTolerance: Double = 10.0): Boolean {
+        // 高度对齐
+        if (location.y < minY - crossingTolerance || location.y > maxY + crossingTolerance) return false
 
         val pastPositive = !reverseDirection
         return if (crossingAxis() == 'z') {
-            // X 对齐（允许 ±10 容差，防止隔壁门的玩家被误判）
-            if (location.x < minX - 10 || location.x > maxX + 10) return false
+            // X 对齐
+            if (location.x < minX - crossingTolerance || location.x > maxX + crossingTolerance) return false
             if (pastPositive) location.z > (minZ + maxZ) / 2.0
             else location.z < (minZ + maxZ) / 2.0
         } else {
-            // Z 对齐（允许 ±10 容差，防止隔壁门的玩家被误判）
-            if (location.z < minZ - 10 || location.z > maxZ + 10) return false
+            // Z 对齐
+            if (location.z < minZ - crossingTolerance || location.z > maxZ + crossingTolerance) return false
             if (pastPositive) location.x > (minX + maxX) / 2.0
             else location.x < (minX + maxX) / 2.0
         }

@@ -40,6 +40,8 @@ class DoorManager(private val plugin: ZombieRun) {
         var phase: Phase = Phase.OPENING
     ) {
         enum class Phase { OPENING, CLOSING }
+        /** 开门期间穿越过门的玩家（实时追踪） */
+        val crossedPlayers = mutableSetOf<Player>()
     }
 
     // ==================== 数据加载 ====================
@@ -212,6 +214,19 @@ class DoorManager(private val plugin: ZombieRun) {
                         lastDisplay[0] = current
                     }
                     session.countdown += 1.0
+
+                    // 实时追踪穿越门的玩家（±15 容差，每 tick 检测一次）
+                    Bukkit.getOnlinePlayers().forEach { p ->
+                        if (p !in session.crossedPlayers) {
+                            session.doors.forEach { d ->
+                                if (d.isPlayerPastDoor(p.location, crossingTolerance = 15.0)) {
+                                    session.crossedPlayers.add(p)
+                                    DebugLogger.door("${p.name} 穿越了 ${d.doorNumber} 号门")
+                                    return@forEach
+                                }
+                            }
+                        }
+                    }
                 } else {
                     // 关门
                     closeAllDoors(session)
@@ -287,13 +302,14 @@ class DoorManager(private val plugin: ZombieRun) {
         world.playSound(soundLoc, Sound.BLOCK_ANVIL_LAND, 1f, 0.5f)
         world.playSound(soundLoc, Sound.ENTITY_ZOMBIE_ATTACK_IRON_DOOR, 1f, 1f)
 
-        // 一次性判定所有玩家
+        // 判定所有玩家（优先用实时追踪集，兜底用位置检测）
         val passedPlayers = mutableListOf<Player>()
         val behindPlayers = mutableListOf<Player>()
 
         Bukkit.getOnlinePlayers().forEach { p ->
-            val pastAny = allDoors.any { it.isPlayerPastDoor(p.location) }
-            if (pastAny) {
+            val tracked = p in session.crossedPlayers
+            val posCheck = allDoors.any { it.isPlayerPastDoor(p.location) }
+            if (tracked || posCheck) {
                 passedPlayers.add(p)
             } else {
                 behindPlayers.add(p)
