@@ -7,6 +7,8 @@ import cn.oneachina.zombieRun.model.Button
 import cn.oneachina.zombieRun.model.Respawn
 import cn.oneachina.zombieRun.model.SpecialDoorBehavior
 import cn.oneachina.zombieRun.model.WeaponConfig
+import cn.oneachina.zombieRun.model.BoltType
+import cn.oneachina.zombieRun.model.FireMode
 import io.papermc.paper.datacomponent.item.CustomModelData
 import org.bukkit.configuration.file.YamlConfiguration
 import java.io.File
@@ -419,8 +421,11 @@ class ConfigManager(private val plugin: ZombieRun) {
                 sound = ws.getString("sound"),
                 hitSound = ws.getString("hit-sound"),
                 recoil = ws.getDoubleList("recoil").toList(),
-                automatic = ws.getBoolean("automatic", false),
-                spreadPerShot = ws.getDouble("spread-per-shot", 0.0)
+                spreadPerShot = ws.getDouble("spread-per-shot", 0.0),
+                fireMode = parseFireMode(ws.getString("fire-mode")),
+                boltType = parseBoltType(ws.getString("bolt-type")),
+                burstCount = ws.getInt("burst-count", 3),
+                aimTime = ws.getDouble("aim-time", 0.15).toFloat()
             )
             weapons[id] = cfg
         }
@@ -510,6 +515,20 @@ class ConfigManager(private val plugin: ZombieRun) {
     fun removeRespawn(name: String) {
         config.set("respawns.$name", null)
         saveConfig()
+    }
+
+    // ---- 武器配置解析 ----
+
+    private fun parseFireMode(s: String?): FireMode = when (s?.uppercase()) {
+        "SEMI" -> FireMode.SEMI
+        "BURST" -> FireMode.BURST
+        else -> FireMode.AUTO
+    }
+
+    private fun parseBoltType(s: String?): BoltType = when (s?.uppercase()) {
+        "CLOSED_BOLT" -> BoltType.CLOSED_BOLT
+        "MANUAL_ACTION" -> BoltType.MANUAL_ACTION
+        else -> BoltType.OPEN_BOLT
     }
 
     // ---- 新增配置文件加载 ----
