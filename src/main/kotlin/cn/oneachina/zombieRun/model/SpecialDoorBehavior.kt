@@ -131,8 +131,9 @@ sealed class SpecialDoorBehavior {
     ) : SpecialDoorBehavior() {
         override fun execute(context: ExecuteContext): ScheduledTask {
             val mm = MiniMessage.miniMessage()
+            // 出发提示
             context.players.forEach { p ->
-                p.showTitle(Title.title(mm.deserialize(departureMsg), mm.deserialize(arrivalMsg)))
+                p.showTitle(Title.title(mm.deserialize(departureMsg), Component.empty()))
             }
             val task = Bukkit.getGlobalRegionScheduler().runDelayed(context.plugin, { _ ->
                 context.players.forEach { p ->
@@ -141,6 +142,8 @@ sealed class SpecialDoorBehavior {
                     val ty = if (isHuman) humanTargetY else (zombieTargetY ?: humanTargetY)
                     val tz = if (isHuman) humanTargetZ else (zombieTargetZ ?: humanTargetZ)
                     p.teleportAsync(Location(context.world, tx + 0.5, ty.toDouble(), tz + 0.5))
+                    // 到达后显示到站提示
+                    p.showTitle(Title.title(mm.deserialize(arrivalMsg), Component.empty()))
                 }
             }, delayTicks)
             return task

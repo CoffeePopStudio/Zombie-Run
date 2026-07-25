@@ -150,6 +150,14 @@ class GameManager(private val plugin: ZombieRun) {
             plugin.questManager.ensureQuests(player)
         }
 
+        // 根据玩家初始出生点确定每扇门的"前方"方向
+        val playerSpawn = plugin.respawnManager.getPlayerInitialRespawn()
+        if (playerSpawn != null) {
+            val world = Bukkit.getWorlds().first()
+            val spawnLoc = playerSpawn.getLocation(world)
+            plugin.doorManager.getAllDoors().forEach { it.determineForward(spawnLoc) }
+        }
+
         startMaxDurationTimer()
     }
 

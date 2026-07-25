@@ -308,9 +308,12 @@ class DoorManager(private val plugin: ZombieRun) {
             }
         }
 
-        // 落后玩家传送倒计时
+        // 落后传送倒计时（人类和僵尸分别处理）
         behindPlayers.forEach { p ->
-            startTransferCountdown(p, doorNum)
+            when (plugin.gameManager.getPlayerTeam(p)) {
+                GameManager.Team.HUMAN -> startTransferCountdown(p, doorNum)
+                else -> startZombieTransferCountdown(p, doorNum)
+            }
         }
 
         DebugLogger.door("${doorNum} 号大门已关闭 | 通过: ${passedPlayers.map { it.name }} | 落后: ${behindPlayers.map { it.name }}")
@@ -354,6 +357,26 @@ class DoorManager(private val plugin: ZombieRun) {
                 countdown--
             } else {
                 plugin.respawnManager.teleportPlayerByDoorClose(player, doorNumber)
+                transferTasks.remove(player)
+                schedTask.cancel()
+            }
+        }, 1L, 20L)
+        transferTasks[player] = taskId
+    }
+
+    private fun startZombieTransferCountdown(player: Player, doorNumber: Int) {
+        transferTasks.remove(player)?.cancel()
+
+        var countdown = 10
+        val taskId = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
+            if (countdown > 0) {
+                player.showTitle(Title.title(
+                    Component.text("$countdown", NamedTextColor.RED),
+                    Component.text("大门已关闭，请等待传送", NamedTextColor.DARK_RED)
+                ))
+                countdown--
+            } else {
+                plugin.respawnManager.teleportZombieByDoorClose(player, doorNumber)
                 transferTasks.remove(player)
                 schedTask.cancel()
             }

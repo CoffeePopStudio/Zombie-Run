@@ -39,6 +39,21 @@ class Door(
     var isOpen: Boolean = false
     var isActive: Boolean = false
 
+    /** 前方是否是坐标正方向（null = 尚未确定） */
+    private var forwardOnPositiveSide: Boolean? = null
+
+    /** 根据玩家出生点确定门的前方方向 */
+    fun determineForward(spawnLocation: Location) {
+        val centerCoord = if (crossingAxis() == 'z') {
+            (minZ + maxZ) / 2.0
+        } else {
+            (minX + maxX) / 2.0
+        }
+        val spawnCoord = if (crossingAxis() == 'z') spawnLocation.z else spawnLocation.x
+        // 出生在哪侧，前方就是反侧
+        forwardOnPositiveSide = spawnCoord < centerCoord
+    }
+
     fun getMinLocation(world: World): Location =
         Location(world, minX.toDouble(), minY.toDouble(), minZ.toDouble())
 
@@ -117,10 +132,13 @@ class Door(
 
     /** 关门时判断玩家是否已通过门（位置在门中心的前方） */
     fun isPlayerPastDoor(location: Location): Boolean {
+        val positiveSide = forwardOnPositiveSide ?: true // 未确定时默认正方向
         return if (crossingAxis() == 'z') {
-            location.z > (minZ + maxZ) / 2.0
+            if (positiveSide) location.z > (minZ + maxZ) / 2.0
+            else location.z < (minZ + maxZ) / 2.0
         } else {
-            location.x > (minX + maxX) / 2.0
+            if (positiveSide) location.x > (minX + maxX) / 2.0
+            else location.x < (minX + maxX) / 2.0
         }
     }
 
