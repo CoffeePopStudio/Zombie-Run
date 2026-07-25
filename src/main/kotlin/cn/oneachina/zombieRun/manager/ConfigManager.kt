@@ -136,6 +136,7 @@ class ConfigManager(private val plugin: ZombieRun) {
 
             val specialBehavior = loadSpecialBehavior(name, doorSection)
             val group = doorSection.getString("group")
+            val reverseDirection = doorSection.getBoolean("reverse-direction", false)
             // player/zombie/start 门不参与门号
             val doorNumber = if (doorMode == Door.DoorMode.NORMAL) doorSection.getInt("door-number", 0) else 0
 
@@ -155,7 +156,8 @@ class ConfigManager(private val plugin: ZombieRun) {
                 mode = doorMode,
                 useScanData = useScanData,
                 blocks = blocks,
-                group = group
+                group = group,
+                reverseDirection = reverseDirection
             )
             doors.add(door)
         }
@@ -448,6 +450,7 @@ class ConfigManager(private val plugin: ZombieRun) {
         doorSection.set("mode", door.mode.name.lowercase())
         doorSection.set("use-scan-data", door.useScanData)
         doorSection.set("group", door.group)
+        doorSection.set("reverse-direction", door.reverseDirection)
         if (door.specialBehavior != null) {
             val sb = doorSection.createSection("special-behavior")
             when (val b = door.specialBehavior!!) {

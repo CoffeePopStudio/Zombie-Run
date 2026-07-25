@@ -23,7 +23,9 @@ class Door(
     val mode: DoorMode = DoorMode.NORMAL,
     val useScanData: Boolean = false,
     val blocks: Map<String, String> = emptyMap(),
-    val group: String? = null
+    val group: String? = null,
+    /** 反转穿越方向（默认正方向为"前方"，设为 true 则负方向为"前方"） */
+    val reverseDirection: Boolean = false
 ) {
 
     enum class DoorMode {
@@ -38,21 +40,6 @@ class Door(
 
     var isOpen: Boolean = false
     var isActive: Boolean = false
-
-    /** 前方是否是坐标正方向（null = 尚未确定） */
-    private var forwardOnPositiveSide: Boolean? = null
-
-    /** 根据玩家出生点确定门的前方方向 */
-    fun determineForward(spawnLocation: Location) {
-        val centerCoord = if (crossingAxis() == 'z') {
-            (minZ + maxZ) / 2.0
-        } else {
-            (minX + maxX) / 2.0
-        }
-        val spawnCoord = if (crossingAxis() == 'z') spawnLocation.z else spawnLocation.x
-        // 出生在哪侧，前方就是反侧
-        forwardOnPositiveSide = spawnCoord < centerCoord
-    }
 
     fun getMinLocation(world: World): Location =
         Location(world, minX.toDouble(), minY.toDouble(), minZ.toDouble())
@@ -130,14 +117,14 @@ class Door(
         return if (xLen > zLen) 'z' else 'x'
     }
 
-    /** 关门时判断玩家是否已通过门（位置在门中心的前方） */
+    /** 关门时判断玩家是否已通过门（正坐标方向为"前方"，reverseDirection=true 则反转） */
     fun isPlayerPastDoor(location: Location): Boolean {
-        val positiveSide = forwardOnPositiveSide ?: true // 未确定时默认正方向
+        val pastPositive = !reverseDirection
         return if (crossingAxis() == 'z') {
-            if (positiveSide) location.z > (minZ + maxZ) / 2.0
+            if (pastPositive) location.z > (minZ + maxZ) / 2.0
             else location.z < (minZ + maxZ) / 2.0
         } else {
-            if (positiveSide) location.x > (minX + maxX) / 2.0
+            if (pastPositive) location.x > (minX + maxX) / 2.0
             else location.x < (minX + maxX) / 2.0
         }
     }
@@ -150,7 +137,7 @@ class Door(
         closeTime: Int = this.closeTime,
         doorNumber: Int = this.doorNumber,
         group: String? = this.group
-    ) = Door(name, minX, minY, minZ, maxX, maxY, maxZ, openTime, closeTime, doorNumber, material, specialBehavior, mode, useScanData, blocks, group)
+    ) = Door(name, minX, minY, minZ, maxX, maxY, maxZ, openTime, closeTime, doorNumber, material, specialBehavior, mode, useScanData, blocks, group, reverseDirection)
 
     override fun toString(): String {
         return "Door(name='$name', doorNumber=$doorNumber, mode='$mode', group=${group ?: "-"}, open=$openTime, close=$closeTime, blocks=${blocks.size})"
