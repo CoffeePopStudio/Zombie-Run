@@ -14,14 +14,9 @@ import org.bukkit.entity.Player
 import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
 
-/**
- * 特殊门行为抽象基类。
- * 每种行为类型封装自己的倒计时、Title 提示、传送逻辑。
- * 未来新增类型只需添加新的 data class 并实现 [execute]。
- */
 sealed class SpecialDoorBehavior {
 
-    /** 执行传送行为，返回可取消的 ScheduledTask（即时行为返回 null） */
+    /** 执行传送，返回可取消的 ScheduledTask（即时行为返回 null） */
     abstract fun execute(context: ExecuteContext): ScheduledTask?
 
     data class ExecuteContext(
@@ -32,9 +27,29 @@ sealed class SpecialDoorBehavior {
         val doorTasks: CopyOnWriteArrayList<ScheduledTask>
     )
 
-    /** 电梯：垂直传送（保留玩家 X/Z，仅改变 Y） */
+    /** 按队伍分流传送 */
+    protected fun teleportByTeams(
+        players: List<Player>,
+        world: World,
+        humanTarget: Location,
+        zombieTarget: Location?,
+        plugin: ZombieRun
+    ) {
+        players.forEach { p ->
+            val target = if (plugin.gameManager.getPlayerTeam(p) == GameManager.Team.HUMAN) {
+                humanTarget
+            } else {
+                zombieTarget ?: humanTarget
+            }
+            p.teleportAsync(target)
+        }
+    }
+
+    // ---- Elevator ----
+
     data class Elevator(
-        val targetY: Int,
+        val humanTargetY: Int,
+        val zombieTargetY: Int? = null,
         val countdown: Int = 5,
         val departureMsg: String = "<yellow>电梯即将到达……</yellow>",
         val arrivalMsg: String = "<green>电梯已到达，祝您旅途愉快</green>"
@@ -58,12 +73,11 @@ sealed class SpecialDoorBehavior {
                     remaining--
                 } else {
                     context.players.forEach { p ->
-                        val target = Location(context.world, p.location.x, targetY.toDouble(), p.location.z)
-                        p.teleportAsync(target)
-                        p.showTitle(Title.title(
-                            mm.deserialize(arrivalMsg),
-                            Component.empty()
-                        ))
+                        val hY = humanTargetY.toDouble()
+                        val zY = zombieTargetY?.toDouble() ?: hY
+                        val targetY = if (context.plugin.gameManager.getPlayerTeam(p) == GameManager.Team.HUMAN) hY else zY
+                        p.teleportAsync(Location(context.world, p.location.x, targetY, p.location.z))
+                        p.showTitle(Title.title(mm.deserialize(arrivalMsg), Component.empty()))
                     }
                     schedTask.cancel()
                 }
@@ -72,34 +86,44 @@ sealed class SpecialDoorBehavior {
         }
     }
 
-    /** 地铁：门关闭立即传送到目标坐标 */
+    // ---- Subway ----
+
     data class Subway(
-        val targetX: Int,
-        val targetY: Int,
-        val targetZ: Int,
+        val humanTargetX: Int,
+        val humanTargetY: Int,
+        val humanTargetZ: Int,
+        val zombieTargetX: Int? = null,
+        val zombieTargetY: Int? = null,
+        val zombieTargetZ: Int? = null,
         val lineName: String = "1号线",
-        val departureMsg: String = "<aqua>${lineName}即将发车……</aqua>",
-        val arrivalMsg: String = "<green>${lineName}已到站，请有序下车</green>"
+        val departureMsg: String = "<aqua>{line}即将发车……</aqua>",
+        val arrivalMsg: String = "<green>{line}已到站，请有序下车</green>"
     ) : SpecialDoorBehavior() {
         override fun execute(context: ExecuteContext): ScheduledTask? {
             val mm = MiniMessage.miniMessage()
+            val depMsg = departureMsg.replace("{line}", lineName)
+            val arrMsg = arrivalMsg.replace("{line}", lineName)
             context.players.forEach { p ->
-                p.showTitle(Title.title(
-                    mm.deserialize(departureMsg),
-                    mm.deserialize(arrivalMsg)
-                ))
+                p.showTitle(Title.title(mm.deserialize(depMsg), mm.deserialize(arrMsg)))
+                val isHuman = context.plugin.gameManager.getPlayerTeam(p) == GameManager.Team.HUMAN
+                val tx = if (isHuman) humanTargetX else (zombieTargetX ?: humanTargetX)
+                val ty = if (isHuman) humanTargetY else (zombieTargetY ?: humanTargetY)
+                val tz = if (isHuman) humanTargetZ else (zombieTargetZ ?: humanTargetZ)
+                p.teleportAsync(Location(context.world, tx + 0.5, ty.toDouble(), tz + 0.5))
             }
-            val target = Location(context.world, targetX + 0.5, targetY.toDouble(), targetZ + 0.5)
-            context.players.forEach { p -> p.teleportAsync(target) }
             return null
         }
     }
 
-    /** 机场专线：延迟一段时间后传送到固定坐标（不倒数、不等待） */
+    // ---- Airport ----
+
     data class Airport(
-        val targetX: Int,
-        val targetY: Int,
-        val targetZ: Int,
+        val humanTargetX: Int,
+        val humanTargetY: Int,
+        val humanTargetZ: Int,
+        val zombieTargetX: Int? = null,
+        val zombieTargetY: Int? = null,
+        val zombieTargetZ: Int? = null,
         val delayTicks: Long = 60,
         val departureMsg: String = "<green>感谢乘坐机场专线</green>",
         val arrivalMsg: String = "<yellow>请拿好你的行李，有序下车</yellow>"
@@ -107,14 +131,16 @@ sealed class SpecialDoorBehavior {
         override fun execute(context: ExecuteContext): ScheduledTask {
             val mm = MiniMessage.miniMessage()
             context.players.forEach { p ->
-                p.showTitle(Title.title(
-                    mm.deserialize(departureMsg),
-                    mm.deserialize(arrivalMsg)
-                ))
+                p.showTitle(Title.title(mm.deserialize(departureMsg), mm.deserialize(arrivalMsg)))
             }
-            val target = Location(context.world, targetX + 0.5, targetY.toDouble(), targetZ + 0.5)
             val task = Bukkit.getGlobalRegionScheduler().runDelayed(context.plugin, { _ ->
-                context.players.forEach { p -> p.teleportAsync(target) }
+                context.players.forEach { p ->
+                    val isHuman = context.plugin.gameManager.getPlayerTeam(p) == GameManager.Team.HUMAN
+                    val tx = if (isHuman) humanTargetX else (zombieTargetX ?: humanTargetX)
+                    val ty = if (isHuman) humanTargetY else (zombieTargetY ?: humanTargetY)
+                    val tz = if (isHuman) humanTargetZ else (zombieTargetZ ?: humanTargetZ)
+                    p.teleportAsync(Location(context.world, tx + 0.5, ty.toDouble(), tz + 0.5))
+                }
             }, delayTicks)
             return task
         }

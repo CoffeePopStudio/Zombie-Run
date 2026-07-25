@@ -7,17 +7,6 @@ import org.bukkit.entity.Player
 
 object TabCompleters {
 
-    private fun getTargetCoord(sender: CommandSender, axis: Char): String {
-        val player = sender as? Player ?: return "~"
-        val target = player.getTargetBlockExact(60) ?: return "~"
-        return when (axis) {
-            'x' -> target.x.toString()
-            'y' -> target.y.toString()
-            'z' -> target.z.toString()
-            else -> "~"
-        }
-    }
-
     fun spawn(plugin: ZombieRun, args: Array<out String>): MutableList<String> {
         if (args.size < 2) return mutableListOf()
         return when (args[1].lowercase()) {
@@ -44,32 +33,52 @@ object TabCompleters {
         if (args.size < 2) return mutableListOf()
         return when (args[1].lowercase()) {
             "add" -> {
-                when (args.size) {
-                    3 -> mutableListOf(getTargetCoord(sender, 'x'))
-                    4 -> mutableListOf(getTargetCoord(sender, 'y'))
-                    5 -> mutableListOf(getTargetCoord(sender, 'z'))
-                    6 -> mutableListOf(getTargetCoord(sender, 'x'))
-                    7 -> mutableListOf(getTargetCoord(sender, 'y'))
-                    8 -> mutableListOf(getTargetCoord(sender, 'z'))
-                    9 -> {
+                when {
+                    args.size == 3 -> {
                         listOf("normal", "player", "zombie", "start")
-                            .filter { it.startsWith(args[7].lowercase()) }
+                            .filter { it.startsWith(args[2].lowercase()) }
                             .toMutableList()
                     }
-                    10 -> {
-                        (0..9).map { it.toString() }
-                            .filter { it.startsWith(args[8]) }
-                            .toMutableList()
+                    args.size == 4 -> {
+                        val mode = args[2].lowercase()
+                        if (mode in listOf("normal")) {
+                            mutableListOf("-g")
+                        } else mutableListOf()
                     }
-                    11 -> {
-                        listOf("30", "60", "90", "120")
-                            .filter { it.startsWith(args[9]) }
-                            .toMutableList()
+                    args.size == 5 -> {
+                        if (args[3] == "-g") {
+                            plugin.doorManager.getDoorGroups().keys
+                                .filter { it.startsWith(args[4], ignoreCase = true) }
+                                .toMutableList()
+                        } else mutableListOf()
+                    }
+                    args.size == 6 -> {
+                        if (args[3] == "-g") {
+                            mutableListOf("<duration:秒数 默认15>")
+                        } else if (args[4].toIntOrNull() != null || args[3] != "-g") {
+                            mutableListOf()
+                        } else mutableListOf("<duration:秒数>")
                     }
                     else -> mutableListOf()
                 }
             }
-            "remove" -> {
+            "edit" -> {
+                when (args.size) {
+                    3 -> plugin.doorManager.getAllDoors().map { it.name }
+                        .filter { it.startsWith(args[2], ignoreCase = true) }.toMutableList()
+                    4 -> listOf("duration", "door-number", "group")
+                        .filter { it.startsWith(args[3].lowercase()) }.toMutableList()
+                    5 -> when (args[3].lowercase()) {
+                        "group" -> plugin.doorManager.getDoorGroups().keys
+                            .filter { it.startsWith(args[4], ignoreCase = true) }.toMutableList()
+                        "duration" -> mutableListOf("<秒数>")
+                        "door-number" -> mutableListOf("<新门号>")
+                        else -> mutableListOf()
+                    }
+                    else -> mutableListOf()
+                }
+            }
+            "remove", "reset", "info" -> {
                 if (args.size == 3) {
                     plugin.doorManager.getAllDoors().map { it.name }
                         .filter { it.startsWith(args[2], ignoreCase = true) }
@@ -77,13 +86,6 @@ object TabCompleters {
                 } else mutableListOf()
             }
             "list" -> mutableListOf()
-            "reset" -> {
-                if (args.size == 3) {
-                    plugin.doorManager.getAllDoors().map { it.name }
-                        .filter { it.startsWith(args[2], ignoreCase = true) }
-                        .toMutableList()
-                } else mutableListOf()
-            }
             else -> mutableListOf()
         }
     }
@@ -92,13 +94,22 @@ object TabCompleters {
         return when (args.size) {
             1 -> listOf("set", "remove", "info")
                 .filter { it.startsWith(args[0].lowercase()) }.toMutableList()
-            2 -> plugin.doorManager.getAllDoors().map { it.name }
-                .filter { it.startsWith(args[1], ignoreCase = true) }.toMutableList()
+            2 -> plugin.doorManager.getAllDoors()
+                .filter { it.doorNumber > 0 }
+                .map { it.doorNumber.toString() }
+                .distinct()
+                .filter { it.startsWith(args[1]) }.toMutableList()
             3 -> {
                 if (args[0].lowercase() == "set") {
-                    listOf("elevator", "subway", "airport")
+                    listOf("subway", "elevator", "airport")
                         .filter { it.startsWith(args[2].lowercase()) }.toMutableList()
                 } else mutableListOf()
+            }
+            4 -> when (args[2].lowercase()) {
+                "subway" -> mutableListOf("<线路名>")
+                "elevator" -> mutableListOf("<human-y>")
+                "airport" -> mutableListOf("<hx>")
+                else -> mutableListOf()
             }
             else -> mutableListOf()
         }
@@ -107,40 +118,37 @@ object TabCompleters {
     fun buttons(plugin: ZombieRun, args: Array<out String>, sender: CommandSender): MutableList<String> {
         if (args.size < 2) return mutableListOf()
         return when (args[1].lowercase()) {
-            "add" -> {
-                when {
-                    args.size == 3 -> mutableListOf(getTargetCoord(sender, 'x'))
-                    args.size == 4 -> mutableListOf(getTargetCoord(sender, 'y'))
-                    args.size == 5 && args[4].isBlank() -> mutableListOf(getTargetCoord(sender, 'z'))
-                    args.size == 5 -> {
-                        listOf("normal", "escape")
-                            .filter { it.startsWith(args[4].lowercase()) }
-                            .toMutableList()
-                    }
-
-                    args.size == 6 -> {
-                        val mode = args[4].lowercase()
-                        when (mode) {
-                            "normal" -> listOf("<门号>").filter { it.startsWith(args[5]) }
-                            "escape" -> mutableListOf()
-                            else -> mutableListOf()
-                        }
-                    }
-
+            "add" -> when (args.size) {
+                3 -> mutableListOf(getTargetCoord(sender, 'x'))
+                4 -> mutableListOf(getTargetCoord(sender, 'y'))
+                5 -> mutableListOf(getTargetCoord(sender, 'z'))
+                6 -> listOf("normal", "escape").filter { it.startsWith(args[5].lowercase()) }.toMutableList()
+                7 -> when (args[5].lowercase()) {
+                    "normal" -> mutableListOf("<门号>")
+                    "escape" -> mutableListOf()
                     else -> mutableListOf()
                 }
+                else -> mutableListOf()
             }
-
             "remove" -> {
                 if (args.size == 3) {
                     plugin.buttonManager.getAllButtons().map { it.name }
-                        .filter { it.startsWith(args[2], ignoreCase = true) }
-                        .toMutableList()
+                        .filter { it.startsWith(args[2], ignoreCase = true) }.toMutableList()
                 } else mutableListOf()
             }
-
             "list" -> mutableListOf()
-             else -> mutableListOf()
-        } as MutableList<String>
+            else -> mutableListOf()
+        }
+    }
+
+    private fun getTargetCoord(sender: CommandSender, axis: Char): String {
+        val player = sender as? Player ?: return "~"
+        val target = player.getTargetBlockExact(60) ?: return "~"
+        return when (axis) {
+            'x' -> target.x.toString()
+            'y' -> target.y.toString()
+            'z' -> target.z.toString()
+            else -> "~"
+        }
     }
 }

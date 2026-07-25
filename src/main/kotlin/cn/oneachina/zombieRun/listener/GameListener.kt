@@ -2,8 +2,6 @@ package cn.oneachina.zombieRun.listener
 
 import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.manager.GameManager
-import cn.oneachina.zombieRun.model.Button
-import cn.oneachina.zombieRun.model.Door
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
@@ -21,7 +19,6 @@ import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockPlaceEvent
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.event.player.*
-import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import java.time.Duration
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -31,8 +28,12 @@ class GameListener(
     val taskTracker: PlayerTaskTracker
 ) : Listener {
 
-    private val playerCurrentDoorZones = ConcurrentHashMap<UUID, Int>()
-    private val playerDoorEntryPoints = ConcurrentHashMap<UUID, Pair<Int, Location>>()
+    // postool 选区
+    private val pos1 = ConcurrentHashMap<UUID, Location>()
+    private val pos2 = ConcurrentHashMap<UUID, Location>()
+
+    fun getPos1(player: Player): Location? = pos1[player.uniqueId]
+    fun getPos2(player: Player): Location? = pos2[player.uniqueId]
 
     @EventHandler
     fun onPlayerJoin(event: PlayerJoinEvent) {
@@ -75,8 +76,8 @@ class GameListener(
     fun onPlayerQuit(event: PlayerQuitEvent) {
         val player = event.player
         taskTracker.clearAll(player.uniqueId)
-        playerCurrentDoorZones.remove(player.uniqueId)
-        playerDoorEntryPoints.remove(player.uniqueId)
+        pos1.remove(player.uniqueId)
+        pos2.remove(player.uniqueId)
         plugin.staminaManager.removePlayer(player)
         plugin.coinManager.savePlayer(player.uniqueId, player.name)
         plugin.gameManager.removePlayer(player)
@@ -92,96 +93,12 @@ class GameListener(
 
         if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return
         val team = plugin.gameManager.getPlayerTeam(player)
-
         if (team == GameManager.Team.SPECTATOR) return
-        val currentDoorNumber = detectCurrentDoorNumber(player)
-        handleDoorZoneEvents(player, currentDoorNumber)
         handleBlackWoolDamage(player)
-    }
-
-    private fun detectCurrentDoorNumber(player: Player): Int {
-        val location = player.location
-        val x = location.x
-        val y = location.y
-        val z = location.z
-
-        val minX = (x - 2).toInt()
-        val minZ = (z - 2).toInt()
-        val maxX = (x + 2).toInt()
-        val maxZ = (z + 2).toInt()
-        val doors = plugin.doorZoneManager.getDoorsInArea(minX, minZ, maxX, maxZ).filter { it.doorNumber >= 1 && it.isOpen }
-
-        for (door in doors) {
-            if (x >= door.minX - 0.5 && x <= door.maxX + 0.5 &&
-                y >= door.minY - 1.0 && y <= door.maxY + 1.0 &&
-                z >= door.minZ - 0.5 && z <= door.maxZ + 0.5) {
-                return door.doorNumber
-            }
-        }
-        return -1
-    }
-
-    private fun handleDoorZoneEvents(player: Player, currentDoorNumber: Int) {
-        val playerId = player.uniqueId
-        val previousDoorNumber = playerCurrentDoorZones[playerId]
-
-        if (previousDoorNumber != null && previousDoorNumber != currentDoorNumber) {
-            plugin.doorManager.onPlayerLeaveDoor(player, previousDoorNumber)
-
-            // A1: 方向向量法 — 判断玩家是否真正穿过了门
-            val entryPoint = playerDoorEntryPoints[playerId]
-            if (entryPoint != null && entryPoint.first == previousDoorNumber) {
-                val door = plugin.doorManager.getDoorByNumber(previousDoorNumber)
-                if (door != null && hasCrossedDoor(door, entryPoint.second, player.location)) {
-                    val currentRoom = plugin.gameManager.getPlayerRoom(player)
-                    if (previousDoorNumber > currentRoom) {
-                        plugin.gameManager.setPlayerRoom(player, previousDoorNumber)
-                        player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已通过 ${previousDoorNumber} 号门，房间号更新为 ${previousDoorNumber}！"))
-                        plugin.progressionListener.onPassDoor(player)
-                    }
-                }
-                playerDoorEntryPoints.remove(playerId)
-            }
-        }
-
-        if (currentDoorNumber != -1 && previousDoorNumber != currentDoorNumber) {
-            plugin.doorManager.onPlayerEnterDoor(player, currentDoorNumber)
-
-            // 记录进入位置，用于离开时判断穿越方向
-            playerDoorEntryPoints[playerId] = Pair(currentDoorNumber, player.location.clone())
-        }
-
-        if (currentDoorNumber == -1) {
-            playerCurrentDoorZones.remove(playerId)
-        } else {
-            playerCurrentDoorZones[playerId] = currentDoorNumber
-        }
-    }
-
-    /** A1: 判断玩家是否穿过了门（从一侧穿越到另一侧） */
-    private fun hasCrossedDoor(door: Door, entryLoc: Location, exitLoc: Location): Boolean {
-        // 门的朝向：长边是墙，短边是穿越方向
-        val xLen = door.maxX - door.minX
-        val zLen = door.maxZ - door.minZ
-
-        if (xLen > zLen) {
-            // 东西向墙 → 穿越方向是 Z 轴
-            val center = (door.minZ + door.maxZ) / 2.0
-            val entryZ = entryLoc.z
-            val exitZ = exitLoc.z
-            return (entryZ <= center && exitZ >= center) || (entryZ >= center && exitZ <= center)
-        } else {
-            // 南北向墙 → 穿越方向是 X 轴
-            val center = (door.minX + door.maxX) / 2.0
-            val entryX = entryLoc.x
-            val exitX = exitLoc.x
-            return (entryX <= center && exitX >= center) || (entryX >= center && exitX <= center)
-        }
     }
 
     private fun handleBlackWoolDamage(player: Player) {
         val loc = player.location
-        val feetY = loc.blockY
         val woolBlocks = listOf(
             loc.block,
             loc.clone().subtract(0.0, 1.0, 0.0).block,
@@ -197,15 +114,40 @@ class GameListener(
         }
     }
 
+    // ==================== postool 交互 ====================
+
     @EventHandler(ignoreCancelled = true)
     fun onPlayerInteract(event: PlayerInteractEvent) {
+        val player = event.player
+        val item = event.item
+        val block = event.clickedBlock
+
+        // postool: 木棍左键=pos1，右键=pos2
+        if (item != null && item.type == Material.STICK && plugin.isPostoolActive(player)) {
+            event.isCancelled = true
+            if (block == null) return
+
+            when (event.action) {
+                Action.LEFT_CLICK_BLOCK -> {
+                    pos1[player.uniqueId] = block.location
+                    player.sendMessage(Component.text("pos1 已设为 (${block.x}, ${block.y}, ${block.z})", NamedTextColor.YELLOW))
+                }
+                Action.RIGHT_CLICK_BLOCK -> {
+                    pos2[player.uniqueId] = block.location
+                    player.sendMessage(Component.text("pos2 已设为 (${block.x}, ${block.y}, ${block.z})", NamedTextColor.YELLOW))
+                }
+                else -> {}
+            }
+            return
+        }
+
+        // 按钮交互
         if (event.action != Action.RIGHT_CLICK_BLOCK) return
-        val block = event.clickedBlock ?: return
+        if (block == null) return
 
         if (block.type == Material.REDSTONE_LAMP || block.type == Material.LEVER) {
             val button = plugin.buttonManager.getButton(block.x, block.y, block.z)
             if (button != null) {
-                val player = event.player
                 val team = plugin.gameManager.getPlayerTeam(player)
 
                 when {
@@ -219,7 +161,6 @@ class GameListener(
                         if (doorNumbers.isEmpty()) {
                             player.sendMessage(Component.text("此按钮配置错误：未指定门号", NamedTextColor.RED))
                         } else {
-                            // 触发首个门号，门组联动由 DoorManager 自动处理
                             plugin.doorManager.triggerDoor(doorNumbers.first(), player)
                         }
                     }
@@ -240,10 +181,16 @@ class GameListener(
         }
     }
 
+    // ==================== 方块/物品限制 ====================
+
     @EventHandler(ignoreCancelled = true)
     fun onBlockBreak(event: BlockBreakEvent) {
         if (event.player.gameMode != GameMode.CREATIVE) {
             event.isCancelled = true
+            // postool 玩家可以打破
+            if (plugin.isPostoolActive(event.player)) {
+                event.isCancelled = false
+            }
         }
     }
 
@@ -275,6 +222,10 @@ class GameListener(
     fun onPlayerSwapHandItems(event: PlayerSwapHandItemsEvent) {
         if (event.player.gameMode != GameMode.CREATIVE) {
             event.isCancelled = true
+            // postool 玩家允许 F 键
+            if (plugin.isPostoolActive(event.player)) {
+                event.isCancelled = false
+            }
         }
     }
 
@@ -313,4 +264,3 @@ class GameListener(
         })
     }
 }
-

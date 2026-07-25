@@ -111,6 +111,7 @@ class ConfigManager(private val plugin: ZombieRun) {
     fun loadDoors(): List<Door> {
         val doors = mutableListOf<Door>()
         val doorsSection = config.getConfigurationSection("doors") ?: return doors
+        val defaultDuration = doorsSection.getInt("default-duration", 15)
 
         for (name in doorsSection.getKeys(false)) {
             val doorSection = doorsSection.getConfigurationSection(name) ?: continue
@@ -122,20 +123,19 @@ class ConfigManager(private val plugin: ZombieRun) {
             val z2 = doorSection.getInt("z2")
 
             val modeStr = doorSection.getString("mode", "normal") ?: "normal"
-            val delay = doorSection.getInt("delay", 30)
+            val doorMode = Door.DoorMode.fromString(modeStr)
+            val duration = doorSection.getInt("duration", defaultDuration)
             val material = doorSection.getString("material", "STONE") ?: "STONE"
             val useScanData = doorSection.getBoolean("use-scan-data", false)
             val blocks = if (useScanData) {
                 val fromFile = loadDoorScanData(name)
-                if (fromFile.isNotEmpty()) {
-                    fromFile
-                } else {
-                    migrateLegacyInlineScanData(name, doorSection)
-                }
+                if (fromFile.isNotEmpty()) fromFile else migrateLegacyInlineScanData(name, doorSection)
             } else emptyMap()
 
             val specialBehavior = loadSpecialBehavior(name, doorSection)
             val group = doorSection.getString("group")
+            // player/zombie/start 门不参与门号
+            val doorNumber = if (doorMode == Door.DoorMode.NORMAL) doorSection.getInt("door-number", 0) else 0
 
             val door = Door(
                 name = name,
@@ -145,16 +145,11 @@ class ConfigManager(private val plugin: ZombieRun) {
                 maxX = maxOf(x1, x2),
                 maxY = maxOf(y1, y2),
                 maxZ = maxOf(z1, z2),
-                delay = delay,
-                duration = doorSection.getInt("duration", 10),
-                doorNumber = doorSection.getInt("door-number", 0),
-                openTime = doorSection.getInt("open-time", 10),
-                closeTime = doorSection.getInt("close-time", 15),
+                duration = duration,
+                doorNumber = doorNumber,
                 material = material,
-                teleportRegion = doorSection.getString("teleport-region"),
-                hasZombieTeleport = doorSection.getBoolean("has-zombie-teleport", false),
                 specialBehavior = specialBehavior,
-                mode = Door.DoorMode.fromString(modeStr),
+                mode = doorMode,
                 useScanData = useScanData,
                 blocks = blocks,
                 group = group
@@ -188,23 +183,30 @@ class ConfigManager(private val plugin: ZombieRun) {
         val type = (sb.getString("type") ?: "").uppercase()
         return when (type) {
             "ELEVATOR" -> SpecialDoorBehavior.Elevator(
-                targetY = sb.getInt("target-y"),
+                humanTargetY = sb.getInt("human-target-y"),
+                zombieTargetY = if (sb.contains("zombie-target-y")) sb.getInt("zombie-target-y") else null,
                 countdown = sb.getInt("countdown", 5),
                 departureMsg = sb.getString("departure-msg") ?: "<yellow>电梯即将到达……</yellow>",
                 arrivalMsg = sb.getString("arrival-msg") ?: "<green>电梯已到达，祝您旅途愉快</green>"
             )
             "SUBWAY" -> SpecialDoorBehavior.Subway(
-                targetX = sb.getInt("target-x"),
-                targetY = sb.getInt("target-y"),
-                targetZ = sb.getInt("target-z"),
+                humanTargetX = sb.getInt("human-target-x"),
+                humanTargetY = sb.getInt("human-target-y"),
+                humanTargetZ = sb.getInt("human-target-z"),
+                zombieTargetX = if (sb.contains("zombie-target-x")) sb.getInt("zombie-target-x") else null,
+                zombieTargetY = if (sb.contains("zombie-target-y")) sb.getInt("zombie-target-y") else null,
+                zombieTargetZ = if (sb.contains("zombie-target-z")) sb.getInt("zombie-target-z") else null,
                 lineName = sb.getString("line-name") ?: "1号线",
-                departureMsg = sb.getString("departure-msg") ?: "<aqua>%s即将发车……</aqua>".format(sb.getString("line-name") ?: "1号线"),
-                arrivalMsg = sb.getString("arrival-msg") ?: "<green>%s已到站，请有序下车</green>".format(sb.getString("line-name") ?: "1号线")
+                departureMsg = sb.getString("departure-msg") ?: "<aqua>{line}即将发车……</aqua>",
+                arrivalMsg = sb.getString("arrival-msg") ?: "<green>{line}已到站，请有序下车</green>"
             )
             "AIRPORT" -> SpecialDoorBehavior.Airport(
-                targetX = sb.getInt("target-x"),
-                targetY = sb.getInt("target-y"),
-                targetZ = sb.getInt("target-z"),
+                humanTargetX = sb.getInt("human-target-x"),
+                humanTargetY = sb.getInt("human-target-y"),
+                humanTargetZ = sb.getInt("human-target-z"),
+                zombieTargetX = if (sb.contains("zombie-target-x")) sb.getInt("zombie-target-x") else null,
+                zombieTargetY = if (sb.contains("zombie-target-y")) sb.getInt("zombie-target-y") else null,
+                zombieTargetZ = if (sb.contains("zombie-target-z")) sb.getInt("zombie-target-z") else null,
                 delayTicks = sb.getLong("delay-ticks", 60),
                 departureMsg = sb.getString("departure-msg") ?: "<green>感谢乘坐机场专线</green>",
                 arrivalMsg = sb.getString("arrival-msg") ?: "<yellow>请拿好你的行李，有序下车</yellow>"
@@ -433,15 +435,9 @@ class ConfigManager(private val plugin: ZombieRun) {
         doorSection.set("x2", door.maxX)
         doorSection.set("y2", door.maxY)
         doorSection.set("z2", door.maxZ)
-        doorSection.set("delay", door.delay)
         doorSection.set("duration", door.duration)
         doorSection.set("door-number", door.doorNumber)
-        doorSection.set("open-time", door.openTime)
-        doorSection.set("close-time", door.closeTime)
         doorSection.set("material", door.material)
-        doorSection.set("teleport-region", door.teleportRegion)
-        doorSection.set("has-zombie-teleport", door.hasZombieTeleport)
-        doorSection.set("special-teleport", null) // 清理旧字段
         doorSection.set("mode", door.mode.name.lowercase())
         doorSection.set("use-scan-data", door.useScanData)
         doorSection.set("group", door.group)
@@ -450,25 +446,32 @@ class ConfigManager(private val plugin: ZombieRun) {
             when (val b = door.specialBehavior!!) {
                 is SpecialDoorBehavior.Elevator -> {
                     sb.set("type", "ELEVATOR")
-                    sb.set("target-y", b.targetY)
+                    sb.set("human-target-y", b.humanTargetY)
+                    b.zombieTargetY?.let { sb.set("zombie-target-y", it) }
                     sb.set("countdown", b.countdown)
                     sb.set("departure-msg", b.departureMsg)
                     sb.set("arrival-msg", b.arrivalMsg)
                 }
                 is SpecialDoorBehavior.Subway -> {
                     sb.set("type", "SUBWAY")
-                    sb.set("target-x", b.targetX)
-                    sb.set("target-y", b.targetY)
-                    sb.set("target-z", b.targetZ)
+                    sb.set("human-target-x", b.humanTargetX)
+                    sb.set("human-target-y", b.humanTargetY)
+                    sb.set("human-target-z", b.humanTargetZ)
+                    b.zombieTargetX?.let { sb.set("zombie-target-x", it) }
+                    b.zombieTargetY?.let { sb.set("zombie-target-y", it) }
+                    b.zombieTargetZ?.let { sb.set("zombie-target-z", it) }
                     sb.set("line-name", b.lineName)
                     sb.set("departure-msg", b.departureMsg)
                     sb.set("arrival-msg", b.arrivalMsg)
                 }
                 is SpecialDoorBehavior.Airport -> {
                     sb.set("type", "AIRPORT")
-                    sb.set("target-x", b.targetX)
-                    sb.set("target-y", b.targetY)
-                    sb.set("target-z", b.targetZ)
+                    sb.set("human-target-x", b.humanTargetX)
+                    sb.set("human-target-y", b.humanTargetY)
+                    sb.set("human-target-z", b.humanTargetZ)
+                    b.zombieTargetX?.let { sb.set("zombie-target-x", it) }
+                    b.zombieTargetY?.let { sb.set("zombie-target-y", it) }
+                    b.zombieTargetZ?.let { sb.set("zombie-target-z", it) }
                     sb.set("delay-ticks", b.delayTicks)
                     sb.set("departure-msg", b.departureMsg)
                     sb.set("arrival-msg", b.arrivalMsg)

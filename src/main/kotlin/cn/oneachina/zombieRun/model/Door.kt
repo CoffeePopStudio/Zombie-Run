@@ -13,19 +13,15 @@ class Door(
     val maxX: Int,
     val maxY: Int,
     val maxZ: Int,
-    val delay: Int = 30,
-    val duration: Int = 10,
+    /** 开门+关门倒计时秒数 */
+    val duration: Int = 15,
     val doorNumber: Int = 0,
-    val openTime: Int = 10,
-    val closeTime: Int = 15,
     val material: String = "STONE",
-    val teleportRegion: String? = null,
-    val hasZombieTeleport: Boolean = false,
     var specialBehavior: SpecialDoorBehavior? = null,
     val mode: DoorMode = DoorMode.NORMAL,
     val useScanData: Boolean = false,
     val blocks: Map<String, String> = emptyMap(),
-    /** 门组：同一组的门联动开/关（用于地铁等多入口场景） */
+    /** 门组：同一组的门共享门号联动开/关（用于地铁等多入口场景） */
     val group: String? = null
 ) {
 
@@ -40,23 +36,16 @@ class Door(
     }
 
     var isOpen: Boolean = false
-    var openTimestamp: Long = 0
-    var closeTaskId: Int? = null
+    var isActive: Boolean = false
 
-    fun getMinLocation(world: World): Location {
-        return Location(world, minX.toDouble(), minY.toDouble(), minZ.toDouble())
-    }
+    fun getMinLocation(world: World): Location =
+        Location(world, minX.toDouble(), minY.toDouble(), minZ.toDouble())
 
-    fun getMaxLocation(world: World): Location {
-        return Location(world, maxX.toDouble(), maxY.toDouble(), maxZ.toDouble())
-    }
+    fun getMaxLocation(world: World): Location =
+        Location(world, maxX.toDouble(), maxY.toDouble(), maxZ.toDouble())
 
-    fun getCenterLocation(world: World): Location {
-        val centerX = (minX + maxX) / 2.0
-        val centerY = (minY + maxY) / 2.0
-        val centerZ = (minZ + maxZ) / 2.0
-        return Location(world, centerX, centerY, centerZ)
-    }
+    fun getCenterLocation(world: World): Location =
+        Location(world, (minX + maxX) / 2.0, (minY + maxY) / 2.0, (minZ + maxZ) / 2.0)
 
     fun containsLocation(location: Location): Boolean {
         val x = location.x.toInt()
@@ -66,20 +55,19 @@ class Door(
     }
 
     fun getBlocks(world: World): List<Block> {
-        val blocks = mutableListOf<Block>()
+        val result = mutableListOf<Block>()
         for (x in minX..maxX) {
             for (y in minY..maxY) {
                 for (z in minZ..maxZ) {
-                    blocks.add(world.getBlockAt(x, y, z))
+                    result.add(world.getBlockAt(x, y, z))
                 }
             }
         }
-        return blocks
+        return result
     }
 
     fun open(world: World) {
         isOpen = true
-        openTimestamp = System.currentTimeMillis()
     }
 
     fun openBlocks(world: World) {
@@ -92,6 +80,7 @@ class Door(
 
     fun close(world: World) {
         isOpen = false
+        isActive = false
     }
 
     fun closeBlocks(world: World) {
@@ -100,11 +89,9 @@ class Door(
                 val parts = posStr.split(',').map { it.toInt() }
                 if (parts.size == 3) {
                     val (x, y, z) = parts
-                    val block = world.getBlockAt(x, y, z)
                     try {
-                        block.type = Material.valueOf(materialName.uppercase())
-                    } catch (_: IllegalArgumentException) {
-                    }
+                        world.getBlockAt(x, y, z).type = Material.valueOf(materialName.uppercase())
+                    } catch (_: IllegalArgumentException) {}
                 }
             }
         } else {
@@ -120,15 +107,32 @@ class Door(
         }
     }
 
-    fun shouldClose(): Boolean {
-        if (!isOpen) return false
-        val elapsedTime = System.currentTimeMillis() - openTimestamp
-        return elapsedTime >= duration * 1000L
+    /** 穿越轴：'x' 或 'z'（短边方向） */
+    fun crossingAxis(): Char {
+        val xLen = maxX - minX
+        val zLen = maxZ - minZ
+        return if (xLen > zLen) 'z' else 'x'
+    }
+
+    /** 关门时判断玩家是否已通过门（位置在门中心的前方） */
+    fun isPlayerPastDoor(location: Location): Boolean {
+        return if (crossingAxis() == 'z') {
+            location.z > (minZ + maxZ) / 2.0
+        } else {
+            location.x > (minX + maxX) / 2.0
+        }
     }
 
     fun hasSpecialBehavior(): Boolean = specialBehavior != null
 
+    /** 返回一个修改了指定字段的新门（用于编辑命令） */
+    fun with(
+        duration: Int = this.duration,
+        doorNumber: Int = this.doorNumber,
+        group: String? = this.group
+    ) = Door(name, minX, minY, minZ, maxX, maxY, maxZ, duration, doorNumber, material, specialBehavior, mode, useScanData, blocks, group)
+
     override fun toString(): String {
-        return "Door(name='$name', doorNumber=$doorNumber, mode='$mode', group=${group ?: "-"}, delay=$delay, useScanData=$useScanData, blocks=${blocks.size})"
+        return "Door(name='$name', doorNumber=$doorNumber, mode='$mode', group=${group ?: "-"}, duration=$duration, useScanData=$useScanData, blocks=${blocks.size})"
     }
 }

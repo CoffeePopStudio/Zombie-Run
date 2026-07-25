@@ -15,10 +15,14 @@ import cn.oneachina.zombieRun.listener.WeaponListener
 import cn.oneachina.zombieRun.manager.*
 import cn.oneachina.zombieRun.papi.ZombieRunExpansion
 import org.bukkit.Bukkit
+import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
+import java.util.UUID
 
 class ZombieRun : JavaPlugin() {
     var debugMode = false
+
+    private val postoolUsers = mutableSetOf<UUID>()
 
     val configManager: ConfigManager by lazy { ConfigManager(this).apply { loadConfig() } }
     val doorManager: DoorManager by lazy { DoorManager(this).apply { loadDoors() } }
@@ -45,6 +49,11 @@ class ZombieRun : JavaPlugin() {
     val combatConfig: CombatConfig by lazy { configManager.loadCombatConfig() }
     val economyConfig: EconomyConfig by lazy { configManager.loadEconomyConfig() }
     val balanceConfig: BalanceConfig by lazy { configManager.loadBalanceConfig() }
+    lateinit var gameListener: GameListener
+
+    fun isPostoolActive(player: Player): Boolean = postoolUsers.contains(player.uniqueId)
+    fun activatePostool(player: Player) { postoolUsers.add(player.uniqueId) }
+    fun deactivatePostool(player: Player) { postoolUsers.remove(player.uniqueId) }
 
     override fun onEnable() {
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
@@ -57,7 +66,8 @@ class ZombieRun : JavaPlugin() {
 
         val pm = Bukkit.getPluginManager()
         val taskTracker = PlayerTaskTracker()
-        pm.registerEvents(GameListener(this, taskTracker), this)
+        gameListener = GameListener(this, taskTracker)
+        pm.registerEvents(gameListener, this)
         pm.registerEvents(CombatListener(this, taskTracker), this)
         pm.registerEvents(StaminaListener(this), this)
         pm.registerEvents(WeaponListener(this), this)

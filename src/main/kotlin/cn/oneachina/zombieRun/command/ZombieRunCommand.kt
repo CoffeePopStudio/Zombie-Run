@@ -7,11 +7,13 @@ import cn.oneachina.zombieRun.model.Door
 import cn.oneachina.zombieRun.model.Respawn
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.Bukkit
+import org.bukkit.Material
 import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
 import org.bukkit.command.TabCompleter
 import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
 
 class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabCompleter {
 
@@ -24,6 +26,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         when (args[0].lowercase()) {
             "start", "spawn", "doors", "buttons", "reload", "open", "close", "reset", "debug" ->
                 handleAdminCommand(sender, args)
+            "postool" -> handlePostool(sender)
             "coins" -> CoinCommands.handle(plugin, sender, args.drop(1).toTypedArray())
             "shop" -> handleShop(sender)
             "select", "unselect", "randomgun", "lobby", "transfer" ->
@@ -80,7 +83,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                 sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有权限使用此命令！"))
                 return true
             }
-            DoorBehaviorCommands.handle(plugin, sender, subArgs.drop(1).toTypedArray())
+            DoorBehaviorCommands.handle(plugin, sender, subArgs.drop(1).toTypedArray(), plugin.gameListener)
         } else {
             if (sender !is Player) {
                 sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
@@ -89,6 +92,26 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
             handleDoor(sender, subArgs)
         }
         return true
+    }
+
+    private fun handlePostool(sender: CommandSender) {
+        if (!sender.hasPermission("zombie.run.admin")) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有权限使用此命令！"))
+            return
+        }
+        if (sender !is Player) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c此命令只能由玩家执行！"))
+            return
+        }
+        if (plugin.isPostoolActive(sender)) {
+            plugin.deactivatePostool(sender)
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§epostool 已关闭"))
+        } else {
+            plugin.activatePostool(sender)
+            sender.inventory.addItem(org.bukkit.inventory.ItemStack(org.bukkit.Material.STICK))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已给你一根选区棒！§e左键方块=pos1, 右键方块=pos2"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§e再输入一次 /zr postool 可关闭"))
+        }
     }
 
     private fun handleShop(sender: CommandSender): Boolean {
@@ -333,87 +356,205 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
 
     private fun handleDoors(sender: CommandSender, args: Array<out String>) {
         if (args.isEmpty()) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr doors <add|remove|list|reset>"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr doors <add|edit|remove|list|reset>"))
             return
         }
         when (args[0].lowercase()) {
             "add" -> handleDoorsAdd(sender, args.drop(1).toTypedArray())
+            "edit" -> handleDoorsEdit(sender, args.drop(1).toTypedArray())
             "remove" -> handleDoorsRemove(sender, args.drop(1).toTypedArray())
             "list" -> handleDoorsList(sender)
             "reset" -> handleDoorsReset(sender, args.drop(1).toTypedArray())
-            else -> sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c未知子命令，可用: add, remove, list, reset"))
+            "info" -> handleDoorsInfo(sender, args.drop(1).toTypedArray())
+            else -> sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c未知子命令，可用: add, edit, remove, list, reset, info"))
         }
     }
 
     private fun handleDoorsAdd(sender: CommandSender, args: Array<out String>) {
-        if (args.size < 7) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr doors add <x1> <y1> <z1> <x2> <y2> <z2> <mode>"))
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§cmode: normal, player, zombie, start"))
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§cnormal 模式额外参数: [门号] [delay]"))
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§cplayer/zombie/start 模式无需门号和 delay"))
+        if (args.isEmpty()) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr doors add <mode> [-g <组名>] [duration]"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c或: /zr doors add <x1> <y1> <z1> <x2> <y2> <z2> <mode> [组名|duration]"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§emode: normal, player, zombie, start"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§e使用 /zr postool 选区后可直接 /zr doors add normal"))
             return
         }
-        try {
-            val x1 = args[0].toInt()
-            val y1 = args[1].toInt()
-            val z1 = args[2].toInt()
-            val x2 = args[3].toInt()
-            val y2 = args[4].toInt()
-            val z2 = args[5].toInt()
 
-            val mode = args[6].lowercase()
-            val validModes = setOf("normal", "player", "zombie", "start")
-            if (mode !in validModes) {
-                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c模式必须是 normal, player, zombie, start 之一"))
-                return
-            }
+        val mode = args[0].lowercase()
+        val validModes = setOf("normal", "player", "zombie", "start")
+        if (mode !in validModes) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c模式必须是 normal, player, zombie, start 之一"))
+            return
+        }
 
-            val isAutoMode = mode == "player" || mode == "zombie"
-            val doorNumber = if (isAutoMode) 0 else if (args.size > 7) (args[7].toIntOrNull() ?: 0) else 0
-            val delay = if (isAutoMode) 0 else if (args.size > 8) (args[8].toIntOrNull() ?: 30) else 30
+        val doorMode = Door.DoorMode.fromString(mode)
 
-            val minX = minOf(x1, x2)
-            val minY = minOf(y1, y2)
-            val minZ = minOf(z1, z2)
-            val maxX = maxOf(x1, x2)
-            val maxY = maxOf(y1, y2)
-            val maxZ = maxOf(z1, z2)
-
-            val blocks = mutableMapOf<String, String>()
-            val world = if (sender is Player) sender.world else Bukkit.getWorlds().first()
-            for (x in minX..maxX) {
-                for (y in minY..maxY) {
-                    for (z in minZ..maxZ) {
-                        val block = world.getBlockAt(x, y, z)
-                        blocks["$x,$y,$z"] = block.type.name
+        // 解析可选参数: [-g 组名] [duration]
+        var group: String? = null
+        var duration: Int = -1 // -1 = use default
+        var idx = 1
+        while (idx < args.size) {
+            when {
+                args[idx] == "-g" -> {
+                    if (idx + 1 < args.size) {
+                        group = args[idx + 1]
+                        idx += 2
+                    } else {
+                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c-g 后需要组名！"))
+                        return
+                    }
+                }
+                else -> {
+                    val v = args[idx].toIntOrNull()
+                    if (v != null) {
+                        duration = v
+                        idx++
+                    } else {
+                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c未知参数: ${args[idx]}"))
+                        return
                     }
                 }
             }
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已扫描门区域，共记录 ${blocks.size} 个方块。"))
+        }
 
-            val doorName = "door_${System.currentTimeMillis()}"
-
-            val door = Door(
-                name = doorName,
-                minX = minX,
-                minY = minY,
-                minZ = minZ,
-                maxX = maxX,
-                maxY = maxY,
-                maxZ = maxZ,
-                doorNumber = doorNumber,
-                delay = delay,
-                material = "",
-                mode = Door.DoorMode.fromString(mode),
-                useScanData = true,
-                blocks = blocks
+        // 坐标来源
+        val coords: List<Int> = if (sender is Player && plugin.isPostoolActive(sender)) {
+            val p1 = plugin.gameListener.getPos1(sender)
+            val p2 = plugin.gameListener.getPos2(sender)
+            if (p1 == null || p2 == null) {
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c请先用 postool 选好两个角！左键=pos1, 右键=pos2"))
+                return
+            }
+            listOf(
+                minOf(p1.blockX, p2.blockX), minOf(p1.blockY, p2.blockY), minOf(p1.blockZ, p2.blockZ),
+                maxOf(p1.blockX, p2.blockX), maxOf(p1.blockY, p2.blockY), maxOf(p1.blockZ, p2.blockZ)
             )
-            plugin.configManager.addDoorFull(door)
-            plugin.doorManager.addDoor(door)
-            val modeLabel = if (isAutoMode) "$mode（自动分配门号和 delay）" else mode
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a门 '$doorName' 添加成功！模式: $modeLabel，自动扫描模式，关门时恢复原始方块。"))
-        } catch (_: NumberFormatException) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c坐标必须是整数！"))
+        } else {
+            // 手打坐标
+            if (args.size < 7) {
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c坐标不足，需要 <x1> <y1> <z1> <x2> <y2> <z2> <mode> 或用 postool"))
+                return
+            }
+            val raw = args.take(6).map { it.toIntOrNull() }
+            if (raw.any { it == null }) {
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c坐标必须是整数！"))
+                return
+            }
+            val x1 = raw[0]!!; val y1 = raw[1]!!; val z1 = raw[2]!!
+            val x2 = raw[3]!!; val y2 = raw[4]!!; val z2 = raw[5]!!
+            listOf(
+                minOf(x1, x2), minOf(y1, y2), minOf(z1, z2),
+                maxOf(x1, x2), maxOf(y1, y2), maxOf(z1, z2)
+            )
+        }
+        val minX = coords[0]; val minY = coords[1]; val minZ = coords[2]
+        val maxX = coords[3]; val maxY = coords[4]; val maxZ = coords[5]
+
+        // 门号
+        val doorNumber = when {
+            doorMode != Door.DoorMode.NORMAL -> 0
+            group != null -> {
+                val existing = plugin.doorManager.getDoorsInGroup(group)
+                if (existing.isNotEmpty()) existing.first().doorNumber
+                else plugin.doorManager.getNextDoorNumber()
+            }
+            else -> plugin.doorManager.getNextDoorNumber()
+        }
+
+        // 扫描方块
+        val blocks = mutableMapOf<String, String>()
+        val world = if (sender is Player) sender.world else Bukkit.getWorlds().first()
+        for (x in minX..maxX) {
+            for (y in minY..maxY) {
+                for (z in minZ..maxZ) {
+                    blocks["$x,$y,$z"] = world.getBlockAt(x, y, z).type.name
+                }
+            }
+        }
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已扫描门区域，共记录 ${blocks.size} 个方块。"))
+
+        val doorName = "door_${System.currentTimeMillis()}"
+
+        val door = Door(
+            name = doorName,
+            minX = minX, minY = minY, minZ = minZ,
+            maxX = maxX, maxY = maxY, maxZ = maxZ,
+            duration = if (duration > 0) duration else plugin.configManager.getConfig().getInt("doors.default-duration", 15),
+            doorNumber = doorNumber,
+            material = "",
+            mode = doorMode,
+            useScanData = true,
+            blocks = blocks,
+            group = group
+        )
+        plugin.configManager.addDoorFull(door)
+        plugin.doorManager.addDoor(door)
+        val extra = buildString {
+            if (group != null) append(" 组=$group")
+            append(" 门号=$doorNumber duration=${door.duration}")
+        }
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a门 '$doorName' 添加成功！模式: $mode$extra"))
+    }
+
+    private fun handleDoorsEdit(sender: CommandSender, args: Array<out String>) {
+        if (args.size < 3) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr doors edit <名称> duration|door-number|group <值>"))
+            return
+        }
+        val door = plugin.doorManager.getDoorByName(args[0])
+        if (door == null) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c未找到门 '${args[0]}'"))
+            return
+        }
+        when (args[1].lowercase()) {
+            "duration" -> {
+                val v = args[2].toIntOrNull()
+                if (v == null || v <= 0) {
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§cduration 必须是正整数！"))
+                    return
+                }
+                val newDoor = door.with(duration = v)
+                plugin.doorManager.removeDoor(door.name)
+                plugin.doorManager.addDoor(newDoor)
+                plugin.configManager.addDoorFull(newDoor)
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a${door.name} duration 已更新为 $v"))
+            }
+            "door-number" -> {
+                val v = args[2].toIntOrNull() ?: return
+                val newDoor = door.with(doorNumber = v)
+                plugin.doorManager.removeDoor(door.name)
+                plugin.doorManager.addDoor(newDoor)
+                plugin.configManager.addDoorFull(newDoor)
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a${door.name} 门号已更新为 $v"))
+            }
+            "group" -> {
+                val v = args[2]
+                val newDoor = door.with(group = v)
+                plugin.doorManager.removeDoor(door.name)
+                plugin.doorManager.addDoor(newDoor)
+                plugin.configManager.addDoorFull(newDoor)
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a${door.name} 组已更新为 $v"))
+            }
+            else -> sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c未知字段: ${args[1]}"))
+        }
+    }
+
+    private fun handleDoorsInfo(sender: CommandSender, args: Array<out String>) {
+        if (args.isEmpty()) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr doors info <名称>"))
+            return
+        }
+        val door = plugin.doorManager.getDoorByName(args[0])
+        if (door == null) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c未找到门 '${args[0]}'"))
+            return
+        }
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a===== ${door.name} ====="))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a模式: ${door.mode}  门号: ${door.doorNumber}  组: ${door.group ?: "-"}"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§aduration: ${door.duration}s  坐标: (${door.minX},${door.minY},${door.minZ})-(${door.maxX},${door.maxY},${door.maxZ})"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§ascanData: ${if (door.useScanData) "已记录 ${door.blocks.size} 方块" else "未使用"}"))
+        val sb = door.specialBehavior
+        if (sb != null) {
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§b特殊行为: ${sb.javaClass.simpleName}"))
         }
     }
 

@@ -9,9 +9,6 @@ import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.title.Title
 import org.bukkit.Bukkit
-import org.bukkit.GameMode
-import org.bukkit.Location
-import org.bukkit.Material
 import org.bukkit.Sound
 import org.bukkit.entity.Player
 import java.time.Duration
@@ -20,18 +17,9 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 class DoorManager(private val plugin: ZombieRun) {
 
-    // ---- DoorSession: 封装一扇门的开→关生命周期 ----
-    private class DoorSession(
-        val door: Door,
-        var opentime: Double,
-        var closetime: Double,
-        var forbiddenUntil: Long
-    )
-
     private val doors: ConcurrentHashMap<String, Door> = ConcurrentHashMap()
 
-    // ---- 多 session：每扇门独立生命周期 ----
-    private val activeSessions = ConcurrentHashMap<Int, DoorSession>()
+    private var activeSession: Session? = null
 
     var endtime: Double = -1.0
         private set
@@ -41,8 +29,14 @@ class DoorManager(private val plugin: ZombieRun) {
     private val doorTasks = CopyOnWriteArrayList<ScheduledTask>()
     private val transferTasks = ConcurrentHashMap<Player, ScheduledTask>()
 
-    // ---- 门组索引：group -> list of doors ----
     private val doorGroups = ConcurrentHashMap<String, List<Door>>()
+
+    // ---- Session ----
+
+    private class Session(
+        val doors: List<Door>,
+        var countdown: Double  // >0 = opening, <0 = closing (abs = seconds)
+    )
 
     // ==================== 数据加载 ====================
 
@@ -59,31 +53,20 @@ class DoorManager(private val plugin: ZombieRun) {
         plugin.logger.info("已加载 ${doors.size} 扇门，${doorGroups.size} 个门组")
     }
 
-    fun getDoorByNumber(number: Int): Door? {
-        return doors.values.find { it.doorNumber == number }
-    }
+    fun getDoorByNumber(number: Int): Door? = doors.values.firstOrNull { it.doorNumber == number }
 
-    // ==================== 即时开门（无倒计时） ====================
+    fun getDoorByName(name: String): Door? = doors[name]
 
-    fun openDoorImmediately(doorNumber: Int, broadcast: Boolean = true) {
-        val door = getDoorByNumber(doorNumber) ?: return
-        openDoor(door, broadcast)
-    }
+    fun getAllDoors(): Collection<Door> = doors.values
 
-    fun openDoorImmediatelyByName(name: String, broadcast: Boolean = true) {
-        val door = doors[name] ?: return
-        openDoor(door, broadcast)
-    }
+    fun getDoorGroups(): Map<String, List<Door>> = doorGroups
 
     // ==================== 按钮触发 ====================
 
     fun triggerDoor(doorNumber: Int, player: Player? = null) {
-        triggerDoor(doorNumber, player, guardActive = true)
-    }
-
-    fun triggerDoor(doorNumber: Int, player: Player?, guardActive: Boolean) {
         val door = getDoorByNumber(doorNumber) ?: return
 
+        // 起始门：立即开
         if (door.mode == Door.DoorMode.START) {
             openDoorImmediately(doorNumber)
             player?.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a起始门已开启！"))
@@ -95,89 +78,132 @@ class DoorManager(private val plugin: ZombieRun) {
             return
         }
 
-        // 门组联动：找出同组所有门
-        val doorsToTrigger = if (!door.group.isNullOrBlank()) {
+        // 守卫：有活跃 session
+        if (activeSession != null) {
+            player?.sendMessage(Component.text("需要等上一道门关闭才可以开这道门！", NamedTextColor.RED))
+            return
+        }
+
+        // 找同组所有门
+        val groupDoors = if (!door.group.isNullOrBlank()) {
             doorGroups[door.group] ?: listOf(door)
         } else {
             listOf(door)
         }
 
-        if (guardActive) {
-            // 守卫检查：任一目标门有活跃 session 则阻止
-            val blocking = doorsToTrigger.firstNotNullOfOrNull { dn ->
-                activeSessions[dn.doorNumber]?.let { s ->
-                    if (System.currentTimeMillis() < s.forbiddenUntil) "你急啥急？！"
-                    else if (s.opentime >= 0 || s.closetime >= 0) "你需要等上一道门关闭才可以开这道门！"
-                    else null
-                }
-            }
-            if (blocking != null) {
-                player?.sendMessage(Component.text(blocking, NamedTextColor.RED))
-                return
-            }
-        }
+        // 标记激活
+        groupDoors.forEach { it.isActive = true }
 
-        // 为每扇门创建独立 session，同步开/关
-        val now = System.currentTimeMillis()
-        doorsToTrigger.forEach { d ->
-            val session = DoorSession(
-                door = d,
-                opentime = d.delay.toDouble(),
-                closetime = -1.0,
-                forbiddenUntil = now + 3000L  // 触发时即设冷却
-            )
-            activeSessions[d.doorNumber] = session
+        val session = Session(groupDoors, countdown = door.duration.toDouble())
+        activeSession = session
 
+        val doorNums = groupDoors.map { it.doorNumber }.toSet().joinToString(", ")
+        val playerName = player?.name ?: "控制台"
+        Bukkit.broadcast(LegacyComponentSerializer.legacySection().deserialize("§b$playerName §a开启了 $doorNums 号大门！"))
+
+        // 亮按钮
+        groupDoors.forEach { d ->
             plugin.buttonManager.getButtonByDoorNumber(d.doorNumber)?.let {
                 plugin.buttonManager.setButtonLit(it)
             }
         }
 
-        val doorNums = doorsToTrigger.map { it.doorNumber }.joinToString(", ")
-        val playerName = player?.name ?: "控制台"
-        Bukkit.broadcast(LegacyComponentSerializer.legacySection().deserialize("§b$playerName §a开启了 $doorNums 号大门！"))
-
-        // 同步启动所有门的开门倒计时
-        doorsToTrigger.forEach { d ->
-            startOpenCountdown(activeSessions[d.doorNumber]!!)
-        }
+        startCountdown(session)
     }
 
-    // ==================== 开门倒计时 ====================
+    // ==================== 统一倒计时 ====================
 
-    private fun startOpenCountdown(session: DoorSession) {
-        val door = session.door
+    private fun startCountdown(session: Session) {
         val lastDisplay = intArrayOf(-1)
+
         val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
             if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
-                session.opentime = -1.0
+                session.countdown = -1.0
                 schedTask.cancel()
                 return@runAtFixedRate
             }
 
-            if (session.opentime > 0) {
-                val currentDisplay = session.opentime.toInt()
-                if (currentDisplay != lastDisplay[0]) {
+            if (session.countdown > 0) {
+                // 开门前倒计时
+                val current = session.countdown.toInt()
+                if (current != lastDisplay[0]) {
+                    val doorNum = session.doors.first().doorNumber
+                    val sb = session.doors.first().specialBehavior
+                    val label = when (sb) {
+                        is SpecialDoorBehavior.Subway -> "${sb.lineName}"
+                        else -> "$doorNum 号大门"
+                    }
                     val title = Title.title(
-                        Component.empty(),
-                        Component.text()
-                            .append(Component.text("${door.doorNumber} 号大门即将开启于 ", NamedTextColor.GREEN))
-                            .append(Component.text(currentDisplay.toString(), NamedTextColor.LIGHT_PURPLE))
-                            .append(Component.text(" ……", NamedTextColor.GREEN))
-                            .build(),
+                        Component.text("$current", NamedTextColor.LIGHT_PURPLE),
+                        Component.text("$label 即将开启……", NamedTextColor.GREEN),
                         Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(1), Duration.ofMillis(500))
                     )
-                    Bukkit.getOnlinePlayers().forEach { player ->
-                        player.showTitle(title)
-                        player.playSound(player.location, Sound.BLOCK_DISPENSER_FAIL, 0.2f, 2f)
+                    Bukkit.getOnlinePlayers().forEach { p ->
+                        p.showTitle(title)
+                        p.playSound(p.location, Sound.BLOCK_DISPENSER_FAIL, 0.2f, 2f)
                     }
-                    lastDisplay[0] = currentDisplay
+                    lastDisplay[0] = current
                 }
-                session.opentime -= 1.0
+                session.countdown -= 1.0
+            } else if (session.countdown == 0.0) {
+                // 开门
+                session.doors.forEach { d -> openDoorBlocks(d) }
+                session.countdown = -(session.doors.first().duration.toDouble())
             } else {
-                openDoor(door, true, session)
-                session.opentime = -1.0
-                schedTask.cancel()
+                // 关门倒计时（countdown < 0）
+                val remaining = -session.countdown
+                if (remaining > 0) {
+                    val current = remaining.toInt()
+                    if (current != lastDisplay[0]) {
+                        val doorNum = session.doors.first().doorNumber
+                        val sb = session.doors.first().specialBehavior
+
+                        val behindMsg: String
+                        val aheadMsg: String
+
+                        when (sb) {
+                            is SpecialDoorBehavior.Subway -> {
+                                behindMsg = "${sb.lineName}列车将在 $current 秒后发车，请立即上车！"
+                                aheadMsg = "${sb.lineName}列车将在 $current 秒后发车……"
+                            }
+                            else -> {
+                                behindMsg = "$doorNum 号大门将在 $current 秒后关闭，请立即进入！"
+                                aheadMsg = "$doorNum 号大门将在 $current 秒后关闭……"
+                            }
+                        }
+
+                        Bukkit.getOnlinePlayers().forEach { p ->
+                            val room = plugin.gameManager.getPlayerRoom(p)
+                            val inFront = session.doors.any { it.isPlayerPastDoor(p.location) }
+                            val title = if (!inFront) {
+                                Title.title(
+                                    Component.text("$current", NamedTextColor.RED),
+                                    Component.text(behindMsg, NamedTextColor.GOLD),
+                                    Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(1), Duration.ofMillis(500))
+                                )
+                            } else {
+                                Title.title(
+                                    Component.empty(),
+                                    Component.text(aheadMsg, NamedTextColor.GRAY),
+                                    Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(1), Duration.ofMillis(500))
+                                )
+                            }
+                            p.showTitle(title)
+                        }
+
+                        when (current) {
+                            5, 3, 2, 1 -> Bukkit.getOnlinePlayers().forEach { p ->
+                                p.playSound(p.location, Sound.ENTITY_ELDER_GUARDIAN_CURSE, 0.1f, 2f)
+                            }
+                        }
+                        lastDisplay[0] = current
+                    }
+                    session.countdown += 0.1
+                } else {
+                    // 关门
+                    closeAllDoors(session)
+                    schedTask.cancel()
+                }
             }
         }, 1L, 20L)
         doorTasks.add(task)
@@ -185,8 +211,7 @@ class DoorManager(private val plugin: ZombieRun) {
 
     // ==================== 开门 ====================
 
-    private fun openDoor(door: Door, broadcast: Boolean, session: DoorSession? = null) {
-        val doorNum = door.doorNumber
+    private fun openDoorBlocks(door: Door) {
         val world = Bukkit.getWorlds().first()
         door.open(world)
         val center = door.getCenterLocation(world)
@@ -194,125 +219,50 @@ class DoorManager(private val plugin: ZombieRun) {
             door.openBlocks(world)
         }
 
-        if (broadcast) {
-            val soundLoc = Bukkit.getOnlinePlayers().firstOrNull()?.location ?: world.spawnLocation
-            world.playSound(soundLoc, Sound.ENTITY_GENERIC_EXPLODE, 0.5f, 2f)
-            world.playSound(soundLoc, Sound.BLOCK_IRON_DOOR_OPEN, 1f, 0.5f)
-            world.playSound(soundLoc, Sound.BLOCK_WOODEN_DOOR_OPEN, 1f, 0.5f)
-            world.playSound(soundLoc, Sound.BLOCK_BELL_USE, 1f, 0.5f)
+        val doorNum = door.doorNumber
+        val soundLoc = Bukkit.getOnlinePlayers().firstOrNull()?.location ?: world.spawnLocation
+        world.playSound(soundLoc, Sound.ENTITY_GENERIC_EXPLODE, 0.5f, 2f)
+        world.playSound(soundLoc, Sound.BLOCK_IRON_DOOR_OPEN, 1f, 0.5f)
+        world.playSound(soundLoc, Sound.BLOCK_WOODEN_DOOR_OPEN, 1f, 0.5f)
+        world.playSound(soundLoc, Sound.BLOCK_BELL_USE, 1f, 0.5f)
 
-            Bukkit.getOnlinePlayers().forEach { player ->
-                player.showTitle(Title.title(
-                    Component.text("$doorNum 号大门开启", NamedTextColor.GREEN),
-                    Component.text("请立即前往下一区域", NamedTextColor.GREEN)
-                ))
+        Bukkit.getOnlinePlayers().forEach { p ->
+            val label = when (door.specialBehavior) {
+                is SpecialDoorBehavior.Subway -> "${(door.specialBehavior as SpecialDoorBehavior.Subway).lineName} 进站"
+                else -> "$doorNum 号大门开启"
             }
-        }
-
-        if (doorNum < 9 && door.mode != Door.DoorMode.START &&
-            door.mode != Door.DoorMode.PLAYER && door.mode != Door.DoorMode.ZOMBIE) {
-            val s = session ?: return
-            s.closetime = door.closeTime.toDouble()
-            startCloseCountdown(s)
+            p.showTitle(Title.title(
+                Component.text(label, NamedTextColor.GREEN),
+                Component.text("请立即前往下一区域", NamedTextColor.GREEN)
+            ))
         }
     }
 
-    // ==================== 关门倒计时 ====================
-
-    private fun startCloseCountdown(session: DoorSession) {
-        val door = session.door
-        val doorNum = door.doorNumber
-        val lastDisplay = doubleArrayOf(-1.0)
-        val sb = door.specialBehavior
-        val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
-            if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
-                session.closetime = -1.0
-                schedTask.cancel()
-                return@runAtFixedRate
-            }
-
-            if (session.closetime > 0) {
-                val currentDisplay = if (session.closetime % 1 == 0.0) session.closetime.toInt().toDouble() else Math.floor(session.closetime * 10) / 10
-
-                val humansBehind = Bukkit.getOnlinePlayers().count { player ->
-                    val team = plugin.gameManager.getPlayerTeam(player)
-                    if (team != GameManager.Team.HUMAN) return@count false
-                    val room = plugin.gameManager.getPlayerRoom(player)
-                    room < doorNum
-                }
-
-                if (session.closetime > 3.1 && humansBehind == 0) {
-                    val enteredMsg = when (sb) {
-                        is SpecialDoorBehavior.Subway -> "所有人类都已上车，${sb.lineName}即将发车……"
-                        else -> "所有人类都已进入，大门即将关闭……"
-                    }
-                    Bukkit.broadcast(Component.text(enteredMsg, NamedTextColor.GREEN))
-                    session.closetime = 3.1
-                }
-
-                if (currentDisplay != lastDisplay[0]) {
-                    val displayStr = if (currentDisplay % 1 == 0.0) currentDisplay.toInt().toString() else String.format("%.1f", currentDisplay)
-
-                    val (behindMsg, aheadMsg) = when (sb) {
-                        is SpecialDoorBehavior.Subway -> Pair(
-                            "${sb.lineName}列车将在 {sec} 秒后发车，请立即上车！",
-                            "${sb.lineName}列车将在 {sec} 秒后发车……"
-                        )
-                        else -> Pair(
-                            "$doorNum 号大门即将关闭，请立即进入！",
-                            "$doorNum 号大门将在 {sec} 秒后关闭……"
-                        )
-                    }
-
-                    Bukkit.getOnlinePlayers().forEach { player ->
-                        val room = plugin.gameManager.getPlayerRoom(player)
-                        val title = if (room < doorNum) {
-                            Title.title(
-                                Component.text(displayStr, NamedTextColor.RED),
-                                Component.text(behindMsg.replace("{sec}", displayStr), NamedTextColor.GOLD),
-                                Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(1), Duration.ofMillis(500))
-                            )
-                        } else {
-                            Title.title(
-                                Component.empty(),
-                                Component.text()
-                                    .append(Component.text(aheadMsg.replace("{sec}", displayStr), NamedTextColor.GRAY))
-                                    .build(),
-                                Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(1), Duration.ofMillis(500))
-                            )
-                        }
-                        player.showTitle(title)
-                    }
-                    lastDisplay[0] = currentDisplay
-                }
-
-                when (session.closetime.toInt()) {
-                    5, 3, 2, 1 -> {
-                        Bukkit.getOnlinePlayers().forEach { player ->
-                            player.playSound(player.location, Sound.ENTITY_ELDER_GUARDIAN_CURSE, 0.1f, 2f)
-                        }
-                    }
-                }
-
-                session.closetime -= 0.1
-            } else {
-                closeDoor(door)
-                session.closetime = -1.0
-                schedTask.cancel()
-            }
-        }, 1L, 2L)
-        doorTasks.add(task)
+    fun openDoorImmediately(doorNumber: Int, broadcast: Boolean = true) {
+        val door = getDoorByNumber(doorNumber) ?: return
+        openDoorBlocks(door)
     }
 
-    // ==================== 关门 ====================
+    fun openDoorImmediatelyByName(name: String, broadcast: Boolean = true) {
+        val door = doors[name] ?: return
+        openDoorBlocks(door)
+    }
 
-    private fun closeDoor(door: Door) {
-        val doorNum = door.doorNumber
+    // ==================== 关门（核心判定） ====================
+
+    private fun closeAllDoors(session: Session) {
         val world = Bukkit.getWorlds().first()
-        door.close(world)
-        val center = door.getCenterLocation(world)
-        Bukkit.getRegionScheduler().execute(plugin, center) {
-            door.closeBlocks(world)
+        val allDoors = session.doors
+        val primaryDoor = allDoors.first()
+        val doorNum = primaryDoor.doorNumber
+
+        // 还原方块
+        allDoors.forEach { d ->
+            d.close(world)
+            val center = d.getCenterLocation(world)
+            Bukkit.getRegionScheduler().execute(plugin, center) {
+                d.closeBlocks(world)
+            }
         }
 
         doorclose = doorNum
@@ -322,54 +272,60 @@ class DoorManager(private val plugin: ZombieRun) {
         world.playSound(soundLoc, Sound.BLOCK_ANVIL_LAND, 1f, 0.5f)
         world.playSound(soundLoc, Sound.ENTITY_ZOMBIE_ATTACK_IRON_DOOR, 1f, 1f)
 
-        val isGroupSpecialDoor = door.group != null && door.hasSpecialBehavior()
+        // 一次性判定所有玩家
+        val passedPlayers = mutableListOf<Player>()
+        val behindPlayers = mutableListOf<Player>()
 
-        if (isGroupSpecialDoor) {
-            // 组门 + 特殊行为：不单独做 room 判定，统一交给 handleSpecialDoorClose
-            Bukkit.getOnlinePlayers().forEach { player ->
-                if (door.containsLocation(player.location)) {
-                    // 卡在门方块里 — 特殊行为触发时会一并处理
-                }
+        Bukkit.getOnlinePlayers().forEach { p ->
+            val pastAny = allDoors.any { it.isPlayerPastDoor(p.location) }
+            if (pastAny) {
+                passedPlayers.add(p)
+            } else {
+                behindPlayers.add(p)
             }
-        } else {
-            val hasSpecial = door.hasSpecialBehavior()
-            Bukkit.getOnlinePlayers().forEach { player ->
-                val room = plugin.gameManager.getPlayerRoom(player)
-                val isInsideDoor = door.containsLocation(player.location)
+        }
 
-                if (isInsideDoor) {
-                    if (!hasSpecial) {
-                        plugin.respawnManager.teleportPlayerByDoorClose(player, doorNum)
-                    }
-                } else if (room < doorNum) {
-                    startTransferCountdown(player, doorNum)
+        // 更新 room
+        passedPlayers.forEach { p ->
+            val current = plugin.gameManager.getPlayerRoom(p)
+            if (doorNum > current) {
+                plugin.gameManager.setPlayerRoom(p, doorNum)
+            }
+        }
+
+        // 落后玩家传送倒计时
+        behindPlayers.forEach { p ->
+            startTransferCountdown(p, doorNum)
+        }
+
+        // 特殊行为传送
+        if (primaryDoor.hasSpecialBehavior()) {
+            if (passedPlayers.isNotEmpty()) {
+                val behavior = primaryDoor.specialBehavior!!
+                val task = behavior.execute(
+                    SpecialDoorBehavior.ExecuteContext(
+                        plugin = plugin,
+                        door = primaryDoor,
+                        players = passedPlayers,
+                        world = world,
+                        doorTasks = doorTasks
+                    )
+                )
+                if (task != null) {
+                    doorTasks.add(task)
                 }
             }
         }
 
-        // 门组：仅当同组门全部关闭时才触发特殊行为
-        if (door.hasSpecialBehavior() && allGroupDoorsClosed(door)) {
-            handleSpecialDoorClose(door)
-        }
-
-        // session 生命周期结束
-        activeSessions.remove(doorNum)
+        activeSession = null
     }
 
-    /** 检查组内所有门是否均已关闭 */
-    private fun allGroupDoorsClosed(door: Door): Boolean {
-        val group = door.group ?: return true
-        val groupDoors = doorGroups[group] ?: return true
-        return groupDoors.none { it.isOpen }
-    }
-
-    // ==================== 落后传送倒计时 ====================
+    // ==================== 落后传送 ====================
 
     private fun startTransferCountdown(player: Player, doorNumber: Int) {
-        // 取消旧任务避免泄露
         transferTasks.remove(player)?.cancel()
 
-        var countdown = plugin.balanceConfig.transferCountdownSec
+        var countdown = 10
         val taskId = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
             if (countdown > 0) {
                 player.showTitle(Title.title(
@@ -386,41 +342,58 @@ class DoorManager(private val plugin: ZombieRun) {
         transferTasks[player] = taskId
     }
 
-    // ==================== 特殊行为 ====================
+    // ==================== CRUD ====================
 
-    fun getDoorByName(name: String): Door? = doors[name]
+    fun addDoor(door: Door) {
+        doors[door.name] = door
+        plugin.doorZoneManager.addDoor(door)
+        if (!door.group.isNullOrBlank()) {
+            doorGroups.merge(door.group, listOf(door)) { old, new -> old + new }
+        }
+    }
 
-    private fun handleSpecialDoorClose(door: Door) {
-        val behavior = door.specialBehavior ?: return
+    fun removeDoor(name: String) {
+        val door = doors.remove(name) ?: return
+        plugin.doorZoneManager.removeDoor(door)
+        if (!door.group.isNullOrBlank()) {
+            doorGroups[door.group]?.let { group ->
+                val updated = group.filter { it.name != name }
+                if (updated.isEmpty()) {
+                    doorGroups.remove(door.group)
+                } else {
+                    doorGroups[door.group] = updated
+                }
+            }
+        }
+    }
+
+    fun resetDoor(name: String) {
+        val door = doors[name] ?: return
         val world = Bukkit.getWorlds().first()
-        val groupDoors = if (!door.group.isNullOrBlank()) doorGroups[door.group] ?: listOf(door) else listOf(door)
-        val groupDoorNumbers = groupDoors.map { it.doorNumber }.toSet()
-        // 收集"已上车"的玩家：在任一扇门区域内，或已经通过同组任一扇门（playerRoom 被更新）
-        val players = Bukkit.getOnlinePlayers().filter { player ->
-            groupDoors.any { it.containsLocation(player.location) } ||
-            plugin.gameManager.getPlayerRoom(player) in groupDoorNumbers
+        door.close(world)
+        val center = door.getCenterLocation(world)
+        Bukkit.getRegionScheduler().execute(plugin, center) {
+            door.closeBlocks(world)
         }
-        if (players.isEmpty()) return
+    }
 
-        val task = behavior.execute(
-            SpecialDoorBehavior.ExecuteContext(
-                plugin = plugin,
-                door = door,
-                players = players,
-                world = world,
-                doorTasks = doorTasks
-            )
-        )
-        if (task != null) {
-            doorTasks.add(task)
-        }
+    fun getDoorsInGroup(group: String): List<Door> = doorGroups[group] ?: emptyList()
+
+    fun getNextDoorNumber(): Int {
+        val existing = doors.values
+            .filter { it.mode == Door.DoorMode.NORMAL }
+            .map { it.doorNumber }
+            .toSet()
+        var next = 1
+        while (next in existing) next++
+        return next
     }
 
     // ==================== 直升机撤离 ====================
 
     fun startHelicopterEscape() {
         if (endtime >= 0) return
-        endtime = plugin.balanceConfig.helicopterCountdownSec.toDouble()
+        endtime = 30.0
         Bukkit.broadcast(LegacyComponentSerializer.legacySection().deserialize("§c\n直升机已启动！\n人类将在 30 秒后撤离！\n"))
 
         val lastDisplay = doubleArrayOf(-1.0)
@@ -432,8 +405,7 @@ class DoorManager(private val plugin: ZombieRun) {
             }
 
             if (endtime > 0) {
-                val currentDisplay = if (endtime % 1 == 0.0) endtime.toInt().toDouble() else Math.floor(endtime * 10) / 10
-
+                val currentDisplay = Math.floor(endtime * 10) / 10
                 if (currentDisplay != lastDisplay[0]) {
                     val displayStr = if (currentDisplay % 1 == 0.0) currentDisplay.toInt().toString() else String.format("%.1f", currentDisplay)
                     Bukkit.getOnlinePlayers().forEach { player ->
@@ -457,15 +429,11 @@ class DoorManager(private val plugin: ZombieRun) {
                         player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§6+ 200 硬币！ (作为人类活到最后)"))
                     }
                 }
-                endHelicopterEscape()
+                plugin.gameManager.endGame(GameManager.Team.HUMAN)
                 schedTask.cancel()
             }
         }, 1L, 2L)
         doorTasks.add(task)
-    }
-
-    private fun endHelicopterEscape() {
-        plugin.gameManager.endGame(GameManager.Team.HUMAN)
     }
 
     // ==================== 重置 ====================
@@ -492,46 +460,8 @@ class DoorManager(private val plugin: ZombieRun) {
             }
         }
 
-        activeSessions.clear()
+        activeSession = null
         endtime = -1.0
         doorclose = 0
-    }
-
-    // ==================== CRUD ====================
-
-    fun getAllDoors(): Collection<Door> = doors.values
-
-    fun addDoor(door: Door) {
-        doors[door.name] = door
-        plugin.doorZoneManager.addDoor(door)
-    }
-
-    fun removeDoor(name: String) {
-        val door = doors[name]
-        if (door != null) {
-            plugin.doorZoneManager.removeDoor(door)
-        }
-        doors.remove(name)
-    }
-
-    fun resetDoor(name: String) {
-        val door = doors[name] ?: return
-        val world = Bukkit.getWorlds().first()
-        door.close(world)
-        val center = door.getCenterLocation(world)
-        Bukkit.getRegionScheduler().execute(plugin, center) {
-            door.closeBlocks(world)
-        }
-    }
-
-    fun onPlayerEnterDoor(player: Player, doorNumber: Int) {
-        val door = getDoorByNumber(doorNumber)
-        if (door != null) {
-            player.sendMessage("你进入了 ${doorNumber} 号门区域")
-        }
-    }
-
-    fun onPlayerLeaveDoor(player: Player, doorNumber: Int) {
-        // 当前无需额外处理，保留入口供未来扩展
     }
 }
