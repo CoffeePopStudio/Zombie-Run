@@ -104,7 +104,8 @@ sealed class SpecialDoorBehavior {
             val depMsg = departureMsg.replace("{line}", lineName)
             val arrMsg = arrivalMsg.replace("{line}", lineName)
             context.players.forEach { p ->
-                p.showTitle(Title.title(mm.deserialize(depMsg), mm.deserialize(arrMsg)))
+                // Subway 即时传送，只显示到站信息（发车提示已在关门倒计时阶段显示过）
+                p.showTitle(Title.title(mm.deserialize(arrMsg), Component.empty()))
                 val isHuman = context.plugin.gameManager.getPlayerTeam(p) == GameManager.Team.HUMAN
                 val tx = if (isHuman) humanTargetX else (zombieTargetX ?: humanTargetX)
                 val ty = if (isHuman) humanTargetY else (zombieTargetY ?: humanTargetY)
