@@ -171,7 +171,7 @@ class GameListener(
                         }
                         if (plugin.doorManager.endtime < 0) {
                             plugin.doorManager.startHelicopterEscape()
-                            block.type = Material.AIR
+                            plugin.buttonManager.setButtonLit(button)
                         }
                     }
                 }
