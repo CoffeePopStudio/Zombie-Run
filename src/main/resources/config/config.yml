@@ -33,10 +33,11 @@ end:
 # 每扇门需要单独配置一个条目，键名可自定义（如 door_1）
 # 参数说明：
 #   x1/y1/z1, x2/y2/z2: 门的对角方块坐标（插件会自动计算 min/max）
-#   duration:     开门+关门统一倒计时秒数（默认取 doors.default-duration）
-#   door-number:   门的编号（normal 模式自动分配，player/zombie/start 无门号）
-#   group:         门组名（同组门共享门号联动开关，用于地铁等多入口场景）
-#   mode:          门模式
+#   open-time:   开门前倒计时秒数（必须）
+#   close-time:  开门后关门倒计时秒数（必须）
+#   door-number: 门的编号（normal 模式自动分配，player/zombie/start 无门号）
+#   group:       门组名（同组门共享门号联动开关，用于地铁等多入口场景）
+#   mode:        门模式
 #     - normal: 普通门，由人类通过按钮触发
 #     - start:  起始门，游戏开始时自动开启
 #     - player: 开局时自动对人类开启
@@ -81,14 +82,13 @@ end:
 #       departure-msg: "<green>感谢乘坐机场专线</green>"
 #       arrival-msg: "<yellow>请拿好你的行李，有序下车</yellow>"
 #
-# 全局默认 duration：
-# default-duration: 15    # 所有门的默认 duration，单扇门可单独覆盖
 #
-# 示例 - 普通门（编号1，duration=15）：
+# 示例 - 普通门（编号1，open=15，close=15）：
 # door_1:
 #   x1: 10; y1: 64; z1: 10
 #   x2: 10; y2: 66; z2: 20
-#   duration: 15
+#   open-time: 15
+#   close-time: 15
 #   door-number: 1
 #   mode: normal
 #   use-scan-data: true
@@ -97,7 +97,8 @@ end:
 # door_subway_a:
 #   x1: 100; y1: 64; z1: 100
 #   x2: 100; y2: 66; z2: 102
-#   duration: 20
+#   open-time: 20
+#   close-time: 20
 #   door-number: 1
 #   mode: normal
 #   group: subway_line1

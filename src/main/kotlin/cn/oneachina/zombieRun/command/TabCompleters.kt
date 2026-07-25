@@ -52,13 +52,6 @@ object TabCompleters {
                                 .toMutableList()
                         } else mutableListOf()
                     }
-                    args.size == 6 -> {
-                        if (args[3] == "-g") {
-                            mutableListOf("<duration:秒数 默认15>")
-                        } else if (args[4].toIntOrNull() != null || args[3] != "-g") {
-                            mutableListOf()
-                        } else mutableListOf("<duration:秒数>")
-                    }
                     else -> mutableListOf()
                 }
             }
@@ -66,12 +59,12 @@ object TabCompleters {
                 when (args.size) {
                     3 -> plugin.doorManager.getAllDoors().map { it.name }
                         .filter { it.startsWith(args[2], ignoreCase = true) }.toMutableList()
-                    4 -> listOf("duration", "door-number", "group")
+                    4 -> listOf("open-time", "close-time", "door-number", "group")
                         .filter { it.startsWith(args[3].lowercase()) }.toMutableList()
                     5 -> when (args[3].lowercase()) {
                         "group" -> plugin.doorManager.getDoorGroups().keys
                             .filter { it.startsWith(args[4], ignoreCase = true) }.toMutableList()
-                        "duration" -> mutableListOf("<秒数>")
+                        "open-time", "close-time" -> mutableListOf("<秒数>")
                         "door-number" -> mutableListOf("<新门号>")
                         else -> mutableListOf()
                     }

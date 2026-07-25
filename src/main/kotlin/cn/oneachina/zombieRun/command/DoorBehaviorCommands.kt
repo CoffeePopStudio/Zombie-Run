@@ -227,7 +227,7 @@ object DoorBehaviorCommands {
         plugin.logger.info("名称: ${door.name}")
         plugin.logger.info("模式: ${door.mode}")
         plugin.logger.info("组: ${door.group ?: "-"}")
-        plugin.logger.info("duration: ${door.duration}")
+        plugin.logger.info("open: ${door.openTime}s  close: ${door.closeTime}s")
         val b = door.specialBehavior
         if (b == null) {
             plugin.logger.info("特殊行为: 无")

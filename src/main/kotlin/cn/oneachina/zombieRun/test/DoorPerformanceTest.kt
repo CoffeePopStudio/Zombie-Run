@@ -36,6 +36,8 @@ class DoorPerformanceTest(private val plugin: ZombieRun) {
                 maxX = maxX,
                 maxY = maxY,
                 maxZ = maxZ,
+                openTime = 15,
+                closeTime = 15,
                 doorNumber = i
             ).apply {
                 isOpen = true

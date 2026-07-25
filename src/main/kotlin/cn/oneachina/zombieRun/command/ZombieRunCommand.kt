@@ -372,10 +372,10 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
 
     private fun handleDoorsAdd(sender: CommandSender, args: Array<out String>) {
         if (args.isEmpty()) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr doors add <mode> [-g <组名>] [duration]"))
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c或: /zr doors add <x1> <y1> <z1> <x2> <y2> <z2> <mode> [组名|duration]"))
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§emode: normal, player, zombie, start"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr doors add <mode> [-g <组名>]"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§cmode: normal, player, zombie, start"))
             sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§e使用 /zr postool 选区后可直接 /zr doors add normal"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§eopen-time/close-time 默认 15，用 /zr doors edit 修改"))
             return
         }
 
@@ -388,31 +388,16 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
 
         val doorMode = Door.DoorMode.fromString(mode)
 
-        // 解析可选参数: [-g 组名] [duration]
+        // 解析可选参数: [-g 组名]
         var group: String? = null
-        var duration: Int = -1 // -1 = use default
         var idx = 1
         while (idx < args.size) {
             when {
                 args[idx] == "-g" -> {
-                    if (idx + 1 < args.size) {
-                        group = args[idx + 1]
-                        idx += 2
-                    } else {
-                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c-g 后需要组名！"))
-                        return
-                    }
+                    if (idx + 1 < args.size) { group = args[idx + 1]; idx += 2 }
+                    else { sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c-g 后需要组名！")); return }
                 }
-                else -> {
-                    val v = args[idx].toIntOrNull()
-                    if (v != null) {
-                        duration = v
-                        idx++
-                    } else {
-                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c未知参数: ${args[idx]}"))
-                        return
-                    }
-                }
+                else -> { sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c未知参数: ${args[idx]}")); return }
             }
         }
 
@@ -478,7 +463,8 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
             name = doorName,
             minX = minX, minY = minY, minZ = minZ,
             maxX = maxX, maxY = maxY, maxZ = maxZ,
-            duration = if (duration > 0) duration else plugin.configManager.getConfig().getInt("doors.default-duration", 15),
+            openTime = 15,
+            closeTime = 15,
             doorNumber = doorNumber,
             material = "",
             mode = doorMode,
@@ -490,14 +476,14 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         plugin.doorManager.addDoor(door)
         val extra = buildString {
             if (group != null) append(" 组=$group")
-            append(" 门号=$doorNumber duration=${door.duration}")
+            append(" 门号=$doorNumber open=${door.openTime}s close=${door.closeTime}s")
         }
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a门 '$doorName' 添加成功！模式: $mode$extra"))
     }
 
     private fun handleDoorsEdit(sender: CommandSender, args: Array<out String>) {
         if (args.size < 3) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr doors edit <名称> duration|door-number|group <值>"))
+            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr doors edit <名称> open-time|close-time|door-number|group <值>"))
             return
         }
         val door = plugin.doorManager.getDoorByName(args[0])
@@ -506,17 +492,29 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
             return
         }
         when (args[1].lowercase()) {
-            "duration" -> {
+            "open-time" -> {
                 val v = args[2].toIntOrNull()
                 if (v == null || v <= 0) {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§cduration 必须是正整数！"))
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§copen-time 必须是正整数！"))
                     return
                 }
-                val newDoor = door.with(duration = v)
+                val newDoor = door.with(openTime = v)
                 plugin.doorManager.removeDoor(door.name)
                 plugin.doorManager.addDoor(newDoor)
                 plugin.configManager.addDoorFull(newDoor)
-                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a${door.name} duration 已更新为 $v"))
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a${door.name} open-time 已更新为 $v"))
+            }
+            "close-time" -> {
+                val v = args[2].toIntOrNull()
+                if (v == null || v <= 0) {
+                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§cclose-time 必须是正整数！"))
+                    return
+                }
+                val newDoor = door.with(closeTime = v)
+                plugin.doorManager.removeDoor(door.name)
+                plugin.doorManager.addDoor(newDoor)
+                plugin.configManager.addDoorFull(newDoor)
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a${door.name} close-time 已更新为 $v"))
             }
             "door-number" -> {
                 val v = args[2].toIntOrNull() ?: return
@@ -550,7 +548,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         }
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a===== ${door.name} ====="))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a模式: ${door.mode}  门号: ${door.doorNumber}  组: ${door.group ?: "-"}"))
-        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§aduration: ${door.duration}s  坐标: (${door.minX},${door.minY},${door.minZ})-(${door.maxX},${door.maxY},${door.maxZ})"))
+        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§aopen: ${door.openTime}s  close: ${door.closeTime}s  坐标: (${door.minX},${door.minY},${door.minZ})-(${door.maxX},${door.maxY},${door.maxZ})"))
         sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§ascanData: ${if (door.useScanData) "已记录 ${door.blocks.size} 方块" else "未使用"}"))
         val sb = door.specialBehavior
         if (sb != null) {

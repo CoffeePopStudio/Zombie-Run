@@ -13,15 +13,16 @@ class Door(
     val maxX: Int,
     val maxY: Int,
     val maxZ: Int,
-    /** 开门+关门倒计时秒数 */
-    val duration: Int = 15,
+    /** 开门前倒计时秒数 */
+    val openTime: Int,
+    /** 关门倒计时秒数 */
+    val closeTime: Int,
     val doorNumber: Int = 0,
     val material: String = "STONE",
     var specialBehavior: SpecialDoorBehavior? = null,
     val mode: DoorMode = DoorMode.NORMAL,
     val useScanData: Boolean = false,
     val blocks: Map<String, String> = emptyMap(),
-    /** 门组：同一组的门共享门号联动开/关（用于地铁等多入口场景） */
     val group: String? = null
 ) {
 
@@ -127,12 +128,13 @@ class Door(
 
     /** 返回一个修改了指定字段的新门（用于编辑命令） */
     fun with(
-        duration: Int = this.duration,
+        openTime: Int = this.openTime,
+        closeTime: Int = this.closeTime,
         doorNumber: Int = this.doorNumber,
         group: String? = this.group
-    ) = Door(name, minX, minY, minZ, maxX, maxY, maxZ, duration, doorNumber, material, specialBehavior, mode, useScanData, blocks, group)
+    ) = Door(name, minX, minY, minZ, maxX, maxY, maxZ, openTime, closeTime, doorNumber, material, specialBehavior, mode, useScanData, blocks, group)
 
     override fun toString(): String {
-        return "Door(name='$name', doorNumber=$doorNumber, mode='$mode', group=${group ?: "-"}, duration=$duration, useScanData=$useScanData, blocks=${blocks.size})"
+        return "Door(name='$name', doorNumber=$doorNumber, mode='$mode', group=${group ?: "-"}, open=$openTime, close=$closeTime, blocks=${blocks.size})"
     }
 }

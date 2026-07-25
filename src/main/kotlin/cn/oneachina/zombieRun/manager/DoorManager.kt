@@ -94,7 +94,7 @@ class DoorManager(private val plugin: ZombieRun) {
         // 标记激活
         groupDoors.forEach { it.isActive = true }
 
-        val session = Session(groupDoors, countdown = door.duration.toDouble())
+        val session = Session(groupDoors, countdown = door.openTime.toDouble())
         activeSession = session
 
         val doorNums = groupDoors.map { it.doorNumber }.toSet().joinToString(", ")
@@ -148,7 +148,7 @@ class DoorManager(private val plugin: ZombieRun) {
             } else if (session.countdown == 0.0) {
                 // 开门
                 session.doors.forEach { d -> openDoorBlocks(d) }
-                session.countdown = -(session.doors.first().duration.toDouble())
+                session.countdown = -(session.doors.first().closeTime.toDouble())
             } else {
                 // 关门倒计时（countdown < 0）
                 val remaining = -session.countdown

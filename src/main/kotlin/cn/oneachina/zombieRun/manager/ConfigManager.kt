@@ -113,7 +113,6 @@ class ConfigManager(private val plugin: ZombieRun) {
     fun loadDoors(): List<Door> {
         val doors = mutableListOf<Door>()
         val doorsSection = config.getConfigurationSection("doors") ?: return doors
-        val defaultDuration = doorsSection.getInt("default-duration", 15)
 
         for (name in doorsSection.getKeys(false)) {
             val doorSection = doorsSection.getConfigurationSection(name) ?: continue
@@ -126,7 +125,8 @@ class ConfigManager(private val plugin: ZombieRun) {
 
             val modeStr = doorSection.getString("mode", "normal") ?: "normal"
             val doorMode = Door.DoorMode.fromString(modeStr)
-            val duration = doorSection.getInt("duration", defaultDuration)
+            val openTime = doorSection.getInt("open-time", 15)
+            val closeTime = doorSection.getInt("close-time", 15)
             val material = doorSection.getString("material", "STONE") ?: "STONE"
             val useScanData = doorSection.getBoolean("use-scan-data", false)
             val blocks = if (useScanData) {
@@ -147,7 +147,8 @@ class ConfigManager(private val plugin: ZombieRun) {
                 maxX = maxOf(x1, x2),
                 maxY = maxOf(y1, y2),
                 maxZ = maxOf(z1, z2),
-                duration = duration,
+                openTime = openTime,
+                closeTime = closeTime,
                 doorNumber = doorNumber,
                 material = material,
                 specialBehavior = specialBehavior,
@@ -440,7 +441,8 @@ class ConfigManager(private val plugin: ZombieRun) {
         doorSection.set("x2", door.maxX)
         doorSection.set("y2", door.maxY)
         doorSection.set("z2", door.maxZ)
-        doorSection.set("duration", door.duration)
+        doorSection.set("open-time", door.openTime)
+        doorSection.set("close-time", door.closeTime)
         doorSection.set("door-number", door.doorNumber)
         doorSection.set("material", door.material)
         doorSection.set("mode", door.mode.name.lowercase())
