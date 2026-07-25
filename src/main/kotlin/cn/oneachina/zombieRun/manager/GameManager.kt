@@ -236,7 +236,7 @@ class GameManager(private val plugin: ZombieRun) {
                 player.gameMode = GameMode.ADVENTURE
                 player.clearActivePotionEffects()
                 setPlayerRoom(player, 0)
-                setPlayerTeam(player, Team.HUMAN)
+                setPlayerTeam(player, Team.SPECTATOR)
             }
             plugin.healthManager.clearAll()
             status = GameStatus.WAITING
