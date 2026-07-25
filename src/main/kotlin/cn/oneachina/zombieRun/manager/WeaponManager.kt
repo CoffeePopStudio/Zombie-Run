@@ -31,14 +31,13 @@ class WeaponManager(private val plugin: ZombieRun) {
 
     // Player state
     private val cooldowns = ConcurrentHashMap<UUID, Int>()
-    private val adsProgress = ConcurrentHashMap<UUID, Float>() // 0.0 ~ 1.0
-    private val adsStartTime = ConcurrentHashMap<UUID, Long>()
+    private val adsActive = ConcurrentHashMap<UUID, Boolean>()     // ADS toggle state
     private val adsOriginalSpeed = ConcurrentHashMap<UUID, Double>()
     private val autoFireTasks = ConcurrentHashMap<UUID, ScheduledTask>()
     private val reloadTasks = ConcurrentHashMap<UUID, ScheduledTask>()
     private val boltTasks = ConcurrentHashMap<UUID, ScheduledTask>()
     private val headshotCooldowns = ConcurrentHashMap<String, Int>()
-    private val burstCounters = ConcurrentHashMap<UUID, Int>() // burst 连发剩余计数
+    private val burstCounters = ConcurrentHashMap<UUID, Int>()
     private val lastShotSemi = ConcurrentHashMap<UUID, Boolean>() // SEMI 模式防止按住连发
 
     // ==================== 加载 ====================
@@ -56,8 +55,8 @@ class WeaponManager(private val plugin: ZombieRun) {
 
     // ==================== 状态查询 ====================
 
-    fun isAds(player: Player): Boolean = (adsProgress[player.uniqueId] ?: 0f) > 0f
-    fun getAdsProgress(player: Player): Float = adsProgress[player.uniqueId] ?: 0f
+    fun isAds(player: Player): Boolean = adsActive.getOrDefault(player.uniqueId, false)
+    fun getAdsProgress(player: Player): Float = if (isAds(player)) 1f else 0f
     fun isReloading(item: ItemStack): Boolean = (item.itemMeta?.persistentDataContainer?.get(reloadKey, PersistentDataType.INTEGER) ?: 0) > 0
     fun isPlayerReloading(player: Player): Boolean = reloadTasks.containsKey(player.uniqueId)
     fun isBolting(player: Player): Boolean = boltTasks.containsKey(player.uniqueId)
@@ -184,8 +183,8 @@ class WeaponManager(private val plugin: ZombieRun) {
         }
 
         // 散布 + 射击
-        val ads = (adsProgress[player.uniqueId] ?: 0f) > 0.8f
-        val adsMult = 1.0f - (adsProgress[player.uniqueId] ?: 0f) * (1.0f - config.adsSpreadMult.toFloat())
+        val ads = isAds(player)
+        val adsMult = if (ads) config.adsSpreadMult else 1.0
         val finalSpread = (config.spread + shotCount * config.spreadPerShot) * adsMult
         val shotResult = performShots(player, player.eyeLocation, player.eyeLocation.direction, config, shotCount, ads, finalSpread)
 
@@ -457,8 +456,7 @@ class WeaponManager(private val plugin: ZombieRun) {
 
     fun setAds(player: Player, aiming: Boolean) {
         if (aiming) {
-            adsStartTime[player.uniqueId] = System.currentTimeMillis()
-            // Start speed reduction immediately
+            adsActive[player.uniqueId] = true
             player.scheduler.run(plugin, { _ ->
                 val attr = player.getAttribute(org.bukkit.attribute.Attribute.MOVEMENT_SPEED)
                 val current = attr?.baseValue ?: plugin.balanceConfig.defaultMoveSpeed
@@ -467,49 +465,19 @@ class WeaponManager(private val plugin: ZombieRun) {
                 player.addPotionEffect(org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.SLOWNESS, -1, 0, false, false))
             }, null)
         } else {
-            adsProgress[player.uniqueId] = 0f
+            adsActive.remove(player.uniqueId)
             player.scheduler.run(plugin, { _ ->
                 val attr = player.getAttribute(org.bukkit.attribute.Attribute.MOVEMENT_SPEED)
                 val original = adsOriginalSpeed.remove(player.uniqueId) ?: plugin.balanceConfig.defaultMoveSpeed
                 attr?.baseValue = original
                 player.removePotionEffect(org.bukkit.potion.PotionEffectType.SLOWNESS)
-                lastShotSemi.remove(player.uniqueId) // 关镜重置 semi 标志
+                lastShotSemi.remove(player.uniqueId)
             }, null)
         }
     }
 
-    /** 每 tick 更新 ADS 进度（由 WeaponListener 调用） */
-    fun tickAds(player: Player) {
-        val item = player.inventory.itemInMainHand
-        if (!isZombieRunWeapon(item)) {
-            if (isAds(player)) setAds(player, false)
-            return
-        }
-        val weaponId = getWeaponId(item) ?: return
-        val config = weapons[weaponId] ?: return
-
-        val start = adsStartTime[player.uniqueId]
-        if (start == null) {
-            adsProgress[player.uniqueId] = (adsProgress[player.uniqueId] ?: 0f) * 0.8f // decay
-            if ((adsProgress[player.uniqueId] ?: 0f) < 0.01f) {
-                adsProgress[player.uniqueId] = 0f
-                // Fully restore speed if not aiming anymore
-                if (adsOriginalSpeed.containsKey(player.uniqueId)) {
-                    setAds(player, false)
-                }
-            }
-            return
-        }
-
-        val elapsed = (System.currentTimeMillis() - start) / 1000f
-        val progress = if (config.aimTime > 0f) (elapsed / config.aimTime).coerceIn(0f, 1f) else 1f
-        adsProgress[player.uniqueId] = progress
-    }
-
-    fun getAdsStartTime(player: Player): Long = adsStartTime.getOrDefault(player.uniqueId, 0L)
     fun removeAds(player: Player) {
-        adsProgress.remove(player.uniqueId)
-        adsStartTime.remove(player.uniqueId)
+        if (isAds(player)) setAds(player, false)
         lastShotSemi.remove(player.uniqueId)
     }
 
@@ -623,8 +591,7 @@ class WeaponManager(private val plugin: ZombieRun) {
     fun clearPlayer(player: Player) {
         val uid = player.uniqueId
         cooldowns.remove(uid)
-        adsProgress.remove(uid)
-        adsStartTime.remove(uid)
+        adsActive.remove(uid)
         adsOriginalSpeed.remove(uid)
         stopAutoFire(player)
         reloadTasks.remove(uid)?.cancel()
