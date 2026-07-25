@@ -3,7 +3,7 @@ package cn.oneachina.zombieRun.gui
 import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.manager.ProgressionManager
 import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
@@ -28,20 +28,20 @@ class ProfileGUI(private val plugin: ZombieRun) : Listener {
         val profile = plugin.progressionManager.getProfile(target.uniqueId)
         val title = plugin.titleManager.getPlayerTitle(target)
 
-        val inv = Bukkit.createInventory(null, 27, LegacyComponentSerializer.legacySection().deserialize("§8$GUI_TITLE"))
+        val inv = Bukkit.createInventory(null, 27, Component.text(GUI_TITLE).color(NamedTextColor.DARK_GRAY))
 
         val head = ItemStack(Material.PLAYER_HEAD)
         val headMeta = head.itemMeta
-        headMeta.displayName(LegacyComponentSerializer.legacySection().deserialize("§e${target.name}"))
+        headMeta.displayName(Component.text(target.name, NamedTextColor.YELLOW))
         headMeta.lore(listOf(
-            LegacyComponentSerializer.legacySection().deserialize("§7称号：${title.ifEmpty { "无" }}"),
-            LegacyComponentSerializer.legacySection().deserialize("§b等级：${profile.level}"),
-            LegacyComponentSerializer.legacySection().deserialize("§aXP：${profile.xp} / ${ProgressionManager.xpForLevel(profile.level)}"),
+            Component.text("称号：${title.ifEmpty { "无" }}", NamedTextColor.GRAY),
+            Component.text("等级：${profile.level}", NamedTextColor.AQUA),
+            Component.text("XP：${profile.xp} / ${ProgressionManager.xpForLevel(profile.level)}", NamedTextColor.GREEN),
             Component.empty(),
-            LegacyComponentSerializer.legacySection().deserialize("§7总击杀：${profile.totalKills}"),
-            LegacyComponentSerializer.legacySection().deserialize("§7总感染：${profile.totalInfections}"),
-            LegacyComponentSerializer.legacySection().deserialize("§7参与局数：${profile.gamesPlayed}"),
-            LegacyComponentSerializer.legacySection().deserialize("§7人类获胜：${profile.humanWins}")
+            Component.text("总击杀：${profile.totalKills}", NamedTextColor.GRAY),
+            Component.text("总感染：${profile.totalInfections}", NamedTextColor.GRAY),
+            Component.text("参与局数：${profile.gamesPlayed}", NamedTextColor.GRAY),
+            Component.text("人类获胜：${profile.humanWins}", NamedTextColor.GRAY)
         ))
         headMeta.setEnchantmentGlintOverride(false)
         head.itemMeta = headMeta
@@ -62,14 +62,12 @@ class ProfileGUI(private val plugin: ZombieRun) : Listener {
             val item = ItemStack(material)
             val meta = item.itemMeta
             meta.displayName(
-                LegacyComponentSerializer.legacySection().deserialize(
-                    if (unlocked) "§a${desc[0]}" else "§7🔒 ${desc[0]}"
-                )
+                if (unlocked) Component.text(desc[0], NamedTextColor.GREEN)
+                else Component.text("🔒 ${desc[0]}", NamedTextColor.GRAY)
             )
             meta.lore(listOf(
-                LegacyComponentSerializer.legacySection().deserialize(
-                    if (unlocked) "§a已解锁" else "§7需要 ${desc[1]}"
-                )
+                if (unlocked) Component.text("已解锁", NamedTextColor.GREEN)
+                else Component.text("需要 ${desc[1]}", NamedTextColor.GRAY)
             ))
             meta.persistentDataContainer.set(profileKey, PersistentDataType.STRING, "unlock")
             item.itemMeta = meta
@@ -78,7 +76,7 @@ class ProfileGUI(private val plugin: ZombieRun) : Listener {
 
         val close = ItemStack(Material.BARRIER)
         val closeMeta = close.itemMeta
-        closeMeta.displayName(LegacyComponentSerializer.legacySection().deserialize("§c关闭"))
+        closeMeta.displayName(Component.text("关闭", NamedTextColor.RED))
         closeMeta.persistentDataContainer.set(profileKey, PersistentDataType.STRING, "close")
         close.itemMeta = closeMeta
         inv.setItem(22, close)

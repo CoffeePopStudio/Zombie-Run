@@ -2,10 +2,10 @@ package cn.oneachina.zombieRun.listener
 
 import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.manager.GameManager
+import cn.oneachina.zombieRun.util.DebugLogger
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.title.Title
 import org.bukkit.Bukkit
 import org.bukkit.GameMode
@@ -43,6 +43,7 @@ class CombatListener(
             plugin.healthManager.damage(victim, swordDamage, attacker)
             victim.velocity = victim.velocity.add(attacker.location.direction.setY(-1.0).normalize().multiply(0.3))
             attacker.sendActionBar(Component.text("造成伤害: ${String.format("%.1f", swordDamage)}").color(NamedTextColor.RED))
+            DebugLogger.damage("${attacker.name}(人类) → ${victim.name}(${victimTeam}) ${String.format("%.1f", swordDamage)}伤害 [HP:${String.format("%.1f", plugin.healthManager.getHealth(victim))}]")
             return
         }
 
@@ -51,6 +52,7 @@ class CombatListener(
             val zombieDamage = if (attackerTeam == GameManager.Team.ZOMBIE_MAIN)
                 plugin.combatConfig.zombieMainDamage else plugin.combatConfig.zombieDamage
             plugin.healthManager.damage(victim, zombieDamage, attacker)
+            DebugLogger.damage("${attacker.name}(${attackerTeam}) → ${victim.name}(人类) ${String.format("%.1f", zombieDamage)}伤害 [HP:${String.format("%.1f", plugin.healthManager.getHealth(victim))}]")
         }
     }
 
@@ -81,12 +83,21 @@ class CombatListener(
                     val reward = if (victimTeam == GameManager.Team.ZOMBIE_MAIN)
                         plugin.economyConfig.killZombieMainCoins else plugin.economyConfig.killZombieCoins
                     plugin.coinManager.addCoins(killer.uniqueId, reward)
-                    killer.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§6+ $reward 硬币!"))
-                    val teamColorCode = if (victimTeam == GameManager.Team.ZOMBIE_MAIN) "5" else "2"
-                    Bukkit.broadcast(LegacyComponentSerializer.legacySection().deserialize("§b${killer.name} §f击杀了 §${teamColorCode}${victim.name}"))
+                    killer.sendMessage(Component.text("+ $reward 硬币!", NamedTextColor.GOLD))
+                    val teamColor = if (victimTeam == GameManager.Team.ZOMBIE_MAIN) NamedTextColor.DARK_PURPLE else NamedTextColor.DARK_GREEN
+                    Bukkit.broadcast(Component.text()
+                        .append(Component.text(killer.name, NamedTextColor.AQUA))
+                        .append(Component.text(" 击杀了 ", NamedTextColor.WHITE))
+                        .append(Component.text(victim.name, teamColor))
+                        .build())
                 } else {
-                    Bukkit.broadcast(LegacyComponentSerializer.legacySection().deserialize("§2${victim.name} §f死亡了"))
+                    Bukkit.broadcast(Component.text()
+                        .append(Component.text(victim.name, NamedTextColor.DARK_GREEN))
+                        .append(Component.text(" 死亡了", NamedTextColor.WHITE))
+                        .build())
                 }
+
+                DebugLogger.damage("${victim.name} 被击杀 (${victimTeam})")
                 victim.gameMode = GameMode.SPECTATOR
                 scheduleZombieRespawn(victim, Component.text("你已复活为僵尸！", NamedTextColor.DARK_GREEN))
             }
@@ -124,8 +135,14 @@ class CombatListener(
         plugin.progressionListener.onInfectHuman(attacker, victim)
         plugin.coinManager.addCoins(attacker.uniqueId, plugin.economyConfig.infectHumanCoins)
 
-        val attackerColor = if (plugin.gameManager.getPlayerTeam(attacker) == GameManager.Team.ZOMBIE_MAIN) "5" else "2"
-        Bukkit.broadcast(LegacyComponentSerializer.legacySection().deserialize("§${attackerColor}${attacker.name} §c感染了 §b${victim.name}"))
+        val attackerColor = if (plugin.gameManager.getPlayerTeam(attacker) == GameManager.Team.ZOMBIE_MAIN) NamedTextColor.DARK_PURPLE else NamedTextColor.DARK_GREEN
+        Bukkit.broadcast(Component.text()
+            .append(Component.text(attacker.name, attackerColor))
+            .append(Component.text(" 感染了 ", NamedTextColor.RED))
+            .append(Component.text(victim.name, NamedTextColor.AQUA))
+            .build())
+
+        DebugLogger.damage("${victim.name} 被 ${attacker.name} 感染")
 
         victim.inventory.clear()
         plugin.gameManager.setPlayerTeam(victim, GameManager.Team.ZOMBIE)
@@ -141,8 +158,8 @@ class CombatListener(
             }
             if (countdown > 0) {
                 val title = Title.title(
-                    LegacyComponentSerializer.legacySection().deserialize("§c$countdown"),
-                    LegacyComponentSerializer.legacySection().deserialize("§2你已死亡，等待部署"),
+                    Component.text("$countdown", NamedTextColor.RED),
+                    Component.text("你已死亡，等待部署", NamedTextColor.DARK_GREEN),
                     Title.Times.times(Duration.ZERO, Duration.ofSeconds(1), Duration.ZERO)
                 )
                 victim.showTitle(title)

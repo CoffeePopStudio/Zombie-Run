@@ -3,7 +3,8 @@ package cn.oneachina.zombieRun.listener
 import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.manager.GameManager
 import com.destroystokyo.paper.event.player.PlayerJumpEvent
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerMoveEvent
@@ -41,7 +42,7 @@ class StaminaListener(private val plugin: ZombieRun) : Listener {
 
         if (event.isSprinting && !plugin.staminaManager.canSprintOrJump(player)) {
             event.isCancelled = true
-            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c体力耗尽！请等待体力恢复到100才能疾跑。"))
+            player.sendMessage(Component.text("体力耗尽！请等待体力恢复到100才能疾跑。", NamedTextColor.RED))
         }
     }
 
@@ -53,7 +54,7 @@ class StaminaListener(private val plugin: ZombieRun) : Listener {
 
         if (!plugin.staminaManager.canSprintOrJump(player)) {
             event.isCancelled = true
-            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c体力耗尽！请等待体力恢复到100才能跳跃。"))
+            player.sendMessage(Component.text("体力耗尽！请等待体力恢复到100才能跳跃。", NamedTextColor.RED))
             return
         }
 

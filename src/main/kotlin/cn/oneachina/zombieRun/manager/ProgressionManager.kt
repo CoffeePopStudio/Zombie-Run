@@ -4,7 +4,6 @@ import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.model.PlayerProfile
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.title.Title
 import org.bukkit.Bukkit
 import org.bukkit.Sound
@@ -155,12 +154,20 @@ class ProgressionManager(private val plugin: ZombieRun) {
 
             player.showTitle(Title.title(
                 Component.text("⬆ 升级！", NamedTextColor.GOLD),
-                LegacyComponentSerializer.legacySection().deserialize("§fLv.${profile.level - 1} → §eLv.${profile.level}"),
+                Component.text()
+                    .append(Component.text("Lv.${profile.level - 1} → ", NamedTextColor.WHITE))
+                    .append(Component.text("Lv.${profile.level}", NamedTextColor.YELLOW))
+                    .build(),
                 Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(2), Duration.ofMillis(500))
             ))
             player.playSound(player.location, Sound.ENTITY_PLAYER_LEVELUP, 1f, 1f)
             Bukkit.broadcast(
-                LegacyComponentSerializer.legacySection().deserialize("§6${player.name} 升级到 §eLv.${profile.level}§6！")
+                Component.text()
+                    .append(Component.text(player.name, NamedTextColor.GOLD))
+                    .append(Component.text(" 升级到 ", NamedTextColor.GOLD))
+                    .append(Component.text("Lv.${profile.level}", NamedTextColor.YELLOW))
+                    .append(Component.text("！", NamedTextColor.GOLD))
+                    .build()
             )
 
             handleLevelUnlock(player.uniqueId, profile.level)
@@ -173,19 +180,47 @@ class ProgressionManager(private val plugin: ZombieRun) {
     private fun handleLevelUnlock(uuid: UUID, level: Int) {
         val player = Bukkit.getPlayer(uuid) ?: return
         when (level) {
-            5 -> unlock(uuid, "title_survivor", player, "§a解锁称号：§e「幸存者」")
-            10 -> unlock(uuid, "title_escape_expert", player, "§a解锁称号：§e「逃生专家」")
-            15 -> unlock(uuid, "golden_pistol", player, "§a解锁金色手枪皮肤！")
-            20 -> unlock(uuid, "title_elite_agent", player, "§a解锁称号：§e「精英特工」")
-            25 -> unlock(uuid, "title_light_of_hope", player, "§a解锁称号：§e「希望之光」")
-            30 -> unlock(uuid, "title_legend", player, "§a解锁称号：§e「传奇」")
-            35 -> unlock(uuid, "title_butcher", player, "§a解锁称号：§e「屠夫」")
-            40 -> unlock(uuid, "title_undying", player, "§a解锁称号：§e「不死之身」")
-            50 -> unlock(uuid, "golden_rifle", player, "§a解锁金色步枪皮肤！")
+            5 -> unlock(uuid, "title_survivor", player,
+                Component.text()
+                    .append(Component.text("解锁称号：", NamedTextColor.GREEN))
+                    .append(Component.text("「幸存者」", NamedTextColor.YELLOW))
+                    .build())
+            10 -> unlock(uuid, "title_escape_expert", player,
+                Component.text()
+                    .append(Component.text("解锁称号：", NamedTextColor.GREEN))
+                    .append(Component.text("「逃生专家」", NamedTextColor.YELLOW))
+                    .build())
+            15 -> unlock(uuid, "golden_pistol", player, Component.text("解锁金色手枪皮肤！", NamedTextColor.GREEN))
+            20 -> unlock(uuid, "title_elite_agent", player,
+                Component.text()
+                    .append(Component.text("解锁称号：", NamedTextColor.GREEN))
+                    .append(Component.text("「精英特工」", NamedTextColor.YELLOW))
+                    .build())
+            25 -> unlock(uuid, "title_light_of_hope", player,
+                Component.text()
+                    .append(Component.text("解锁称号：", NamedTextColor.GREEN))
+                    .append(Component.text("「希望之光」", NamedTextColor.YELLOW))
+                    .build())
+            30 -> unlock(uuid, "title_legend", player,
+                Component.text()
+                    .append(Component.text("解锁称号：", NamedTextColor.GREEN))
+                    .append(Component.text("「传奇」", NamedTextColor.YELLOW))
+                    .build())
+            35 -> unlock(uuid, "title_butcher", player,
+                Component.text()
+                    .append(Component.text("解锁称号：", NamedTextColor.GREEN))
+                    .append(Component.text("「屠夫」", NamedTextColor.YELLOW))
+                    .build())
+            40 -> unlock(uuid, "title_undying", player,
+                Component.text()
+                    .append(Component.text("解锁称号：", NamedTextColor.GREEN))
+                    .append(Component.text("「不死之身」", NamedTextColor.YELLOW))
+                    .build())
+            50 -> unlock(uuid, "golden_rifle", player, Component.text("解锁金色步枪皮肤！", NamedTextColor.GREEN))
         }
     }
 
-    private fun unlock(uuid: UUID, unlockId: String, player: Player, msg: String) {
+    private fun unlock(uuid: UUID, unlockId: String, player: Player, msg: Component) {
         CompletableFuture.runAsync {
             getConnection().use { conn ->
                 conn.prepareStatement(
@@ -199,7 +234,7 @@ class ProgressionManager(private val plugin: ZombieRun) {
             }
         }
         plugin.titleManager.invalidateUnlockCache(uuid)
-        player.sendMessage(LegacyComponentSerializer.legacySection().deserialize(msg))
+        player.sendMessage(msg)
     }
 
     fun getUnlocks(uuid: UUID): Set<String> {
@@ -274,9 +309,13 @@ class ProgressionManager(private val plugin: ZombieRun) {
 
     private fun buildActionBar(profile: PlayerProfile): Component {
         val needed = if (profile.level < MAX_LEVEL) xpForLevel(profile.level) else profile.xp
-        return LegacyComponentSerializer.legacySection().deserialize(
-            "§bLv.${profile.level}  §f|  §a${profile.xp} §f/ §7$needed XP"
-        )
+        return Component.text()
+            .append(Component.text("Lv.${profile.level}", NamedTextColor.AQUA))
+            .append(Component.text("  |  ", NamedTextColor.WHITE))
+            .append(Component.text("${profile.xp}", NamedTextColor.GREEN))
+            .append(Component.text(" / ", NamedTextColor.WHITE))
+            .append(Component.text("$needed XP", NamedTextColor.GRAY))
+            .build()
     }
 
     private fun updateAsync(uuid: UUID) {

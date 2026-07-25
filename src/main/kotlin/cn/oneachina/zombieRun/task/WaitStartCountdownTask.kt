@@ -5,7 +5,6 @@ import cn.oneachina.zombieRun.manager.GameManager
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.title.Title
 import org.bukkit.Bukkit
 
@@ -41,7 +40,11 @@ class WaitStartCountdownTask(
             Bukkit.getOnlinePlayers().forEach { player ->
                 player.showTitle(Title.title(
                     Component.text("", NamedTextColor.GREEN),
-                    LegacyComponentSerializer.legacySection().deserialize("§a游戏将在 §c$countdown §a秒后开始")
+                    Component.text()
+                        .append(Component.text("游戏将在 ", NamedTextColor.GREEN))
+                        .append(Component.text("$countdown", NamedTextColor.RED))
+                        .append(Component.text(" 秒后开始", NamedTextColor.GREEN))
+                        .build()
                 ))
             }
 

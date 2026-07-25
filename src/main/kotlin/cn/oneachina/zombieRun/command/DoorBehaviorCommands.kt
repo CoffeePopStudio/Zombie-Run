@@ -4,43 +4,42 @@ import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.model.SpecialDoorBehavior
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 
 object DoorBehaviorCommands {
 
     fun handle(plugin: ZombieRun, sender: org.bukkit.command.CommandSender, args: Array<out String>, gListener: cn.oneachina.zombieRun.listener.GameListener) {
         if (args.isEmpty()) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c用法: /zr door behavior <set|remove|info>"))
+            sender.sendMessage(Component.text("用法: /zr door behavior <set|remove|info>", NamedTextColor.RED))
             return
         }
         when (args[0].lowercase()) {
             "set" -> handleSet(plugin, sender, args.drop(1).toTypedArray(), gListener)
             "remove" -> handleRemove(plugin, sender, args.drop(1).toTypedArray())
             "info" -> handleInfo(plugin, sender, args.drop(1).toTypedArray())
-            else -> sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c未知子命令: set, remove, info"))
+            else -> sender.sendMessage(Component.text("未知子命令: set, remove, info", NamedTextColor.RED))
         }
     }
 
     private fun handleSet(plugin: ZombieRun, sender: org.bukkit.command.CommandSender, args: Array<out String>, gListener: cn.oneachina.zombieRun.listener.GameListener) {
         val player = sender as? org.bukkit.entity.Player
         if (args.size < 2) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c用法:"))
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c/zr door behavior set <门号> subway <线路名> [手打坐标...]"))
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c/zr door behavior set <门号> elevator"))
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c/zr door behavior set <门号> airport [delayTicks]"))
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&e使用 /zr postool 选区后可省略坐标！"))
+            sender.sendMessage(Component.text("用法:", NamedTextColor.RED))
+            sender.sendMessage(Component.text("/zr door behavior set <门号> subway <线路名> [手打坐标...]", NamedTextColor.RED))
+            sender.sendMessage(Component.text("/zr door behavior set <门号> elevator", NamedTextColor.RED))
+            sender.sendMessage(Component.text("/zr door behavior set <门号> airport [delayTicks]", NamedTextColor.RED))
+            sender.sendMessage(Component.text("使用 /zr postool 选区后可省略坐标！", NamedTextColor.YELLOW))
             return
         }
 
         val doorNumber = args[0].toIntOrNull()
         if (doorNumber == null) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c门号必须是数字！"))
+            sender.sendMessage(Component.text("门号必须是数字！", NamedTextColor.RED))
             return
         }
 
         val door = plugin.doorManager.getDoorByNumber(doorNumber)
         if (door == null) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c门号 $doorNumber 不存在！"))
+            sender.sendMessage(Component.text("门号 $doorNumber 不存在！", NamedTextColor.RED))
             return
         }
 
@@ -59,9 +58,9 @@ object DoorBehaviorCommands {
                 d.specialBehavior = behavior
                 plugin.configManager.addDoorFull(d)
             }
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&a门号 ${doorNumber}${if (groupDoors.size > 1) "（同组 ${groupDoors.size} 扇门）" else ""} behavior 已设置为 $type"))
+            sender.sendMessage(Component.text("门号 ${doorNumber}${if (groupDoors.size > 1) "（同组 ${groupDoors.size} 扇门）" else ""} behavior 已设置为 $type", NamedTextColor.GREEN))
         } catch (_: NumberFormatException) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c坐标/参数必须是整数！"))
+            sender.sendMessage(Component.text("坐标/参数必须是整数！", NamedTextColor.RED))
         }
     }
 
@@ -83,7 +82,7 @@ object DoorBehaviorCommands {
             return when (type) {
                 "elevator" -> {
                     if (hTarget == null) {
-                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c请先用 postool 选取 pos1（人类目标Y）"))
+                        sender.sendMessage(Component.text("请先用 postool 选取 pos1（人类目标Y）", NamedTextColor.RED))
                         return null
                     }
                     SpecialDoorBehavior.Elevator(
@@ -108,7 +107,7 @@ object DoorBehaviorCommands {
                             lineName = lineName
                         )
                     } else {
-                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c请先用 postool 选区或手打坐标！"))
+                        sender.sendMessage(Component.text("请先用 postool 选区或手打坐标！", NamedTextColor.RED))
                         return null
                     }
                 }
@@ -129,12 +128,12 @@ object DoorBehaviorCommands {
                             delayTicks = delayTicks
                         )
                     } else {
-                        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c请先用 postool 选区或手打坐标！"))
+                    sender.sendMessage(Component.text("请先用 postool 选区或手打坐标！", NamedTextColor.RED))
                         return null
                     }
                 }
                 else -> {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c未知类型: $type"))
+                        sender.sendMessage(Component.text("未知类型: $type", NamedTextColor.RED))
                     return null
                 }
             }
@@ -144,7 +143,7 @@ object DoorBehaviorCommands {
         return when (type) {
             "elevator" -> {
                 if (args.size < 3) {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c用法: ... elevator <human-y> [zombie-y]"))
+                    sender.sendMessage(Component.text("用法: ... elevator <human-y> [zombie-y]", NamedTextColor.RED))
                     return null
                 }
                 SpecialDoorBehavior.Elevator(
@@ -154,7 +153,7 @@ object DoorBehaviorCommands {
             }
             "subway" -> {
                 if (args.size < 6) {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c用法: ... subway <线路名> <hx> <hy> <hz> [zx] [zy] [zz]"))
+                    sender.sendMessage(Component.text("用法: ... subway <线路名> <hx> <hy> <hz> [zx] [zy] [zz]", NamedTextColor.RED))
                     return null
                 }
                 SpecialDoorBehavior.Subway(
@@ -167,7 +166,7 @@ object DoorBehaviorCommands {
             }
             "airport" -> {
                 if (args.size < 5) {
-                    sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c用法: ... airport <hx> <hy> <hz> [zx] [zy] [zz] [delayTicks]"))
+                    sender.sendMessage(Component.text("用法: ... airport <hx> <hy> <hz> [zx] [zy] [zz] [delayTicks]", NamedTextColor.RED))
                     return null
                 }
                 SpecialDoorBehavior.Airport(
@@ -179,7 +178,7 @@ object DoorBehaviorCommands {
                 )
             }
             else -> {
-                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c未知类型: $type"))
+                sender.sendMessage(Component.text("未知类型: $type", NamedTextColor.RED))
                 null
             }
         }
@@ -187,17 +186,17 @@ object DoorBehaviorCommands {
 
     private fun handleRemove(plugin: ZombieRun, sender: org.bukkit.command.CommandSender, args: Array<out String>) {
         if (args.isEmpty()) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c用法: /zr door behavior remove <门号>"))
+            sender.sendMessage(Component.text("用法: /zr door behavior remove <门号>", NamedTextColor.RED))
             return
         }
         val doorNumber = args[0].toIntOrNull()
         if (doorNumber == null) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c门号必须是数字！"))
+            sender.sendMessage(Component.text("门号必须是数字！", NamedTextColor.RED))
             return
         }
         val door = plugin.doorManager.getDoorByNumber(doorNumber)
         if (door == null) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c门号 $doorNumber 不存在！"))
+            sender.sendMessage(Component.text("门号 $doorNumber 不存在！", NamedTextColor.RED))
             return
         }
         val groupDoors = if (!door.group.isNullOrBlank()) plugin.doorManager.getDoorsInGroup(door.group!!) else listOf(door)
@@ -205,22 +204,22 @@ object DoorBehaviorCommands {
             d.specialBehavior = null
             plugin.configManager.addDoorFull(d)
         }
-        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&a门号 $doorNumber 的 behavior 已移除"))
+        sender.sendMessage(Component.text("门号 $doorNumber 的 behavior 已移除", NamedTextColor.GREEN))
     }
 
     private fun handleInfo(plugin: ZombieRun, sender: org.bukkit.command.CommandSender, args: Array<out String>) {
         if (args.isEmpty()) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c用法: /zr door behavior info <门号>"))
+            sender.sendMessage(Component.text("用法: /zr door behavior info <门号>", NamedTextColor.RED))
             return
         }
         val doorNumber = args[0].toIntOrNull()
         if (doorNumber == null) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c门号必须是数字！"))
+            sender.sendMessage(Component.text("门号必须是数字！", NamedTextColor.RED))
             return
         }
         val door = plugin.doorManager.getDoorByNumber(doorNumber)
         if (door == null) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&c门号 $doorNumber 不存在！"))
+            sender.sendMessage(Component.text("门号 $doorNumber 不存在！", NamedTextColor.RED))
             return
         }
         plugin.logger.info("===== 门号 $doorNumber =====")
@@ -251,6 +250,6 @@ object DoorBehaviorCommands {
                 plugin.logger.info("延迟: ${b.delayTicks} ticks")
             }
         }
-        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&a门号 $doorNumber 信息已输出到控制台"))
+        sender.sendMessage(Component.text("门号 $doorNumber 信息已输出到控制台", NamedTextColor.GREEN))
     }
 }

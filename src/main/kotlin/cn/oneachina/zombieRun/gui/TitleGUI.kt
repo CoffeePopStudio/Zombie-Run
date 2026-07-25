@@ -2,7 +2,7 @@ package cn.oneachina.zombieRun.gui
 
 import cn.oneachina.zombieRun.ZombieRun
 import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
@@ -28,20 +28,21 @@ class TitleGUI(private val plugin: ZombieRun) : Listener {
         val rows = maxOf(1, (titles.size + 1) / 9 + 1)
         val size = rows * 9
 
-        val inv = Bukkit.createInventory(null, size, LegacyComponentSerializer.legacySection().deserialize("§8$GUI_TITLE"))
+        val inv = Bukkit.createInventory(null, size, Component.text(GUI_TITLE).color(NamedTextColor.DARK_GRAY))
 
         val currentTitle = plugin.titleManager.getPlayerTitle(player)
 
         val noneItem = ItemStack(Material.BARRIER)
         val noneMeta = noneItem.itemMeta
         if (currentTitle.isEmpty()) {
-            noneMeta.displayName(LegacyComponentSerializer.legacySection().deserialize("§a► 默认（已装备）"))
+            noneMeta.displayName(Component.text("► 默认（已装备）", NamedTextColor.GREEN))
         } else {
-            noneMeta.displayName(LegacyComponentSerializer.legacySection().deserialize("§7默认"))
+            noneMeta.displayName(Component.text("默认", NamedTextColor.GRAY))
         }
+        val defaultTitle = cn.oneachina.zombieRun.manager.TitleManager.getDefaultTitle(plugin.progressionManager.getLevel(player.uniqueId))
         noneMeta.lore(listOf(
-            LegacyComponentSerializer.legacySection().deserialize("§7使用等级默认称号"),
-            LegacyComponentSerializer.legacySection().deserialize("§7当前：${cn.oneachina.zombieRun.manager.TitleManager.getDefaultTitle(plugin.progressionManager.getLevel(player.uniqueId)).ifEmpty { "无" }}")
+            Component.text("使用等级默认称号", NamedTextColor.GRAY),
+            Component.text("当前：${defaultTitle.ifEmpty { "无" }}", NamedTextColor.GRAY)
         ))
         noneMeta.persistentDataContainer.set(titleKey, PersistentDataType.STRING, "none")
         noneItem.itemMeta = noneMeta
@@ -51,8 +52,8 @@ class TitleGUI(private val plugin: ZombieRun) : Listener {
             val material = if (name == currentTitle) Material.LIME_STAINED_GLASS_PANE else Material.WHITE_STAINED_GLASS_PANE
             val item = ItemStack(material)
             val meta = item.itemMeta
-            val prefix = if (name == currentTitle) "§a► " else ""
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize("${prefix}§f$name"))
+            val prefix = if (name == currentTitle) "► " else ""
+            meta.displayName(Component.text("$prefix$name", NamedTextColor.WHITE))
             meta.persistentDataContainer.set(titleKey, PersistentDataType.STRING, "select")
             meta.persistentDataContainer.set(equipKey, PersistentDataType.STRING, name)
             if (name == currentTitle) {
@@ -64,7 +65,7 @@ class TitleGUI(private val plugin: ZombieRun) : Listener {
 
         val close = ItemStack(Material.BARRIER)
         val closeMeta = close.itemMeta
-        closeMeta.displayName(LegacyComponentSerializer.legacySection().deserialize("§c关闭"))
+        closeMeta.displayName(Component.text("关闭", NamedTextColor.RED))
         closeMeta.persistentDataContainer.set(titleKey, PersistentDataType.STRING, "close")
         close.itemMeta = closeMeta
         inv.setItem(size - 5, close)
@@ -87,13 +88,16 @@ class TitleGUI(private val plugin: ZombieRun) : Listener {
         when (action) {
             "none" -> {
                 plugin.titleManager.equipTitle(player, null)
-                player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已切换到默认称号"))
+                player.sendMessage(Component.text("已切换到默认称号", NamedTextColor.GREEN))
                 player.closeInventory()
             }
             "select" -> {
                 val titleName = meta.persistentDataContainer.get(equipKey, PersistentDataType.STRING)
                 if (titleName != null && plugin.titleManager.equipTitle(player, titleName)) {
-                    player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a已装备称号：§e$titleName"))
+                    player.sendMessage(Component.text()
+                        .append(Component.text("已装备称号：", NamedTextColor.GREEN))
+                        .append(Component.text(titleName, NamedTextColor.YELLOW))
+                        .build())
                     player.closeInventory()
                 }
             }

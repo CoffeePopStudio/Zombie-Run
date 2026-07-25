@@ -4,7 +4,6 @@ import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.model.PlayerQuestProgress
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
@@ -32,7 +31,7 @@ class QuestGUI(private val plugin: ZombieRun) : Listener {
         val rows = ((totalSize / 9) + 1).coerceAtMost(6)
         val size = rows * 9
 
-        val inv = Bukkit.createInventory(null, size, LegacyComponentSerializer.legacySection().deserialize("§8$GUI_TITLE"))
+        val inv = Bukkit.createInventory(null, size, Component.text(GUI_TITLE).color(NamedTextColor.DARK_GRAY))
 
         val dailyLabel = ItemStack(Material.CLOCK)
         val dMeta = dailyLabel.itemMeta
@@ -59,7 +58,7 @@ class QuestGUI(private val plugin: ZombieRun) : Listener {
 
         val close = ItemStack(Material.BARRIER)
         val closeMeta = close.itemMeta
-        closeMeta.displayName(LegacyComponentSerializer.legacySection().deserialize("§c关闭"))
+        closeMeta.displayName(Component.text("关闭", NamedTextColor.RED))
         closeMeta.persistentDataContainer.set(questKey, PersistentDataType.STRING, "close")
         close.itemMeta = closeMeta
         inv.setItem(size - 5, close)
@@ -82,18 +81,26 @@ class QuestGUI(private val plugin: ZombieRun) : Listener {
         val item = ItemStack(material)
         val meta = item.itemMeta
 
-        val doneMark = if (quest.progress >= def.target) "§a✅" else ""
-        meta.displayName(LegacyComponentSerializer.legacySection().deserialize("$doneMark §f${def.desc}"))
+        val doneMark = if (quest.progress >= def.target) "✅" else ""
+        meta.displayName(Component.text("$doneMark ${def.desc}", NamedTextColor.WHITE))
 
         val lore = mutableListOf<Component>()
-        lore.add(LegacyComponentSerializer.legacySection().deserialize(
-            "§7进度：§a${quest.progress}§7/§7${def.target}"
-        ))
-        val rewards = mutableListOf<String>()
-        if (def.rewardXp > 0) rewards.add("§e${def.rewardXp} XP")
-        if (def.rewardCoins > 0) rewards.add("§6${def.rewardCoins} 硬币")
-        if (rewards.isNotEmpty()) {
-            lore.add(LegacyComponentSerializer.legacySection().deserialize("§7奖励：${rewards.joinToString(" ")}"))
+        lore.add(Component.text()
+            .append(Component.text("进度：", NamedTextColor.GRAY))
+            .append(Component.text("${quest.progress}", NamedTextColor.GREEN))
+            .append(Component.text("/${def.target}", NamedTextColor.GRAY))
+            .build())
+        val rewardComponents = mutableListOf<Component>()
+        if (def.rewardXp > 0) rewardComponents.add(Component.text("${def.rewardXp} XP", NamedTextColor.YELLOW))
+        if (def.rewardCoins > 0) rewardComponents.add(Component.text("${def.rewardCoins} 硬币", NamedTextColor.GOLD))
+        if (rewardComponents.isNotEmpty()) {
+            val rewardLine = Component.text()
+                .append(Component.text("奖励：", NamedTextColor.GRAY))
+            rewardComponents.forEachIndexed { i, c ->
+                rewardLine.append(c)
+                if (i < rewardComponents.size - 1) rewardLine.append(Component.text(" ", NamedTextColor.GRAY))
+            }
+            lore.add(rewardLine.build())
         }
         if (quest.progress >= def.target) {
             meta.setEnchantmentGlintOverride(true)

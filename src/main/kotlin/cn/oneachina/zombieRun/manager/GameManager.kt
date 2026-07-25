@@ -4,11 +4,11 @@ import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.model.Door
 import cn.oneachina.zombieRun.task.StartCountdownTask
 import cn.oneachina.zombieRun.task.WaitStartCountdownTask
+import cn.oneachina.zombieRun.util.DebugLogger
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.title.Title
 import org.bukkit.Bukkit
 import org.bukkit.GameMode
@@ -67,7 +67,9 @@ class GameManager(private val plugin: ZombieRun) {
     }
 
     fun setGameStatus(newStatus: GameStatus) {
+        val oldStatus = this.status
         this.status = newStatus
+        DebugLogger.game("游戏状态 $oldStatus → $newStatus")
     }
 
     fun forceStartGame() {
@@ -156,7 +158,7 @@ class GameManager(private val plugin: ZombieRun) {
         maxDurationTask = Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
             if (status == GameStatus.RUNNING) {
                 plugin.logger.info("游戏时间已达上限，强制结束")
-                Bukkit.broadcast(LegacyComponentSerializer.legacySection().deserialize("§c游戏时间已达上限！"))
+                Bukkit.broadcast(Component.text("游戏时间已达上限！", NamedTextColor.RED))
                 endGame(Team.SPECTATOR)
             }
         }, (maxDuration * 20L).coerceAtLeast(1L))
@@ -302,7 +304,7 @@ class GameManager(private val plugin: ZombieRun) {
         topThree.forEachIndexed { index, (player, _) ->
             val reward = rewards.getOrNull(index) ?: 0
             plugin.coinManager.addCoins(player.uniqueId, reward)
-            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§6+ $reward 硬币! ($label 第 ${index + 1} 名)"))
+            player.sendMessage(Component.text("+ $reward 硬币! ($label 第 ${index + 1} 名)", NamedTextColor.GOLD))
         }
     }
 
@@ -310,7 +312,13 @@ class GameManager(private val plugin: ZombieRun) {
 
     fun getPlayerTeam(player: Player?) = playerTeams.getOrDefault(player, Team.SPECTATOR)
     fun getPlayerRoom(player: Player) = playerRooms.getOrDefault(player, 0)
-    fun setPlayerRoom(player: Player, room: Int) { playerRooms[player] = room }
+    fun setPlayerRoom(player: Player, room: Int) {
+        val oldRoom = playerRooms[player]
+        playerRooms[player] = room
+        if (oldRoom != room) {
+            DebugLogger.room("${player.name} 区域 $oldRoom → $room")
+        }
+    }
     fun getGameStartTime(): Long = gameStartTime
     fun getHumans(): List<Player> = humans
     fun getZombies(): List<Player> = zombies
@@ -359,7 +367,7 @@ class GameManager(private val plugin: ZombieRun) {
                 if (onlineCount < minPlayers) {
                     cancelCountdownTask()
                     setGameStatus(GameStatus.WAITING)
-                    Bukkit.broadcast(LegacyComponentSerializer.legacySection().deserialize("§c人数不足，游戏取消"))
+                    Bukkit.broadcast(Component.text("人数不足，游戏取消", NamedTextColor.RED))
                 }
             }
 

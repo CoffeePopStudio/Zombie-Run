@@ -3,7 +3,6 @@ package cn.oneachina.zombieRun.manager
 import cn.oneachina.zombieRun.ZombieRun
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.enchantments.Enchantment
@@ -53,7 +52,7 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
     fun giveRandomGun(player: Player) {
         val weaponIds = plugin.weaponManager.getWeaponIds()
         if (weaponIds.isEmpty()) {
-            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c未找到可用枪械配置。"))
+            player.sendMessage(Component.text("未找到可用枪械配置。", NamedTextColor.RED))
             giveFallbackSword(player)
             return
         }
@@ -64,10 +63,10 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
             val price = config?.price ?: 600
             if (plugin.coinManager.takeCoins(player.uniqueId, price)) {
                 val remaining = plugin.coinManager.getCoins(player.uniqueId)
-                player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a购买成功！花费硬币: $price，剩余: $remaining"))
+                player.sendMessage(Component.text("购买成功！花费硬币: $price，剩余: $remaining", NamedTextColor.GREEN))
                 selected
             } else {
-                player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c硬币不足，已改为随机枪械。"))
+                player.sendMessage(Component.text("硬币不足，已改为随机枪械。", NamedTextColor.RED))
                 weaponIds.random()
             }
         } else {
@@ -75,7 +74,7 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
         }
 
         if (!plugin.weaponManager.giveWeapon(player, weaponId)) {
-            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c发放枪械失败：$weaponId"))
+            player.sendMessage(Component.text("发放枪械失败：$weaponId", NamedTextColor.RED))
             giveFallbackSword(player)
             return
         }
@@ -88,7 +87,7 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
         val sword = ItemStack(Material.IRON_SWORD)
         val meta = sword.itemMeta
         meta?.addEnchant(Enchantment.KNOCKBACK, 1, true)
-        meta?.displayName(LegacyComponentSerializer.legacySection().deserialize("§c匕首"))
+        meta?.displayName(Component.text("匕首", NamedTextColor.RED))
         sword.itemMeta = meta
         player.inventory.addItem(sword)
     }
@@ -138,7 +137,7 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
     fun teleportToLobby(player: Player) {
         plugin.respawnManager.teleportToWaitRespawn(player)
         plugin.gameManager.setPlayerTeam(player, GameManager.Team.SPECTATOR)
-        player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a你已传送回大厅"))
+        player.sendMessage(Component.text("你已传送回大厅", NamedTextColor.GREEN))
     }
 
     fun clear() {

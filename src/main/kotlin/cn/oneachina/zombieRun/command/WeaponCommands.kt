@@ -1,22 +1,23 @@
 package cn.oneachina.zombieRun.command
 
 import cn.oneachina.zombieRun.ZombieRun
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.command.CommandSender
 
 object WeaponCommands {
 
     fun handle(plugin: ZombieRun, sender: CommandSender, args: Array<out String>) {
         if (!sender.hasPermission("zombie.run.admin")) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c你没有权限使用此命令！"))
+            sender.sendMessage(Component.text("你没有权限使用此命令！", NamedTextColor.RED))
             return
         }
         if (args.isEmpty() || args[0].lowercase() != "create") {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr weapon create <id> <material> <damage> <price>"))
+            sender.sendMessage(Component.text("用法: /zr weapon create <id> <material> <damage> <price>", NamedTextColor.RED))
             return
         }
         if (args.size < 5) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c用法: /zr weapon create <id> <material> <damage> <price>"))
+            sender.sendMessage(Component.text("用法: /zr weapon create <id> <material> <damage> <price>", NamedTextColor.RED))
             return
         }
         val id = args[1]
@@ -24,7 +25,7 @@ object WeaponCommands {
         val damage = args[3].toDoubleOrNull()
         val price = args[4].toIntOrNull()
         if (damage == null || price == null) {
-            sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c伤害和价格必须是数字！"))
+            sender.sendMessage(Component.text("伤害和价格必须是数字！", NamedTextColor.RED))
             return
         }
 
@@ -56,6 +57,6 @@ object WeaponCommands {
         config.set("custom-weapons.$id.spread-per-shot", 0.02)
         plugin.configManager.saveConfig()
         plugin.weaponManager.loadWeapons()
-        sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a武器 '$id' 已创建到 config.yml，请编辑 config.yml 调整详细属性后 /zr reload"))
+        sender.sendMessage(Component.text("武器 '$id' 已创建到 config.yml，请编辑 config.yml 调整详细属性后 /zr reload", NamedTextColor.GREEN))
     }
 }

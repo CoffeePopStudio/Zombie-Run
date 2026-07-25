@@ -4,7 +4,6 @@ import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.manager.GameManager
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import net.kyori.adventure.title.Title
 import org.bukkit.Bukkit

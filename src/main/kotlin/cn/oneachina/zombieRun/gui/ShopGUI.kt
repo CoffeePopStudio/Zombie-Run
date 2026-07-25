@@ -4,7 +4,6 @@ import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.manager.GameManager
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
@@ -38,15 +37,14 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
             val item = ItemStack(material)
             val meta = item.itemMeta ?: return@forEachIndexed
             val customModelDataComponent = meta.customModelDataComponent
-            val serializer = LegacyComponentSerializer.legacySection()
-            meta.displayName(serializer.deserialize(config.name.replace("&", "§")))
+            meta.displayName(Component.text(config.name.replace(Regex("&[0-9a-fk-or]"), "").trim()))
             val lore : MutableList<Component> = config.lore
-                .map { serializer.deserialize(it.replace("&", "§")) }
+                .map { Component.text(it.replace(Regex("&[0-9a-fk-or]"), "").trim()) }
                 .toMutableList()
             lore.add(Component.empty())
             lore.add(Component.text("价格: ", NamedTextColor.YELLOW)
                 .append(Component.text("${config.price} 硬币", NamedTextColor.GOLD)))
-            lore.add(LegacyComponentSerializer.legacySection().deserialize("§7伤害: ${config.damage} | 弹匣: ${config.magazineSize} | 弹药: ${config.ammoCategory}"))
+            lore.add(Component.text("伤害: ${config.damage} | 弹匣: ${config.magazineSize} | 弹药: ${config.ammoCategory}", NamedTextColor.GRAY))
 
             meta.lore(lore)
             if (!config.customModelData.floats().isEmpty()) {
@@ -103,8 +101,8 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
             plugin.miscManager.setSelectedWeapon(player, weaponIndex)
             val config = plugin.weaponManager.getWeaponConfig(weaponId)
             val price = config?.price ?: 0
-            player.sendMessage(LegacyComponentSerializer.legacySection().deserialize(
-                "§a已预购 ${weaponId}（${price} 硬币），游戏开始自动发放。§7/zr unselect 可取消"
+            player.sendMessage(Component.text(
+                "已预购 $weaponId（$price 硬币），游戏开始自动发放。/zr unselect 可取消", NamedTextColor.GREEN
             ))
             player.closeInventory()
             return

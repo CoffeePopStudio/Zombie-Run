@@ -14,6 +14,7 @@ import cn.oneachina.zombieRun.listener.StaminaListener
 import cn.oneachina.zombieRun.listener.WeaponListener
 import cn.oneachina.zombieRun.manager.*
 import cn.oneachina.zombieRun.papi.ZombieRunExpansion
+import cn.oneachina.zombieRun.util.DebugLogger
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
@@ -82,6 +83,7 @@ class ZombieRun : JavaPlugin() {
         getCommand("zr")?.tabCompleter = zrCommand
         getCommand("doorperf")?.setExecutor(DoorPerformanceCommand(this))
 
+        DebugLogger.init(this)
         logger.info("ZombieRun 核心已启用")
     }
 

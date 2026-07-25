@@ -5,7 +5,6 @@ import cn.oneachina.zombieRun.model.*
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.*
 import org.bukkit.entity.Display
 import org.bukkit.entity.Player
@@ -74,8 +73,8 @@ class WeaponManager(private val plugin: ZombieRun) {
         val item = ItemStack(material)
         val meta = item.itemMeta ?: return null
         val cmdComp = meta.customModelDataComponent
-        meta.displayName(LegacyComponentSerializer.legacySection().deserialize(config.name.replace("&", "§")))
-        val lore = config.lore.map { LegacyComponentSerializer.legacySection().deserialize(it.replace("&", "§")) }.toMutableList()
+        meta.displayName(Component.text(config.name.replace(Regex("&[0-9a-fk-or]"), "").trim()))
+        val lore = config.lore.map { Component.text(it.replace(Regex("&[0-9a-fk-or]"), "").trim()) }.toMutableList()
         meta.lore(lore)
         if (config.customModelData.floats().isNotEmpty()) {
             cmdComp.floats = config.customModelData.floats()
@@ -432,7 +431,7 @@ class WeaponManager(private val plugin: ZombieRun) {
             curPdc.set(reloadKey, PersistentDataType.INTEGER, progress); curItem.itemMeta = curMeta
             val percent = (progress.toDouble() / config.reloadTimeTicks * 100).toInt()
             val filled = "█".repeat(percent / 5); val empty = "░".repeat(20 - percent / 5)
-            player.sendActionBar(LegacyComponentSerializer.legacySection().deserialize("§e装填中... $filled$empty $percent%"))
+            player.sendActionBar(Component.text("装填中... $filled$empty $percent%", NamedTextColor.YELLOW))
         }, 1L, 1L)
 
         reloadTasks[player.uniqueId] = task
@@ -550,7 +549,7 @@ class WeaponManager(private val plugin: ZombieRun) {
         val item = ItemStack(material, amount)
         val meta = item.itemMeta ?: return null
         val cmdComp = meta.customModelDataComponent
-        meta.displayName(LegacyComponentSerializer.legacySection().deserialize(cat.name.replace("&", "§")))
+        meta.displayName(Component.text(cat.name.replace(Regex("&[0-9a-fk-or]"), "").trim()))
         if (cat.customModelData > 0) {
             cmdComp.floats = listOf(cat.customModelData.toFloat())
             meta.setCustomModelDataComponent(cmdComp)

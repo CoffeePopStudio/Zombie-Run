@@ -4,7 +4,8 @@ import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.model.PlayerQuestProgress
 import cn.oneachina.zombieRun.model.QuestDef
 import cn.oneachina.zombieRun.model.QuestType
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import java.sql.Connection
@@ -159,9 +160,10 @@ class QuestManager(private val plugin: ZombieRun) {
         if (def.rewardCoins > 0) rewards.add("${def.rewardCoins} 硬币")
 
         player.sendMessage(
-            LegacyComponentSerializer.legacySection().deserialize(
-                "§a✅ 任务完成：${def.desc} §7(+${rewards.joinToString(", ")})"
-            )
+            Component.text()
+                .append(Component.text("✅ 任务完成：${def.desc} ", NamedTextColor.GREEN))
+                .append(Component.text("(+${rewards.joinToString(", ")})", NamedTextColor.GRAY))
+                .build()
         )
 
         CompletableFuture.runAsync {

@@ -4,7 +4,6 @@ import cn.oneachina.zombieRun.ZombieRun
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.Particle
 import org.bukkit.attribute.Attribute
@@ -121,7 +120,7 @@ class StaminaManager(private val plugin: ZombieRun) {
                 if (ps.isExhausted) {
                     if (ps.stamina >= 100.0) {
                         ps.isExhausted = false
-                        player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§a体力已完全恢复，可以跑跳了！"))
+                        player.sendMessage(Component.text("体力已完全恢复，可以跑跳了！", NamedTextColor.GREEN))
                     } else if (ps.isSprinting) {
                         // 体力耗尽时仍在疾跑：不扣除、不恢复，等待玩家停止疾跑
                         continue
@@ -150,7 +149,7 @@ class StaminaManager(private val plugin: ZombieRun) {
 
                     if (ps.stamina <= 0) {
                         ps.isExhausted = true
-                        player.sendMessage(LegacyComponentSerializer.legacySection().deserialize("§c体力耗尽！请等待体力恢复到100才能跑跳。"))
+                        player.sendMessage(Component.text("体力耗尽！请等待体力恢复到100才能跑跳。", NamedTextColor.RED))
                     }
                 }
 
