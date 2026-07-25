@@ -33,79 +33,74 @@ end:
 # 每扇门需要单独配置一个条目，键名可自定义（如 door_1）
 # 参数说明：
 #   x1/y1/z1, x2/y2/z2: 门的对角方块坐标（插件会自动计算 min/max）
-#   delay:       按下按钮后等待多少秒开门（开门前倒计时）
-#   close-time:  门开启后多少秒自动关闭（关门倒计时）
-#   door-number: 门的编号（房间号判定/传送逻辑的核心标识）
-#   mode:        门模式
-#     - normal: 普通门，由玩家通过按钮触发（人类专用）
+#   duration:     开门+关门统一倒计时秒数（默认取 doors.default-duration）
+#   door-number:   门的编号（normal 模式自动分配，player/zombie/start 无门号）
+#   group:         门组名（同组门共享门号联动开关，用于地铁等多入口场景）
+#   mode:          门模式
+#     - normal: 普通门，由人类通过按钮触发
 #     - start:  起始门，游戏开始时自动开启
-#     - player: 开局时自动对玩家开启
+#     - player: 开局时自动对人类开启
 #     - zombie: 开局后延迟对僵尸开启
-#   material:    关门后恢复的方块材质（必须是 Bukkit Material 名，如 STONE）
-#   open-time:   （预留）门保持开启的时长，暂未启用，由 close-time 替代
-#   duration:    （预留）门开启持续时间，暂未启用
-#   use-scan-data: 启用后关门时恢复扫描到的原始方块（而非统一 material）
-#   blocks:      仅当 use-scan-data 为 true 时有效，保存原始方块快照
-#                （添加门后由插件自动扫描生成，无需手动填写）
-#   teleport-region:    （可选）WorldGuard 区域名，关门时传送门内玩家
-#   has-zombie-teleport:（可选）关门时僵尸是否也传送
+#   use-scan-data:  启用后关门时恢复扫描到的原始方块
+#   blocks:         仅当 use-scan-data 为 true 时有效，保存原始方块快照
+#                   （添加门后由插件自动扫描生成，无需手动填写）
 #   special-behavior:  （可选）特殊传送行为，支持 elevator / subway / airport
-#     也可使用命令 /zr door behavior set <门名> <type> [args...] 配置
-#     电梯示例：
+#     也可使用命令 /zr door behavior set <门号> <type> [args...] + postool 配置
+#     电梯示例（支持人类/僵尸独立目标）：
 #     special-behavior:
 #       type: ELEVATOR
-#       target-y: 48           # 目标 Y 坐标（保持玩家 X/Z 不变）
-#       countdown: 5           # 到达倒计时（秒），默认 5
-#       departure-msg: "&e电梯即将到达……"
-#       arrival-msg: "&a电梯已到达，祝您旅途愉快"
+#       human-target-y: 48            # 人类目标Y坐标
+#       zombie-target-y: 48           # 僵尸目标Y（可选，不设则不传僵尸）
+#       countdown: 5                  # 到达倒计时（秒），默认 5
+#       departure-msg: "<yellow>电梯即将到达……</yellow>"
+#       arrival-msg: "<green>电梯已到达，祝您旅途愉快</green>"
 #
-#     地铁示例：
+#     地铁示例（支持人类/僵尸独立目标）：
 #     special-behavior:
 #       type: SUBWAY
-#       target-x: 500
-#       target-y: 20
-#       target-z: 500
-#       line-name: "1号线"       # 线路名，默认 1号线
-#       countdown: 10            # 发车倒计时（秒），默认 10
-#       departure-msg: "&b%s即将发车，请站稳扶好……"
-#       arrival-msg: "&a%s已到站，请有序下车"
+#       line-name: "1号线"
+#       human-target-x: 500
+#       human-target-y: 20
+#       human-target-z: 500
+#       zombie-target-x: 490         # 僵尸目标（可选）
+#       zombie-target-y: 20
+#       zombie-target-z: 500
+#       departure-msg: "<aqua>{line}即将发车……</aqua>"
+#       arrival-msg: "<green>{line}已到站，请有序下车</green>"
 #
 #     机场专线示例：
 #     special-behavior:
 #       type: AIRPORT
-#       target-x: 110
-#       target-y: 35
-#       target-z: 112
-#       delay-ticks: 60          # 延迟 tick 后传送，默认 60
-#       departure-msg: "&a感谢乘坐机场专线"
-#       arrival-msg: "&e请拿好你的行李，有序下车"
+#       human-target-x: 110
+#       human-target-y: 35
+#       human-target-z: 112
+#       zombie-target-x: 105         # 僵尸目标（可选）
+#       zombie-target-y: 35
+#       zombie-target-z: 112
+#       delay-ticks: 60
+#       departure-msg: "<green>感谢乘坐机场专线</green>"
+#       arrival-msg: "<yellow>请拿好你的行李，有序下车</yellow>"
 #
-# 示例 - 普通门（编号1，按下按钮后5秒开启，开启后15秒关闭）：
+# 全局默认 duration：
+# default-duration: 15    # 所有门的默认 duration，单扇门可单独覆盖
+#
+# 示例 - 普通门（编号1，duration=15）：
 # door_1:
-#   x1: 10
-#   y1: 64
-#   z1: 10
-#   x2: 10
-#   y2: 66
-#   z2: 20
-#   delay: 5
-#   close-time: 15
+#   x1: 10; y1: 64; z1: 10
+#   x2: 10; y2: 66; z2: 20
+#   duration: 15
 #   door-number: 1
 #   mode: normal
-#   material: STONE
+#   use-scan-data: true
 #
-# 示例 - 使用扫描数据（自动保存原始方块，关闭时精确恢复）：
-# door_scan:
-#   x1: 10
-#   y1: 64
-#   z1: 10
-#   x2: 10
-#   y2: 66
-#   z2: 20
-#   delay: 5
-#   close-time: 15
-#   door-number: 2
+# 示例 - 地铁门组（三扇门共用门号1）：
+# door_subway_a:
+#   x1: 100; y1: 64; z1: 100
+#   x2: 100; y2: 66; z2: 102
+#   duration: 20
+#   door-number: 1
 #   mode: normal
+#   group: subway_line1
 #   use-scan-data: true
 doors: {}
 
@@ -241,8 +236,14 @@ ammo-categories:
 #   sound:             射击音效（Bukkit Sound 名）
 #   hit-sound:         命中音效（Bukkit Sound 名）
 #   recoil:            后坐力值列表，按 shotCount 依次取用，超出则取最后一个
-#   automatic:         是否为全自动武器（按住右键连续射击）
+#   fire-mode:         开火模式 — AUTO（左键切换连射）/ SEMI（单发）/ BURST（三连发）
+#   bolt-type:         枪机类型 — OPEN_BOLT / CLOSED_BOLT（膛弹+弹匣）/ MANUAL_ACTION（拉栓）
+#   burst-count:       BURST 模式每轮发射数（默认 3）
+#   aim-time:          ADS 过渡时间秒数（0 = 瞬间开镜）
 #   spread-per-shot:   连射时每发额外增加的散布值
+#
+# 操作方式：左键射击 | 右键切换ADS | F键换弹
+custom-weapons:
   pistol:
     material: WOODEN_HOE
     custom-model-data: 10001
@@ -265,6 +266,9 @@ ammo-categories:
     sound: ENTITY_GENERIC_EXPLODE
     hit-sound: ENTITY_ARROW_HIT_PLAYER
     recoil: [0.3, 0.5, 0.5, 0.7, 0.7]
+    fire-mode: SEMI
+    bolt-type: OPEN_BOLT
+    aim-time: 0.1
   shotgun:
     material: WOODEN_HOE
     custom-model-data: 10002
@@ -285,6 +289,9 @@ ammo-categories:
     sound: ENTITY_GENERIC_EXPLODE
     hit-sound: ENTITY_ARROW_HIT_PLAYER
     recoil: [1.0, 2.0, 2.0]
+    fire-mode: SEMI
+    bolt-type: MANUAL_ACTION
+    aim-time: 0.15
     spread-per-shot: 0.03
   rifle:
     material: WOODEN_HOE
@@ -305,7 +312,9 @@ ammo-categories:
     sound: ENTITY_GENERIC_EXPLODE
     hit-sound: ENTITY_ARROW_HIT_PLAYER
     recoil: [0.5, 0.7, 1.0, 1.3, 1.3, 1.0, 0.8, 0.5, 0.5, 0.5]
-    automatic: true
+    fire-mode: AUTO
+    bolt-type: CLOSED_BOLT
+    aim-time: 0.2
 
 # ---------- 杂项 ----------
 # 注意：以下参数当前版本暂未在游戏逻辑中启用，相关值由代码硬编码
