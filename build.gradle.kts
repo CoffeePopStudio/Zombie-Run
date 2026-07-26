@@ -5,7 +5,23 @@ plugins {
 }
 
 group = "cn.oneachina"
-version = "26.7.1-2e57ce2"
+
+version = run {
+    val now = java.time.LocalDate.now()
+    val year = now.year % 100
+    val month = now.monthValue
+    val count = try {
+        ProcessBuilder("git", "rev-list", "--count", "HEAD")
+            .directory(rootProject.projectDir)
+            .start().inputStream.bufferedReader().readText().trim()
+    } catch (_: Exception) { "0" }
+    val hash = try {
+        ProcessBuilder("git", "rev-parse", "--short=7", "HEAD")
+            .directory(rootProject.projectDir)
+            .start().inputStream.bufferedReader().readText().trim()
+    } catch (_: Exception) { "unknown" }
+    "$year.$month.$count-$hash"
+}
 
 repositories {
     mavenCentral()
