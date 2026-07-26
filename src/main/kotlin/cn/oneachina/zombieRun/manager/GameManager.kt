@@ -339,6 +339,7 @@ class GameManager(private val plugin: ZombieRun) {
     }
 
     private fun startAutoCheckTask() {
+        if (!plugin.isEnabled) return
         autoCheckTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { _ ->
             checkAutoStartCondition()
         }, 1L, 20L)
