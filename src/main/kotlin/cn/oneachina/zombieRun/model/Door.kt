@@ -118,7 +118,7 @@ class Door(
     }
 
     /** 关门时判断玩家是否已通过门（正坐标方向为"前方"，reverseDirection=true 则反转） */
-    fun isPlayerPastDoor(location: Location, crossingTolerance: Double = 10.0): Boolean {
+    fun isPlayerPastDoor(location: Location, crossingTolerance: Double = 5.0): Boolean {
         // 高度对齐
         if (location.y < minY - crossingTolerance || location.y > maxY + crossingTolerance) return false
 

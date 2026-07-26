@@ -215,11 +215,11 @@ class DoorManager(private val plugin: ZombieRun) {
                     }
                     session.countdown += 1.0
 
-                    // 实时追踪穿越门的玩家（±15 容差，每 tick 检测一次）
+                    // 实时追踪穿越门的玩家（±5 容差，每 tick 检测一次）
                     Bukkit.getOnlinePlayers().forEach { p ->
                         if (p !in session.crossedPlayers) {
                             session.doors.forEach { d ->
-                                if (d.isPlayerPastDoor(p.location, crossingTolerance = 15.0)) {
+                                if (d.isPlayerPastDoor(p.location, crossingTolerance = 5.0)) {
                                     session.crossedPlayers.add(p)
                                     DebugLogger.door("${p.name} 穿越了 ${d.doorNumber} 号门")
                                     return@forEach
