@@ -44,7 +44,7 @@ class GameListener(
 
         when (plugin.gameManager.getGameStatus()) {
             GameManager.GameStatus.WAITING, GameManager.GameStatus.ENDED -> {
-                plugin.gameManager.setPlayerTeam(player, GameManager.Team.HUMAN)
+                plugin.gameManager.setPlayerTeam(player, GameManager.Team.SPECTATOR)
                 player.gameMode = GameMode.ADVENTURE
                 player.clearActivePotionEffects()
                 player.inventory.clear()
