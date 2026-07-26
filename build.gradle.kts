@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "cn.oneachina"
-version = "1.0.2"
+version = "26.7.1-2e57ce2"
 
 repositories {
     mavenCentral()
