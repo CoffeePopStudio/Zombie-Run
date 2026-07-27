@@ -47,6 +47,7 @@ class StaminaManager(private val plugin: ZombieRun) {
     private val zombieMainParticleTasks: ConcurrentHashMap<Player, ScheduledTask> = ConcurrentHashMap()
 
     fun init() {
+        if (!plugin.isEnabled) return
         startStaminaRegenTask()
         startActionBarTask()
         startStaminaEffectsTask()

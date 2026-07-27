@@ -14,6 +14,7 @@ class NametagManager(private val plugin: ZombieRun) {
     private val tasks = CopyOnWriteArrayList<ScheduledTask>()
 
     fun init() {
+        if (!plugin.isEnabled) return
         val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { _ ->
             if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return@runAtFixedRate
 

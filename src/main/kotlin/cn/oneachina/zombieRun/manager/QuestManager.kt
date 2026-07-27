@@ -47,6 +47,7 @@ class QuestManager(private val plugin: ZombieRun) {
     private fun getConnection(): Connection = plugin.progressionManager.getConnection()
 
     fun init() {
+        if (!plugin.isEnabled) return
         scheduleRefresh()
     }
 
