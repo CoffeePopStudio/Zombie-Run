@@ -241,6 +241,34 @@ class RespawnManager(private val plugin: ZombieRun) {
         plugin.logger.info("僵尸传送到出生点 ${respawn.name}")
     }
 
+    /**
+     * 按人类推进进度选择僵尸复活点。
+     * @param progress 人类当前推进到的最高门/房间号
+     * @param ahead    是否向"人类前方更远"布防：true 优先选门号 > progress 的最近门点；
+     *                 false 优先选门号 == progress 的就近门点（无则回退到最近的更前门点）
+     */
+    fun getProgressZombieRespawn(progress: Int, ahead: Boolean): Respawn? {
+        val nextDoors = doorZombieRespawns.keys.filter { it > progress }
+        val aheadPoint = nextDoors.minOrNull()?.let { doorZombieRespawns[it]?.randomOrNull() }
+        val currentPoint = doorZombieRespawns[progress]?.randomOrNull()
+        return if (ahead) {
+            // 布防：更远门点优先；已到最后阶段则退回当前进度门点
+            aheadPoint ?: currentPoint
+        } else {
+            // 就近：当前进度门点优先；人类刚开局（progress=0）则用最近的更前门点
+            currentPoint ?: aheadPoint
+        }
+    }
+
+    fun teleportZombieByProgress(zombie: Player, progress: Int, ahead: Boolean) {
+        val respawn = getProgressZombieRespawn(progress, ahead)
+            ?: getZombieRespawn()
+            ?: getDefaultRespawn()
+        val location = respawn.getLocation(zombie.world)
+        zombie.teleportAsync(location)
+        plugin.logger.info("僵尸按进度($progress, ahead=$ahead)传送到 ${respawn.name}")
+    }
+
     fun teleportToZombieMainRespawn(zombie: Player) {
         val respawn = getZombieMainRespawn() ?: getDefaultRespawn()
         val location = respawn.getLocation(zombie.world)
