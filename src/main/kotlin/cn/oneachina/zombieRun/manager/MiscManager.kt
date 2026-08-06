@@ -121,16 +121,18 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
         }
 
         val causingEntity = event.damageSource.causingEntity
-        if (causingEntity == null && event.cause != EntityDamageEvent.DamageCause.ENTITY_ATTACK) {
-            lastHealth[victim] = victim.health
-            Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
-                val before = lastHealth.remove(victim) ?: return@runDelayed
-                val after = victim.health
-                val damage = before - after
-                if (damage > 0) {
-                    plugin.staminaManager.deductStamina(victim, 2.0 * damage)
-                }
-            }, 1L)
+        // 环境伤害（掉落/火焰等）按实际伤害直接扣体力：
+        // - 过滤 ENTITY_ATTACK（僵尸/玩家近战走 CombatListener 自定义血量）
+        // - 过滤 CUSTOM（HealthManager 红闪 player.damage(0.01) 触发，不扣体力）
+        // 不再依赖 1 tick 延迟读原版血量差，避免与红闪/回血竞争
+        if (causingEntity == null &&
+            event.cause != EntityDamageEvent.DamageCause.ENTITY_ATTACK &&
+            event.cause != EntityDamageEvent.DamageCause.CUSTOM
+        ) {
+            val damage = event.finalDamage
+            if (damage > 0) {
+                plugin.staminaManager.deductStamina(victim, 2.0 * damage)
+            }
         }
     }
 
@@ -144,6 +146,5 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
         playerKills.clear()
         playerInfections.clear()
         selectedWeapon.clear()
-        lastHealth.clear()
     }
 }

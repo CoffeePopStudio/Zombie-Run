@@ -293,13 +293,15 @@ class DoorManager(private val plugin: ZombieRun) {
         world.playSound(soundLoc, Sound.BLOCK_ANVIL_LAND, 1f, 0.5f)
         world.playSound(soundLoc, Sound.ENTITY_ZOMBIE_ATTACK_IRON_DOOR, 1f, 1f)
 
-        // 仅按移动事件记录的 UUID 判定玩家是否通过；观众（大厅/观战）不参与结算
+        // 判定玩家是否通过：记录过穿越，或当前已站在门前侧区域（兜底开门瞬间被挤到内侧/漏记的情况）
         val passedPlayers = mutableListOf<Player>()
         val behindPlayers = mutableListOf<Player>()
 
         Bukkit.getOnlinePlayers().forEach { p ->
             if (plugin.gameManager.getPlayerTeam(p) == GameManager.Team.SPECTATOR) return@forEach
-            if (session.crossedPlayers.contains(p.uniqueId)) {
+            val crossed = session.crossedPlayers.contains(p.uniqueId)
+            val pastDoor = session.doors.any { it.isPlayerPastDoor(p.location) }
+            if (crossed || pastDoor) {
                 passedPlayers.add(p)
             } else {
                 behindPlayers.add(p)

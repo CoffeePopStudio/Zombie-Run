@@ -101,39 +101,41 @@ class ProgressionManager(private val plugin: ZombieRun) {
         }
     }
 
+    /**
+     * 同步加载玩家档案（仅 cache miss 时调用；SQLite 本地查询毫秒级，避免 supplyAsync+.get()
+     * 的伪异步阻塞）。用 putIfAbsent 写入，防止覆盖 loadPlayerAsync 刚预热的最新档案。
+     */
     fun loadPlayer(uuid: UUID): PlayerProfile {
-        val profile = CompletableFuture.supplyAsync {
-            getConnection().use { conn ->
-                conn.prepareStatement(
-                    "SELECT level, xp, total_kills, total_infections, games_played, human_wins, equipped_title FROM player_progression WHERE uuid = ?"
-                ).use { stmt ->
-                    stmt.setString(1, uuid.toString())
-                    val rs = stmt.executeQuery()
-                    if (rs.next()) {
-                        PlayerProfile(
-                            uuid = uuid,
-                            level = rs.getInt("level"),
-                            xp = rs.getInt("xp"),
-                            totalKills = rs.getInt("total_kills"),
-                            totalInfections = rs.getInt("total_infections"),
-                            gamesPlayed = rs.getInt("games_played"),
-                            humanWins = rs.getInt("human_wins"),
-                            equippedTitle = rs.getString("equipped_title")
-                        )
-                    } else {
-                        conn.prepareStatement(
-                            "INSERT INTO player_progression (uuid) VALUES (?)"
-                        ).use { ins ->
-                            ins.setString(1, uuid.toString())
-                            ins.executeUpdate()
-                        }
-                        PlayerProfile(uuid = uuid)
+        val profile = getConnection().use { conn ->
+            conn.prepareStatement(
+                "SELECT level, xp, total_kills, total_infections, games_played, human_wins, equipped_title FROM player_progression WHERE uuid = ?"
+            ).use { stmt ->
+                stmt.setString(1, uuid.toString())
+                val rs = stmt.executeQuery()
+                if (rs.next()) {
+                    PlayerProfile(
+                        uuid = uuid,
+                        level = rs.getInt("level"),
+                        xp = rs.getInt("xp"),
+                        totalKills = rs.getInt("total_kills"),
+                        totalInfections = rs.getInt("total_infections"),
+                        gamesPlayed = rs.getInt("games_played"),
+                        humanWins = rs.getInt("human_wins"),
+                        equippedTitle = rs.getString("equipped_title")
+                    )
+                } else {
+                    conn.prepareStatement(
+                        "INSERT INTO player_progression (uuid) VALUES (?)"
+                    ).use { ins ->
+                        ins.setString(1, uuid.toString())
+                        ins.executeUpdate()
                     }
+                    PlayerProfile(uuid = uuid)
                 }
             }
-        }.get()
-        cache[uuid] = profile
-        return profile
+        }
+        cache.putIfAbsent(uuid, profile)
+        return cache[uuid] ?: profile
     }
 
     fun savePlayer(uuid: UUID) {
