@@ -66,7 +66,10 @@ class GameListener(
                 player.gameMode = GameMode.ADVENTURE
                 plugin.staminaManager.applyZombieEffects(player)
                 Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
-                    plugin.respawnManager.teleportToZombieRespawn(player)
+                    // 中途加入：布防复活到人类前方更远的僵尸点
+                    plugin.respawnManager.teleportZombieByProgress(
+                        player, plugin.gameManager.getHumanProgress(), ahead = true
+                    )
                 }, 1L)
             }
         }
@@ -91,7 +94,10 @@ class GameListener(
         val team = plugin.gameManager.getPlayerTeam(player)
         if (team == GameManager.Team.SPECTATOR) return
         plugin.doorManager.tryRecordPlayerCrossing(player, event.from, to)
-        handleBlackWoolDamage(player)
+        // 同格微动（转圈/蹲起/被挤）不重复判定黑羊毛伤害
+        if (event.from.blockX != to.blockX || event.from.blockY != to.blockY || event.from.blockZ != to.blockZ) {
+            handleBlackWoolDamage(player)
+        }
     }
 
     private fun handleBlackWoolDamage(player: Player) {

@@ -71,36 +71,47 @@ class CombatListener(
         // 接管伤害：取消 QA 原版伤害，走 ZombieRun 自定义生命值
         event.isCancelled = true
         val damage = event.damage
-        plugin.healthManager.damage(victim, damage, shooter)
-        plugin.progressionListener.onDealDamage(shooter, damage)
-
-        // 击退（沿射击者→目标方向）
         val knockback = event.gun.knockbackPower
-        if (knockback > 0) {
-            val dir = victim.location.toVector().subtract(shooter.location.toVector())
-            if (dir.lengthSquared() > 0.0001) {
-                victim.velocity = victim.velocity.add(dir.normalize().multiply(knockback))
-            }
-        }
 
-        // 爆头：粒子 + XP（带防刷冷却）
+        // 爆头 XP 判定（shooter 线程安全，仅记状态与加经验）
+        var shouldHeadshotXp = false
         if (event.isHeadshot) {
             val now = plugin.server.currentTick
             val key = "${shooter.uniqueId}:${victim.uniqueId}"
             val last = headshotCooldowns.getOrDefault(key, 0)
             if (now - last >= headshotXpCooldownTicks) {
                 headshotCooldowns[key] = now
+                shouldHeadshotXp = true
                 plugin.progressionManager.addXp(shooter, plugin.economyConfig.headshotXp, "爆头")
+            }
+        }
+        plugin.progressionListener.onDealDamage(shooter, damage)
+
+        // QA 事件在射手区域线程触发，受害者可能在另一区域：
+        // 受害者相关的实体/世界操作统一调度到受害者所在区域线程执行
+        Bukkit.getRegionScheduler().execute(plugin, victim.location) {
+            plugin.healthManager.damage(victim, damage, shooter)
+
+            // 击退（沿射击者→目标方向）
+            if (knockback > 0) {
+                val dir = victim.location.toVector().subtract(shooter.location.toVector())
+                if (dir.lengthSquared() > 0.0001) {
+                    victim.velocity = victim.velocity.add(dir.normalize().multiply(knockback))
+                }
+            }
+
+            // 爆头：粒子
+            if (shouldHeadshotXp) {
                 victim.world.spawnParticle(
                     Particle.CRIT,
                     victim.location.clone().add(0.0, victim.eyeHeight - 0.2, 0.0),
                     5, 0.3, 0.3, 0.3, 0.0
                 )
             }
-        }
 
-        spawnDamageDisplay(victim, damage, event.isHeadshot)
-        DebugLogger.damage("${shooter.name}(人类) → ${victim.name} QA枪械 ${String.format("%.1f", damage)}伤害 [HP:${String.format("%.1f", plugin.healthManager.getHealth(victim))}]")
+            spawnDamageDisplay(victim, damage, event.isHeadshot)
+            DebugLogger.damage("${shooter.name}(人类) → ${victim.name} QA枪械 ${String.format("%.1f", damage)}伤害 [HP:${String.format("%.1f", plugin.healthManager.getHealth(victim))}]")
+        }
     }
 
     private fun spawnDamageDisplay(target: Player, dmg: Double, isHeadshot: Boolean) {
@@ -284,7 +295,10 @@ class CombatListener(
             } else {
                 victim.gameMode = GameMode.ADVENTURE
                 plugin.staminaManager.applyZombieEffects(victim)
-                plugin.respawnManager.teleportToZombieRespawn(victim)
+                // 被感染：就近复活到当前推进门附近的僵尸点
+                plugin.respawnManager.teleportZombieByProgress(
+                    victim, plugin.gameManager.getHumanProgress(), ahead = false
+                )
                 victim.sendMessage(Component.text("你现在是僵尸！阻止人类前进！", NamedTextColor.DARK_GREEN))
                 taskTracker.unregister(task, victim.uniqueId)
                 task.cancel()

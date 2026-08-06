@@ -21,6 +21,8 @@ class DoorManager(private val plugin: ZombieRun) {
 
     private val doors: ConcurrentHashMap<String, Door> = ConcurrentHashMap()
 
+    // 由按钮触发线程（区域线程）写入、全局调度任务读写，跨线程需要可见性保证
+    @Volatile
     private var activeSession: Session? = null
 
     var endtime: Double = -1.0
@@ -291,11 +293,12 @@ class DoorManager(private val plugin: ZombieRun) {
         world.playSound(soundLoc, Sound.BLOCK_ANVIL_LAND, 1f, 0.5f)
         world.playSound(soundLoc, Sound.ENTITY_ZOMBIE_ATTACK_IRON_DOOR, 1f, 1f)
 
-        // 仅按移动事件记录的 UUID 判定玩家是否通过
+        // 仅按移动事件记录的 UUID 判定玩家是否通过；观众（大厅/观战）不参与结算
         val passedPlayers = mutableListOf<Player>()
         val behindPlayers = mutableListOf<Player>()
 
         Bukkit.getOnlinePlayers().forEach { p ->
+            if (plugin.gameManager.getPlayerTeam(p) == GameManager.Team.SPECTATOR) return@forEach
             if (session.crossedPlayers.contains(p.uniqueId)) {
                 passedPlayers.add(p)
             } else {
