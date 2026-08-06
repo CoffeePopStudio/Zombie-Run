@@ -123,3 +123,6 @@ runs/
 .tmp_wm_src/
 .kotlin/
 docs/superpowers
+
+# 本地修复记录（不进版本库/远程）
+修复记录.md
