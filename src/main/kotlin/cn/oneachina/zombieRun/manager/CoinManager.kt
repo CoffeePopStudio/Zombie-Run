@@ -1,9 +1,6 @@
 package cn.oneachina.zombieRun.manager
 
 import cn.oneachina.zombieRun.ZombieRun
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.HikariDataSource
-import java.io.File
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
@@ -11,22 +8,9 @@ import java.util.concurrent.ConcurrentHashMap
 class CoinManager(private val plugin: ZombieRun) {
 
     private val cache = ConcurrentHashMap<UUID, Int>()
-    private lateinit var dataSource: HikariDataSource
 
     fun init() {
-        val dataDir = File(plugin.dataFolder, "data")
-        if (!dataDir.exists()) dataDir.mkdirs()
-        val dbFile = File(dataDir, "zr_economy.db")
-
-        val config = HikariConfig().apply {
-            jdbcUrl = "jdbc:sqlite:$dbFile"
-            maximumPoolSize = 2
-            minimumIdle = 1
-            connectionTimeout = 5000
-        }
-        dataSource = HikariDataSource(config)
-
-        dataSource.connection.use { conn ->
+        plugin.databaseManager.getConnection().use { conn ->
             conn.createStatement().use { stmt ->
                 stmt.execute("""
                     CREATE TABLE IF NOT EXISTS zr_economy (
@@ -37,30 +21,28 @@ class CoinManager(private val plugin: ZombieRun) {
                 """.trimIndent())
             }
         }
-        plugin.logger.info("CoinManager SQLite 已初始化: $dbFile")
+        plugin.logger.info("CoinManager 已初始化 (共享 DatabaseManager)")
     }
 
-    fun loadPlayer(uuid: UUID, username: String): Int {
-        val coins = CompletableFuture.supplyAsync {
-            dataSource.connection.use { conn ->
-                conn.prepareStatement("SELECT coins FROM zr_economy WHERE uuid = ?").use { stmt ->
-                    stmt.setString(1, uuid.toString())
-                    val rs = stmt.executeQuery()
-                    if (rs.next()) {
-                        rs.getInt("coins")
-                    } else {
-                        conn.prepareStatement("INSERT INTO zr_economy (uuid, username, coins) VALUES (?, ?, 0)").use { ins ->
-                            ins.setString(1, uuid.toString())
-                            ins.setString(2, username)
-                            ins.executeUpdate()
-                        }
-                        0
+    /** 异步加载玩家金币并写入缓存；金币展示优先读缓存（默认 0） */
+    fun loadPlayerAsync(uuid: UUID, username: String) {
+        plugin.databaseManager.runAsync { conn ->
+            conn.prepareStatement("SELECT coins FROM zr_economy WHERE uuid = ?").use { stmt ->
+                stmt.setString(1, uuid.toString())
+                val rs = stmt.executeQuery()
+                val coins = if (rs.next()) {
+                    rs.getInt("coins")
+                } else {
+                    conn.prepareStatement("INSERT INTO zr_economy (uuid, username, coins) VALUES (?, ?, 0)").use { ins ->
+                        ins.setString(1, uuid.toString())
+                        ins.setString(2, username)
+                        ins.executeUpdate()
                     }
+                    0
                 }
+                cache[uuid] = coins
             }
-        }.get()
-        cache[uuid] = coins
-        return coins
+        }
     }
 
     fun getCoins(uuid: UUID): Int = cache.getOrDefault(uuid, 0)
@@ -86,14 +68,12 @@ class CoinManager(private val plugin: ZombieRun) {
 
     fun savePlayer(uuid: UUID, username: String) {
         val coins = cache[uuid] ?: return
-        CompletableFuture.runAsync {
-            dataSource.connection.use { conn ->
-                conn.prepareStatement("UPDATE zr_economy SET coins = ?, username = ? WHERE uuid = ?").use { stmt ->
-                    stmt.setInt(1, coins)
-                    stmt.setString(2, username)
-                    stmt.setString(3, uuid.toString())
-                    stmt.executeUpdate()
-                }
+        plugin.databaseManager.runAsync { conn ->
+            conn.prepareStatement("UPDATE zr_economy SET coins = ?, username = ? WHERE uuid = ?").use { stmt ->
+                stmt.setInt(1, coins)
+                stmt.setString(2, username)
+                stmt.setString(3, uuid.toString())
+                stmt.executeUpdate()
             }
         }
         cache.remove(uuid)
@@ -102,7 +82,7 @@ class CoinManager(private val plugin: ZombieRun) {
     fun flushAll() {
         cache.forEach { (uuid, coins) ->
             runCatching {
-                dataSource.connection.use { conn ->
+                plugin.databaseManager.getConnection().use { conn ->
                     conn.prepareStatement("UPDATE zr_economy SET coins = ? WHERE uuid = ?").use { stmt ->
                         stmt.setInt(1, coins)
                         stmt.setString(2, uuid.toString())
@@ -114,9 +94,10 @@ class CoinManager(private val plugin: ZombieRun) {
         cache.clear()
     }
 
-    fun getTopCoins(limit: Int): List<Pair<String, Int>> {
+    /** 异步查询金币排行榜（命令侧通过回调渲染，避免阻塞主线程） */
+    fun getTopCoinsAsync(limit: Int): CompletableFuture<List<Pair<String, Int>>> {
         return CompletableFuture.supplyAsync {
-            dataSource.connection.use { conn ->
+            plugin.databaseManager.getConnection().use { conn ->
                 conn.prepareStatement("SELECT username, coins FROM zr_economy ORDER BY coins DESC LIMIT ?").use { stmt ->
                     stmt.setInt(1, limit)
                     val rs = stmt.executeQuery()
@@ -127,36 +108,31 @@ class CoinManager(private val plugin: ZombieRun) {
                     result
                 }
             }
-        }.get()
+        }
     }
 
     private fun updateAsync(uuid: UUID) {
         val coins = cache[uuid] ?: return
-        CompletableFuture.runAsync {
-            dataSource.connection.use { conn ->
-                conn.prepareStatement("UPDATE zr_economy SET coins = ? WHERE uuid = ?").use { stmt ->
-                    stmt.setInt(1, coins)
-                    stmt.setString(2, uuid.toString())
-                    stmt.executeUpdate()
-                }
+        plugin.databaseManager.runAsync { conn ->
+            conn.prepareStatement("UPDATE zr_economy SET coins = ? WHERE uuid = ?").use { stmt ->
+                stmt.setInt(1, coins)
+                stmt.setString(2, uuid.toString())
+                stmt.executeUpdate()
             }
         }
     }
 
     fun resetCoins(uuid: UUID) {
         cache[uuid] = 0
-        CompletableFuture.runAsync {
-            dataSource.connection.use { conn ->
-                conn.prepareStatement("UPDATE zr_economy SET coins = 0 WHERE uuid = ?").use { stmt ->
-                    stmt.setString(1, uuid.toString())
-                    stmt.executeUpdate()
-                }
+        plugin.databaseManager.runAsync { conn ->
+            conn.prepareStatement("UPDATE zr_economy SET coins = 0 WHERE uuid = ?").use { stmt ->
+                stmt.setString(1, uuid.toString())
+                stmt.executeUpdate()
             }
         }
     }
 
     fun close() {
         flushAll()
-        dataSource.close()
     }
 }

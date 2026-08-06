@@ -8,9 +8,7 @@ import net.kyori.adventure.title.Title
 import org.bukkit.Bukkit
 import org.bukkit.Sound
 import org.bukkit.entity.Player
-import java.io.File
 import java.sql.Connection
-import java.sql.DriverManager
 import java.time.Duration
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
@@ -25,14 +23,9 @@ class ProgressionManager(private val plugin: ZombieRun) {
     }
 
     private val cache = ConcurrentHashMap<UUID, PlayerProfile>()
-    private lateinit var dbFile: File
 
     fun init() {
-        val dataDir = File(plugin.dataFolder, "data")
-        if (!dataDir.exists()) dataDir.mkdirs()
-        dbFile = File(dataDir, "zr_economy.db")
-
-        getConnection().use { conn ->
+        plugin.databaseManager.getConnection().use { conn ->
             conn.createStatement().use { stmt ->
                 stmt.execute("""
                     CREATE TABLE IF NOT EXISTS player_progression (
@@ -70,11 +63,42 @@ class ProgressionManager(private val plugin: ZombieRun) {
                 """.trimIndent())
             }
         }
-        plugin.logger.info("ProgressionManager SQLite 已初始化")
+        plugin.logger.info("ProgressionManager 已初始化 (共享 DatabaseManager)")
     }
 
-    fun getConnection(): Connection {
-        return DriverManager.getConnection("jdbc:sqlite:$dbFile")
+    fun getConnection(): Connection = plugin.databaseManager.getConnection()
+
+    /** 异步加载玩家档案并写入缓存（进服时预热，避免阻塞主线程） */
+    fun loadPlayerAsync(uuid: UUID) {
+        plugin.databaseManager.runAsync { conn ->
+            val profile = conn.prepareStatement(
+                "SELECT level, xp, total_kills, total_infections, games_played, human_wins, equipped_title FROM player_progression WHERE uuid = ?"
+            ).use { stmt ->
+                stmt.setString(1, uuid.toString())
+                val rs = stmt.executeQuery()
+                if (rs.next()) {
+                    PlayerProfile(
+                        uuid = uuid,
+                        level = rs.getInt("level"),
+                        xp = rs.getInt("xp"),
+                        totalKills = rs.getInt("total_kills"),
+                        totalInfections = rs.getInt("total_infections"),
+                        gamesPlayed = rs.getInt("games_played"),
+                        humanWins = rs.getInt("human_wins"),
+                        equippedTitle = rs.getString("equipped_title")
+                    )
+                } else {
+                    conn.prepareStatement(
+                        "INSERT INTO player_progression (uuid) VALUES (?)"
+                    ).use { ins ->
+                        ins.setString(1, uuid.toString())
+                        ins.executeUpdate()
+                    }
+                    PlayerProfile(uuid = uuid)
+                }
+            }
+            cache[uuid] = profile
+        }
     }
 
     fun loadPlayer(uuid: UUID): PlayerProfile {

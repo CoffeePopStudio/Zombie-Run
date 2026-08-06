@@ -1,6 +1,5 @@
 package cn.oneachina.zombieRun
 
-import cn.oneachina.zombieRun.command.DoorPerformanceCommand
 import cn.oneachina.zombieRun.command.ZombieRunCommand
 import cn.oneachina.zombieRun.gui.ProfileGUI
 import cn.oneachina.zombieRun.gui.QuestGUI
@@ -11,7 +10,6 @@ import cn.oneachina.zombieRun.listener.GameListener
 import cn.oneachina.zombieRun.listener.PlayerTaskTracker
 import cn.oneachina.zombieRun.listener.ProgressionListener
 import cn.oneachina.zombieRun.listener.StaminaListener
-import cn.oneachina.zombieRun.listener.WeaponListener
 import cn.oneachina.zombieRun.manager.*
 import cn.oneachina.zombieRun.papi.ZombieRunExpansion
 import cn.oneachina.zombieRun.util.DebugLogger
@@ -26,6 +24,7 @@ class ZombieRun : JavaPlugin() {
     private val postoolUsers = mutableSetOf<UUID>()
 
     val configManager: ConfigManager by lazy { ConfigManager(this).apply { loadConfig() } }
+    val databaseManager: DatabaseManager by lazy { DatabaseManager(this).apply { init() } }
     val doorManager: DoorManager by lazy { DoorManager(this).apply { loadDoors() } }
     val doorZoneManager: DoorZoneManager by lazy { DoorZoneManager() }
     val buttonManager: ButtonManager by lazy { ButtonManager(this).apply { loadButtons() } }
@@ -34,7 +33,7 @@ class ZombieRun : JavaPlugin() {
     val staminaManager: StaminaManager by lazy { StaminaManager(this).apply { init() } }
     val miscManager: MiscManager by lazy { MiscManager(this) }
     val startEffectManager: StartEffectManager by lazy { StartEffectManager(this).apply { loadEffects() } }
-    val weaponManager: WeaponManager by lazy { WeaponManager(this).apply { loadWeapons() } }
+    val weaponManager: WeaponManager by lazy { WeaponManager(this) }
     val healthManager: HealthManager by lazy { HealthManager(this) }
     val coinManager: CoinManager by lazy { CoinManager(this).apply { init() } }
     val progressionManager: ProgressionManager by lazy { ProgressionManager(this).apply { init() } }
@@ -71,7 +70,6 @@ class ZombieRun : JavaPlugin() {
         pm.registerEvents(gameListener, this)
         pm.registerEvents(CombatListener(this, taskTracker), this)
         pm.registerEvents(StaminaListener(this), this)
-        pm.registerEvents(WeaponListener(this), this)
         pm.registerEvents(shopGUI, this)
         pm.registerEvents(profileGUI, this)
         pm.registerEvents(questGUI, this)
@@ -81,7 +79,6 @@ class ZombieRun : JavaPlugin() {
         val zrCommand = ZombieRunCommand(this)
         getCommand("zr")?.setExecutor(zrCommand)
         getCommand("zr")?.tabCompleter = zrCommand
-        getCommand("doorperf")?.setExecutor(DoorPerformanceCommand(this))
 
         DebugLogger.init(this)
         logger.info("ZombieRun 核心已启用")
@@ -94,6 +91,7 @@ class ZombieRun : JavaPlugin() {
             player.clearActivePotionEffects()
         }
         coinManager.close()
+        databaseManager.close()
         doorManager.reset()
         respawnManager.clear()
         gameManager.clear()

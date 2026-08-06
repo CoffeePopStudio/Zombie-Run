@@ -44,7 +44,11 @@ class QuestManager(private val plugin: ZombieRun) {
     private val weeklyCache = ConcurrentHashMap<UUID, List<PlayerQuestProgress>>()
     private var refreshTask: io.papermc.paper.threadedregions.scheduler.ScheduledTask? = null
 
-    private fun getConnection(): Connection = plugin.progressionManager.getConnection()
+    /** 最近一次刷新的日期标记，避免每日/每周任务每 60 秒被重复重新随机 */
+    private var lastDailyDate: String? = null
+    private var lastWeeklyDate: String? = null
+
+    private fun getConnection(): Connection = plugin.databaseManager.getConnection()
 
     fun init() {
         if (!plugin.isEnabled) return
@@ -60,12 +64,18 @@ class QuestManager(private val plugin: ZombieRun) {
     }
 
     private fun checkDailyRefresh(now: LocalDate) {
-        dailyCache.clear()
+        val today = now.format(DATE_FMT)
+        if (lastDailyDate != today) {
+            dailyCache.clear()
+            lastDailyDate = today
+        }
     }
 
     private fun checkWeeklyRefresh(now: LocalDate) {
-        if (now.dayOfWeek == DayOfWeek.MONDAY) {
+        val monday = now.with(DayOfWeek.MONDAY).format(DATE_FMT)
+        if (lastWeeklyDate != monday) {
             weeklyCache.clear()
+            lastWeeklyDate = monday
         }
     }
 
