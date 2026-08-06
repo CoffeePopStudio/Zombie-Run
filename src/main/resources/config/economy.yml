@@ -3,6 +3,8 @@ kill-zombie-coins: 50
 kill-zombie-main-coins: 150
 infect-human-coins: 50
 survive-human-coins: 200
+# 人类胜利时排行榜奖励（前3名，单位硬币）
+rank-reward-coins: [200, 150, 100]
 
 # 经验值
 headshot-xp: 5

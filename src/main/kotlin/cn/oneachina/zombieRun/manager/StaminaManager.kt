@@ -173,7 +173,6 @@ class StaminaManager(private val plugin: ZombieRun) {
                 }
 
                 val staminaBar = buildStaminaBar(ps.stamina, ps.maxStamina, ps.staminastate)
-                if (plugin.weaponManager.isPlayerReloading(player)) continue
                 player.sendActionBar(staminaBar)
             }
         }, 1L, 2L)

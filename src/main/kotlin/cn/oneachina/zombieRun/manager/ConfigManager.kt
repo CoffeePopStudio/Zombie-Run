@@ -1,15 +1,10 @@
 package cn.oneachina.zombieRun.manager
 
 import cn.oneachina.zombieRun.ZombieRun
-import cn.oneachina.zombieRun.model.AmmoCategory
 import cn.oneachina.zombieRun.model.Door
 import cn.oneachina.zombieRun.model.Button
 import cn.oneachina.zombieRun.model.Respawn
 import cn.oneachina.zombieRun.model.SpecialDoorBehavior
-import cn.oneachina.zombieRun.model.WeaponConfig
-import cn.oneachina.zombieRun.model.BoltType
-import cn.oneachina.zombieRun.model.FireMode
-import io.papermc.paper.datacomponent.item.CustomModelData
 import org.bukkit.configuration.file.YamlConfiguration
 import java.io.File
 import java.io.IOException
@@ -370,69 +365,7 @@ class ConfigManager(private val plugin: ZombieRun) {
     }
 
     fun getExplosionDamageReduction(): Double {
-        return config.getDouble("misc.explosion-damage-reduction", 0.5)
-    }
-
-    fun getKnockbackReduction(): Double {
-        return config.getDouble("misc.knockback-reduction", 0.3)
-    }
-
-    fun getZombieKnockbackForce(): Double {
-        return config.getDouble("misc.zombie-knockback-force", 0.8)
-    }
-
-    fun loadAmmoCategories(): Map<String, AmmoCategory> {
-        val cats = mutableMapOf<String, AmmoCategory>()
-        val section = config.getConfigurationSection("ammo-categories") ?: return cats
-        for (id in section.getKeys(false)) {
-            val cs = section.getConfigurationSection(id) ?: continue
-            cats[id] = AmmoCategory(
-                id = id,
-                name = cs.getString("name") ?: id,
-                itemMaterial = cs.getString("item-material") ?: "PAPER",
-                customModelData = cs.getInt("custom-model-data", 0)
-            )
-        }
-        return cats
-    }
-
-    fun loadWeaponConfigs(): Map<String, WeaponConfig> {
-        val weapons = mutableMapOf<String, WeaponConfig>()
-        val section = config.getConfigurationSection("custom-weapons") ?: return weapons
-        for (id in section.getKeys(false)) {
-            val ws = section.getConfigurationSection(id) ?: continue
-            val cfg = WeaponConfig(
-                id = id,
-                material = ws.getString("material") ?: "WOODEN_HOE",
-                customModelData = CustomModelData.customModelData().addFloat(ws.getInt("custom-model-data", 0).toFloat()).build(),
-                name = ws.getString("name") ?: id,
-                lore = ws.getStringList("lore"),
-                damage = ws.getDouble("damage", 5.0),
-                ammoCategory = ws.getString("ammo-category") ?: "light",
-                magazineSize = ws.getInt("magazine-size", 12),
-                maxReserve = ws.getInt("max-reserve", 60),
-                reloadTimeTicks = ws.getInt("reload-time-ticks", 30),
-                price = ws.getInt("price", 300),
-                cooldownTicks = ws.getInt("cooldown-ticks", 10),
-                spread = ws.getDouble("spread", 0.08),
-                adsSpreadMult = ws.getDouble("ads-spread-mult", 0.5),
-                adsRecoilMult = ws.getDouble("ads-recoil-mult", 0.7),
-                headshotMult = ws.getDouble("headshot-mult", 2.0),
-                knockback = ws.getDouble("knockback", 0.0),
-                range = ws.getInt("range", 30),
-                pellets = ws.getInt("pellets", 1),
-                sound = ws.getString("sound"),
-                hitSound = ws.getString("hit-sound"),
-                recoil = ws.getDoubleList("recoil").toList(),
-                spreadPerShot = ws.getDouble("spread-per-shot", 0.0),
-                fireMode = parseFireMode(ws.getString("fire-mode")),
-                boltType = parseBoltType(ws.getString("bolt-type")),
-                burstCount = ws.getInt("burst-count", 3),
-                aimTime = ws.getDouble("aim-time", 0.15).toFloat()
-            )
-            weapons[id] = cfg
-        }
-        return weapons
+        return config.getDouble("misc.explosion-damage-reduction", 0.05)
     }
 
     fun addDoorFull(door: Door) {
@@ -522,20 +455,6 @@ class ConfigManager(private val plugin: ZombieRun) {
         saveConfig()
     }
 
-    // ---- 武器配置解析 ----
-
-    private fun parseFireMode(s: String?): FireMode = when (s?.uppercase()) {
-        "SEMI" -> FireMode.SEMI
-        "BURST" -> FireMode.BURST
-        else -> FireMode.AUTO
-    }
-
-    private fun parseBoltType(s: String?): BoltType = when (s?.uppercase()) {
-        "CLOSED_BOLT" -> BoltType.CLOSED_BOLT
-        "MANUAL_ACTION" -> BoltType.MANUAL_ACTION
-        else -> BoltType.OPEN_BOLT
-    }
-
     // ---- 新增配置文件加载 ----
 
     fun loadCombatConfig(): CombatConfig {
@@ -544,10 +463,10 @@ class ConfigManager(private val plugin: ZombieRun) {
         val cfg = YamlConfiguration.loadConfiguration(file)
         return CombatConfig(
             swordDamage = cfg.getDouble("sword-damage", 5.0),
-            zombieDamage = cfg.getDouble("zombie-damage", 6.0),
-            zombieMainDamage = cfg.getDouble("zombie-main-damage", 10.0),
-            zombieMaxHealth = cfg.getDouble("zombie-max-health", 200.0),
-            zombieMainMaxHealth = cfg.getDouble("zombie-main-max-health", 500.0),
+            zombieDamage = cfg.getDouble("zombie-damage", 5.0),
+            zombieMainDamage = cfg.getDouble("zombie-main-damage", 8.0),
+            zombieMaxHealth = cfg.getDouble("zombie-max-health", 120.0),
+            zombieMainMaxHealth = cfg.getDouble("zombie-main-max-health", 300.0),
             humanMaxHealth = cfg.getDouble("human-max-health", 20.0)
         )
     }
@@ -561,6 +480,7 @@ class ConfigManager(private val plugin: ZombieRun) {
             killZombieMainCoins = cfg.getInt("kill-zombie-main-coins", 150),
             infectHumanCoins = cfg.getInt("infect-human-coins", 50),
             surviveHumanCoins = cfg.getInt("survive-human-coins", 200),
+            rankRewardCoins = cfg.getIntegerList("rank-reward-coins"),
             headshotXp = cfg.getInt("headshot-xp", 5),
             killZombieXp = cfg.getInt("kill-zombie-xp", 30),
             killZombieMainXp = cfg.getInt("kill-zombie-main-xp", 10),
@@ -601,6 +521,7 @@ data class EconomyConfig(
     val killZombieMainCoins: Int,
     val infectHumanCoins: Int,
     val surviveHumanCoins: Int,
+    val rankRewardCoins: List<Int>,
     val headshotXp: Int,
     val killZombieXp: Int,
     val killZombieMainXp: Int,

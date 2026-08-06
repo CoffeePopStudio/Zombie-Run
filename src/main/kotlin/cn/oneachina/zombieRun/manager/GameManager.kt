@@ -269,9 +269,9 @@ class GameManager(private val plugin: ZombieRun) {
         Bukkit.broadcast(Component.empty())
         Bukkit.broadcast(separator)
 
-        val rankRewards = listOf(200, 150, 100)
-        awardRankingRewards(kills, rankRewards, "击杀")
-        awardRankingRewards(infections, rankRewards, "感染")
+        val rewards = rankRewards()
+        awardRankingRewards(kills, rewards, "击杀")
+        awardRankingRewards(infections, rewards, "感染")
     }
 
     private fun formatRanking(
@@ -308,10 +308,16 @@ class GameManager(private val plugin: ZombieRun) {
         }
     }
 
-    private fun rankRewards(): List<Int> = listOf(200, 150, 100)
+    private fun rankRewards(): List<Int> = plugin.economyConfig.rankRewardCoins
 
     fun getPlayerTeam(player: Player?) = playerTeams.getOrDefault(player, Team.SPECTATOR)
     fun getPlayerRoom(player: Player) = playerRooms.getOrDefault(player, 0)
+
+    /** 人类推进进度 = 人类队伍中已通过的最高门/房间号；无人类时返回 0 */
+    fun getHumanProgress(): Int = humans.asSequence()
+        .mapNotNull { playerRooms[it] }
+        .maxOrNull() ?: 0
+
     fun setPlayerRoom(player: Player, room: Int) {
         val oldRoom = playerRooms[player]
         playerRooms[player] = room

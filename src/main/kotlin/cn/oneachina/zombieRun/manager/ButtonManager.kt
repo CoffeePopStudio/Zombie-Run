@@ -59,7 +59,8 @@ class ButtonManager(private val plugin: ZombieRun) {
     }
 
     fun clear() {
+        // 先还原被点亮的按钮方块，避免服务端关闭/重置后按钮残留为海晶灯
+        resetAllButtons()
         buttons.clear()
-        originalButtonBlocks.clear()
     }
 }
