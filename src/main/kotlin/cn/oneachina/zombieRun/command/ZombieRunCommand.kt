@@ -78,12 +78,12 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
     }
 
     private fun handleDoorCommand(sender: CommandSender, args: Array<out String>): Boolean {
+        if (!sender.hasPermission("zombie.run.admin")) {
+            sender.sendMessage(Component.text("你没有权限使用此命令！", NamedTextColor.RED))
+            return true
+        }
         val subArgs = args.drop(1).toTypedArray()
         if (subArgs.isNotEmpty() && subArgs[0].lowercase() == "behavior") {
-            if (!sender.hasPermission("zombie.run.admin")) {
-                sender.sendMessage(Component.text("你没有权限使用此命令！", NamedTextColor.RED))
-                return true
-            }
             DoorBehaviorCommands.handle(plugin, sender, subArgs.drop(1).toTypedArray(), plugin.gameListener)
         } else {
             if (sender !is Player) {

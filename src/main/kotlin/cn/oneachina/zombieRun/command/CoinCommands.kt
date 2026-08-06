@@ -66,10 +66,13 @@ object CoinCommands {
             }
             "top" -> {
                 val count = if (args.size > 1) args[1].toIntOrNull() ?: 10 else 10
-                val top = plugin.coinManager.getTopCoins(count)
-                sender.sendMessage(Component.text("===== 硬币排行榜 (TOP $count) =====", NamedTextColor.GREEN))
-                top.forEachIndexed { index, (name, coins) ->
-                    sender.sendMessage(Component.text("${index + 1}. $name - $coins 硬币", NamedTextColor.GREEN))
+                plugin.coinManager.getTopCoinsAsync(count).whenComplete { top, _ ->
+                    plugin.server.globalRegionScheduler.run(plugin) { _ ->
+                        sender.sendMessage(Component.text("===== 硬币排行榜 (TOP $count) =====", NamedTextColor.GREEN))
+                        top.forEachIndexed { index, (name, coins) ->
+                            sender.sendMessage(Component.text("${index + 1}. $name - $coins 硬币", NamedTextColor.GREEN))
+                        }
+                    }
                 }
             }
             else -> sender.sendMessage(Component.text("未知子命令，可用: add, remove, set, get, top", NamedTextColor.RED))
