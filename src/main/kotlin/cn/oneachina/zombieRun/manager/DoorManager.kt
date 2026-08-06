@@ -13,6 +13,7 @@ import org.bukkit.Bukkit
 import org.bukkit.Sound
 import org.bukkit.entity.Player
 import java.time.Duration
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -40,8 +41,8 @@ class DoorManager(private val plugin: ZombieRun) {
         var phase: Phase = Phase.OPENING
     ) {
         enum class Phase { OPENING, CLOSING }
-        /** 开门期间穿越过门的玩家（实时追踪） */
-        val crossedPlayers = mutableSetOf<Player>()
+        /** 开门期间穿越过门的玩家 */
+        val crossedPlayers: MutableSet<UUID> = mutableSetOf()
     }
 
     // ==================== 数据加载 ====================
@@ -215,18 +216,6 @@ class DoorManager(private val plugin: ZombieRun) {
                     }
                     session.countdown += 1.0
 
-                    // 实时追踪穿越门的玩家（±5 容差，每 tick 检测一次）
-                    Bukkit.getOnlinePlayers().forEach { p ->
-                        if (p !in session.crossedPlayers) {
-                            session.doors.forEach { d ->
-                                if (d.isPlayerPastDoor(p.location, crossingTolerance = 5.0)) {
-                                    session.crossedPlayers.add(p)
-                                    DebugLogger.door("${p.name} 穿越了 ${d.doorNumber} 号门")
-                                    return@forEach
-                                }
-                            }
-                        }
-                    }
                 } else {
                     // 关门
                     closeAllDoors(session)
@@ -302,22 +291,21 @@ class DoorManager(private val plugin: ZombieRun) {
         world.playSound(soundLoc, Sound.BLOCK_ANVIL_LAND, 1f, 0.5f)
         world.playSound(soundLoc, Sound.ENTITY_ZOMBIE_ATTACK_IRON_DOOR, 1f, 1f)
 
-        // 判定所有玩家（优先用实时追踪集，兜底用位置检测）
+        // 仅按移动事件记录的 UUID 判定玩家是否通过
         val passedPlayers = mutableListOf<Player>()
         val behindPlayers = mutableListOf<Player>()
 
         Bukkit.getOnlinePlayers().forEach { p ->
-            val tracked = p in session.crossedPlayers
-            val posCheck = allDoors.any { it.isPlayerPastDoor(p.location) }
-            if (tracked || posCheck) {
+            if (session.crossedPlayers.contains(p.uniqueId)) {
                 passedPlayers.add(p)
             } else {
                 behindPlayers.add(p)
             }
         }
 
-        // 更新 room
+        // 更新 room + 过门任务/XP
         passedPlayers.forEach { p ->
+            plugin.progressionListener.onPassDoor(p)
             val current = plugin.gameManager.getPlayerRoom(p)
             if (doorNum > current) {
                 plugin.gameManager.setPlayerRoom(p, doorNum)
@@ -437,6 +425,18 @@ class DoorManager(private val plugin: ZombieRun) {
 
     fun getDoorsInGroup(group: String): List<Door> = doorGroups[group] ?: emptyList()
 
+    fun tryRecordPlayerCrossing(player: Player, from: org.bukkit.Location, to: org.bukkit.Location) {
+        if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return
+        val session = activeSession ?: return
+        if (session.phase != Session.Phase.CLOSING) return
+        if (session.crossedPlayers.contains(player.uniqueId)) return
+
+        session.doors.firstOrNull { it.crossedBy(from, to) }?.let { door ->
+            session.crossedPlayers.add(player.uniqueId)
+            DebugLogger.door("${player.name} 穿越了 ${door.doorNumber} 号门")
+        }
+    }
+
     fun getNextDoorNumber(): Int {
         val existing = doors.values
             .filter { it.mode == Door.DoorMode.NORMAL }
@@ -492,8 +492,9 @@ class DoorManager(private val plugin: ZombieRun) {
                         Component.text("人类成功逃离！", NamedTextColor.AQUA)
                     ))
                     if (plugin.gameManager.getPlayerTeam(player) == GameManager.Team.HUMAN) {
-                        plugin.coinManager.addCoins(player.uniqueId, 200)
-                        player.sendMessage(Component.text("+ 200 硬币！ (作为人类活到最后)", NamedTextColor.GOLD))
+                        val coins = plugin.economyConfig.surviveHumanCoins
+                        plugin.coinManager.addCoins(player.uniqueId, coins)
+                        player.sendMessage(Component.text("+ $coins 硬币！ (作为人类活到最后)", NamedTextColor.GOLD))
                     }
                 }
                 plugin.gameManager.endGame(GameManager.Team.HUMAN)

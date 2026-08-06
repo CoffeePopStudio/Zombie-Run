@@ -117,6 +117,31 @@ class Door(
         return if (xLen > zLen) 'z' else 'x'
     }
 
+    /** 判断玩家是否从上一位置到当前位置穿过门平面 */
+    fun crossedBy(from: Location, to: Location, axisTolerance: Double = 0.5, heightTolerance: Double = 1.0): Boolean {
+        if (from.world != to.world) return false
+
+        val axis = crossingAxis()
+        val fromAxis = if (axis == 'z') from.z else from.x
+        val toAxis = if (axis == 'z') to.z else to.x
+        val center = if (axis == 'z') (minZ + maxZ) / 2.0 else (minX + maxX) / 2.0
+        val axisDelta = kotlin.math.abs(toAxis - fromAxis)
+        if (axisDelta > 2.5) return false
+
+        val crossed = if (!reverseDirection) {
+            fromAxis < center && toAxis >= center
+        } else {
+            fromAxis > center && toAxis <= center
+        }
+        if (!crossed) return false
+
+        val transverse = if (axis == 'z') to.x else to.z
+        val transverseMin = if (axis == 'z') minX else minZ
+        val transverseMax = if (axis == 'z') maxX else maxZ
+        if (transverse < transverseMin - axisTolerance || transverse > transverseMax + axisTolerance) return false
+        return to.y >= minY - heightTolerance && to.y <= maxY + heightTolerance
+    }
+
     /** 关门时判断玩家是否已通过门（正坐标方向为"前方"，reverseDirection=true 则反转） */
     fun isPlayerPastDoor(location: Location, crossingTolerance: Double = 5.0): Boolean {
         // 高度对齐

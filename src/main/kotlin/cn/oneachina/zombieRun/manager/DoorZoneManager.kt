@@ -92,10 +92,10 @@ class DoorZoneManager {
     }
 
     /**
-     * 获取区域的唯一键
+     * 获取区域的唯一键（调用方需传入已除以 zoneSize 的区域索引）
      */
     private fun getZoneKey(x: Int, z: Int): String {
-        return "${x / zoneSize},${z / zoneSize}"
+        return "$x,$z"
     }
 
     /**

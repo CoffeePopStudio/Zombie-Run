@@ -38,7 +38,8 @@ class GameListener(
     fun onPlayerJoin(event: PlayerJoinEvent) {
         val player = event.player
         plugin.gameManager.addPlayer(player)
-        plugin.coinManager.loadPlayer(player.uniqueId, player.name)
+        plugin.coinManager.loadPlayerAsync(player.uniqueId, player.name)
+        plugin.progressionManager.loadPlayerAsync(player.uniqueId)
         plugin.staminaManager.addPlayer(player)
         plugin.shopGUI.onAutoOpen(player)
 
@@ -86,13 +87,10 @@ class GameListener(
     fun onPlayerMove(event: PlayerMoveEvent) {
         val to = event.to
         val player = event.player
-        if (event.from.blockX == to.blockX &&
-            event.from.blockY == to.blockY &&
-            event.from.blockZ == to.blockZ) return
-
         if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return
         val team = plugin.gameManager.getPlayerTeam(player)
         if (team == GameManager.Team.SPECTATOR) return
+        plugin.doorManager.tryRecordPlayerCrossing(player, event.from, to)
         handleBlackWoolDamage(player)
     }
 
@@ -105,8 +103,9 @@ class GameListener(
         )
         for (block in woolBlocks) {
             if (block.type == Material.BLACK_WOOL) {
-                if (plugin.gameManager.getPlayerTeam(player) != GameManager.Team.SPECTATOR) {
-                    player.health = 0.0
+                // 仅人类受黑羊毛伤害；走自定义生命系统以保留击杀/统计/死亡流程
+                if (plugin.gameManager.getPlayerTeam(player) == GameManager.Team.HUMAN) {
+                    plugin.healthManager.damage(player, 10000.0)
                 }
                 return
             }
