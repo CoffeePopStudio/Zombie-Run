@@ -2,6 +2,7 @@ package cn.oneachina.zombieRun.gui
 
 import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.manager.GameManager
+import me.zombie_striker.qg.api.QualityArmory
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.Bukkit
@@ -25,33 +26,25 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
     private val shopKey = NamespacedKey("zombie-run", "shop_weapon")
 
     fun open(player: Player) {
-        val weapons = plugin.weaponManager.getAllWeaponConfigs().toList()
+        val weapons = plugin.weaponManager.getWeaponIds()
         val rows = ceil(weapons.size / 9.0).toInt().coerceAtLeast(1)
         val totalRows = rows + 1
         val size = totalRows * 9
 
         val inv = Bukkit.createInventory(null, size, Component.text(GUI_TITLE).color(NamedTextColor.GRAY))
 
-        weapons.forEachIndexed { index, config ->
-            val material = Material.matchMaterial(config.material) ?: Material.WOODEN_HOE
-            val item = ItemStack(material)
+        weapons.forEachIndexed { index, weaponId ->
+            val gun = plugin.weaponManager.getGun(weaponId) ?: return@forEachIndexed
+            val item = QualityArmory.getCustomItemAsItemStack(gun)
             val meta = item.itemMeta ?: return@forEachIndexed
-            val customModelDataComponent = meta.customModelDataComponent
-            meta.displayName(Component.text(config.name.replace(Regex("&[0-9a-fk-or]"), "").trim()))
-            val lore : MutableList<Component> = config.lore
-                .map { Component.text(it.replace(Regex("&[0-9a-fk-or]"), "").trim()) }
-                .toMutableList()
+            val lore = (meta.lore() ?: emptyList()).toMutableList()
             lore.add(Component.empty())
             lore.add(Component.text("价格: ", NamedTextColor.YELLOW)
-                .append(Component.text("${config.price} 硬币", NamedTextColor.GOLD)))
-            lore.add(Component.text("伤害: ${config.damage} | 弹匣: ${config.magazineSize} | 弹药: ${config.ammoCategory}", NamedTextColor.GRAY))
+                .append(Component.text("${gun.price.toInt()} 硬币", NamedTextColor.GOLD)))
+            lore.add(Component.text("伤害: ${gun.damage.toInt()} | 弹匣: ${gun.maxBullets} | 弹药: ${gun.ammoType?.name ?: "无"}", NamedTextColor.GRAY))
 
             meta.lore(lore)
-            if (!config.customModelData.floats().isEmpty()) {
-                customModelDataComponent.floats = config.customModelData.floats()
-                meta.setCustomModelDataComponent(customModelDataComponent)
-            }
-            meta.persistentDataContainer.set(shopKey, PersistentDataType.STRING, config.id)
+            meta.persistentDataContainer.set(shopKey, PersistentDataType.STRING, weaponId)
             item.itemMeta = meta
             inv.setItem(index, item)
         }
@@ -99,8 +92,7 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
                 return
             }
             plugin.miscManager.setSelectedWeapon(player, weaponIndex)
-            val config = plugin.weaponManager.getWeaponConfig(weaponId)
-            val price = config?.price ?: 0
+            val price = plugin.weaponManager.getWeaponPrice(weaponId).toInt()
             player.sendMessage(Component.text(
                 "已预购 $weaponId（$price 硬币），游戏开始自动发放。/zr unselect 可取消", NamedTextColor.GREEN
             ))

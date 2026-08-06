@@ -59,8 +59,7 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
 
         val selected = selectedWeapon[player]
         val weaponId = if (selected != null && weaponIds.contains(selected)) {
-            val config = plugin.weaponManager.getWeaponConfig(selected)
-            val price = config?.price ?: 600
+            val price = plugin.weaponManager.getWeaponPrice(selected).toInt()
             if (plugin.coinManager.takeCoins(player.uniqueId, price)) {
                 val remaining = plugin.coinManager.getCoins(player.uniqueId)
                 player.sendMessage(Component.text("购买成功！花费硬币: $price，剩余: $remaining", NamedTextColor.GREEN))
@@ -111,13 +110,14 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
     fun getAllKills(): Map<Player, Int> = playerKills.toMap()
     fun getAllInfections(): Map<Player, Int> = playerInfections.toMap()
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     fun onEntityDamage(event: EntityDamageEvent) {
         val victim = event.entity as? Player ?: return
         if (plugin.gameManager.getPlayerTeam(victim) != GameManager.Team.HUMAN) return
 
         if (event.cause == EntityDamageEvent.DamageCause.ENTITY_EXPLOSION) {
-            event.damage = 0.05
+            // 使用配置中的爆炸伤害减免倍率（在 NORMAL 阶段修改才会被其他监听器正确读取）
+            event.damage *= plugin.configManager.getExplosionDamageReduction()
         }
 
         val causingEntity = event.damageSource.causingEntity

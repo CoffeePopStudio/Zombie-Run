@@ -23,12 +23,14 @@ repositories {
     maven("https://repo.papermc.io/repository/maven-public/") {
         name = "papermc-repo"
     }
+    maven("https://repo.codemc.io/repository/maven-public/")
     maven ("https://repo.extendedclip.com/releases/")
 }
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.+")
     compileOnly("me.clip:placeholderapi:2.12.2")
+    compileOnly("me.zombie_striker:QualityArmory:2.1.3")
     implementation(kotlin("stdlib-jdk8"))
     implementation("com.zaxxer:HikariCP:7.0.2")
 }
