@@ -24,6 +24,7 @@ repositories {
         name = "papermc-repo"
     }
     maven("https://repo.codemc.io/repository/maven-public/")
+    maven("https://repo.onarandombox.com/content/groups/public/")
     maven ("https://repo.extendedclip.com/releases/")
 }
 
@@ -31,6 +32,7 @@ dependencies {
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.+")
     compileOnly("me.clip:placeholderapi:2.12.2")
     compileOnly("me.zombie_striker:QualityArmory:2.1.3")
+    compileOnly("com.onarandombox.multiversecore:multiverse-core:4.3.14")
     implementation(kotlin("stdlib-jdk8"))
     implementation("com.zaxxer:HikariCP:7.0.2")
 }
@@ -51,6 +53,10 @@ tasks {
     runServer {
         minecraftVersion("26.1.2")
         dependsOn("shadowJar")
+        downloadPlugins {
+            // QualityArmory 2.1.3（Modrinth 版本 ID，与 compileOnly 依赖版本一致）
+            modrinth("qualityarmory", "fdVKuHYp")
+        }
     }
 }
 

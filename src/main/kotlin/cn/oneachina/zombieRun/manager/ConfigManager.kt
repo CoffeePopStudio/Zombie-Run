@@ -26,7 +26,101 @@ class ConfigManager(private val plugin: ZombieRun) {
         }
 
         config = YamlConfiguration.loadConfiguration(configFile)
+        migrateConfigIfNeeded()
+        if (configFile.exists()) {
+            config = YamlConfiguration.loadConfiguration(configFile)
+        }
         plugin.logger.info("配置文件加载成功")
+    }
+
+    fun migrateConfigIfNeeded() {
+        val configFile = File(plugin.dataFolder, "config/config.yml")
+        if (!configFile.exists()) return
+
+        val old = YamlConfiguration.loadConfiguration(configFile)
+        // 标记：旧配置有 weapons 节（已移除），新配置没有
+        if (!old.contains("weapons")) return // 已是新格式
+
+        plugin.logger.info("检测到旧配置格式，开始自动迁移...")
+
+        // 加载新默认模板
+        val defaultConfig = plugin.getResource("config/config.yml")?.use {
+            YamlConfiguration.loadConfiguration(it.bufferedReader())
+        } ?: return
+
+        // 逐节迁移（只保留新模板中仍存在的路径）
+        val sectionsToKeep = listOf(
+            "game", "spawn", "end", "doors", "buttons", "respawns",
+            "zombie", "human", "stamina", "misc", "start-effects"
+        )
+        for (section in sectionsToKeep) {
+            old.getConfigurationSection(section)?.let { oldSection ->
+                defaultConfig.getConfigurationSection(section)?.let { newSection ->
+                    for (key in oldSection.getKeys(true)) {
+                        if (newSection.contains(key) && oldSection.isSet(key)) {
+                            newSection.set(key, oldSection.get(key))
+                        }
+                    }
+                }
+            }
+        }
+
+        // 补充 world 字段到门/按钮/重生点
+        val gameWorld = old.getString("game.world", "world") ?: "world"
+        for (sectionName in listOf("doors", "buttons", "respawns")) {
+            defaultConfig.getConfigurationSection(sectionName)?.let { section ->
+                for (key in section.getKeys(false)) {
+                    val entry = section.getConfigurationSection(key)
+                    if (entry != null && !entry.contains("world")) {
+                        entry.set("world", gameWorld)
+                    }
+                }
+            }
+        }
+
+        // 备份旧文件
+        val bakFile = File(plugin.dataFolder, "config/config.yml.bak")
+        configFile.copyTo(bakFile, overwrite = true)
+        plugin.logger.info("旧配置已备份至 config.yml.bak")
+
+        // 写新文件
+        defaultConfig.save(configFile)
+        plugin.logger.info("配置迁移完成（已移除已废弃的 weapons/ammo-categories/custom-weapons 节）")
+
+        migrateSubConfigIfNeeded("combat.yml", "config/combat.yml")
+        migrateSubConfigIfNeeded(
+            "economy.yml", "config/economy.yml",
+            mapOf("rank-reward-coins" to listOf(200, 150, 100))
+        )
+    }
+
+    private fun migrateSubConfigIfNeeded(fileName: String, defaultResourcePath: String, additionalKeys: Map<String, Any> = emptyMap()) {
+        val file = File(plugin.dataFolder, "config/$fileName")
+        if (!file.exists()) return
+
+        val old = YamlConfiguration.loadConfiguration(file)
+        val default = plugin.getResource(defaultResourcePath)?.use {
+            YamlConfiguration.loadConfiguration(it.bufferedReader())
+        } ?: return
+
+        // 保留旧值
+        for (key in default.getKeys(true)) {
+            if (old.contains(key)) {
+                default.set(key, old.get(key))
+            }
+        }
+
+        // 补充新默认值
+        for ((key, value) in additionalKeys) {
+            if (!old.contains(key)) {
+                default.set(key, value)
+            }
+        }
+
+        val bakFile = File(plugin.dataFolder, "config/$fileName.bak")
+        file.copyTo(bakFile, overwrite = true)
+        default.save(file)
+        plugin.logger.info("$fileName 迁移完成")
     }
 
     fun reloadConfig() {
@@ -132,6 +226,7 @@ class ConfigManager(private val plugin: ZombieRun) {
             val specialBehavior = loadSpecialBehavior(name, doorSection)
             val group = doorSection.getString("group")
             val reverseDirection = doorSection.getBoolean("reverse-direction", false)
+            val world = doorSection.getString("world") ?: getWorldName()
             // player/zombie/start 门不参与门号
             val doorNumber = if (doorMode == Door.DoorMode.NORMAL) doorSection.getInt("door-number", 0) else 0
 
@@ -152,7 +247,8 @@ class ConfigManager(private val plugin: ZombieRun) {
                 useScanData = useScanData,
                 blocks = blocks,
                 group = group,
-                reverseDirection = reverseDirection
+                reverseDirection = reverseDirection,
+                world = world
             )
             doors.add(door)
         }
@@ -273,7 +369,8 @@ class ConfigManager(private val plugin: ZombieRun) {
                 pitch = respawnSection.getDouble("pitch", 0.0),
                 type = type,
                 doorNumber = if (respawnSection.contains("door-number")) respawnSection.getInt("door-number") else null,
-                roomNumber = if (respawnSection.contains("room-number")) respawnSection.getInt("room-number") else null
+                roomNumber = if (respawnSection.contains("room-number")) respawnSection.getInt("room-number") else null,
+                world = respawnSection.getString("world") ?: getWorldName()
             )
             respawns.add(respawn)
         }
@@ -297,7 +394,8 @@ class ConfigManager(private val plugin: ZombieRun) {
                 z = section.getInt("z"),
                 mode = mode,
                 doorNumber = doorNumber,
-                doorNumbers = doorNumbers
+                doorNumbers = doorNumbers,
+                world = section.getString("world") ?: getWorldName()
             )
             buttons.add(button)
         }
@@ -320,6 +418,7 @@ class ConfigManager(private val plugin: ZombieRun) {
         } else {
             section.set("door-numbers", null)
         }
+        section.set("world", button.world)
         saveConfig()
     }
 
@@ -384,6 +483,7 @@ class ConfigManager(private val plugin: ZombieRun) {
         doorSection.set("use-scan-data", door.useScanData)
         doorSection.set("group", door.group)
         doorSection.set("reverse-direction", door.reverseDirection)
+        doorSection.set("world", door.world)
         if (door.specialBehavior != null) {
             val sb = doorSection.createSection("special-behavior")
             when (val b = door.specialBehavior!!) {
@@ -441,6 +541,7 @@ class ConfigManager(private val plugin: ZombieRun) {
         if (respawn.roomNumber != null) {
             respawnSection.set("room-number", respawn.roomNumber)
         }
+        respawnSection.set("world", respawn.world)
         saveConfig()
     }
 

@@ -25,7 +25,9 @@ class Door(
     val blocks: Map<String, String> = emptyMap(),
     val group: String? = null,
     /** 反转穿越方向（默认正方向为"前方"，设为 true 则负方向为"前方"） */
-    val reverseDirection: Boolean = false
+    val reverseDirection: Boolean = false,
+    /** 所在世界名 */
+    val world: String = "world"
 ) {
 
     enum class DoorMode {
@@ -168,8 +170,9 @@ class Door(
         openTime: Int = this.openTime,
         closeTime: Int = this.closeTime,
         doorNumber: Int = this.doorNumber,
-        group: String? = this.group
-    ) = Door(name, minX, minY, minZ, maxX, maxY, maxZ, openTime, closeTime, doorNumber, material, specialBehavior, mode, useScanData, blocks, group, reverseDirection)
+        group: String? = this.group,
+        world: String = this.world
+    ) = Door(name, minX, minY, minZ, maxX, maxY, maxZ, openTime, closeTime, doorNumber, material, specialBehavior, mode, useScanData, blocks, group, reverseDirection, world)
 
     override fun toString(): String {
         return "Door(name='$name', doorNumber=$doorNumber, mode='$mode', group=${group ?: "-"}, open=$openTime, close=$closeTime, blocks=${blocks.size})"

@@ -12,6 +12,7 @@ import cn.oneachina.zombieRun.listener.ProgressionListener
 import cn.oneachina.zombieRun.listener.StaminaListener
 import cn.oneachina.zombieRun.manager.*
 import cn.oneachina.zombieRun.papi.ZombieRunExpansion
+import cn.oneachina.zombieRun.service.WorldService
 import cn.oneachina.zombieRun.util.DebugLogger
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
@@ -22,6 +23,8 @@ class ZombieRun : JavaPlugin() {
     var debugMode = false
 
     private val postoolUsers = mutableSetOf<UUID>()
+
+    val worldService: WorldService by lazy { WorldService(this).apply { init() } }
 
     val configManager: ConfigManager by lazy { ConfigManager(this).apply { loadConfig() } }
     val databaseManager: DatabaseManager by lazy { DatabaseManager(this).apply { init() } }

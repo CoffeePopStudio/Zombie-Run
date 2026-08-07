@@ -7,7 +7,8 @@ class Button(
     val z: Int,
     val mode: String,                      // normal, escape
     val doorNumber: Int? = null,            // for normal mode (single door)
-    val doorNumbers: List<Int>? = null      // for normal mode (multi doors)
+    val doorNumbers: List<Int>? = null,     // for normal mode (multi doors)
+    val world: String = "world"
 ) {
     fun matches(x: Int, y: Int, z: Int): Boolean {
         return this.x == x && this.y == y && this.z == z

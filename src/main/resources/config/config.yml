@@ -7,7 +7,7 @@
 # ---------- 全局游戏参数 ----------
 game:
   mode: zombie_run             # （预留）游戏模式，当前仅 zombie_run，暂未启用
-  world: world                 # （预留）游戏地图所在的世界名，暂未启用
+  world: world                 # 游戏地图所在的世界名（门/按钮/重生点默认世界）
   start-delay: 30              # 达到最小人数后，等待多少秒自动开局
   min-players: 8               # 自动开局所需的最小在线玩家数
   max-players: 32              # 最大显示玩家数（仅用于 PAPI 占位符，不限制实际加入）

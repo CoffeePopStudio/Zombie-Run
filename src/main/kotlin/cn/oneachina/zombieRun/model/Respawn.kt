@@ -12,7 +12,8 @@ class Respawn(
     val pitch: Double = 0.0,
     val type: RespawnType = RespawnType.PLAYER,
     val doorNumber: Int? = null,
-    val roomNumber: Int? = null
+    val roomNumber: Int? = null,
+    val world: String = "world"
 ) {
     
     enum class RespawnType {
