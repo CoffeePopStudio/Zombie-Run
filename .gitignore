@@ -122,6 +122,7 @@ runs/
 .trae/
 .tmp_wm_src/
 .kotlin/
+.opencode/
 docs/superpowers
 
 # 本地修复记录（不进版本库/远程）
