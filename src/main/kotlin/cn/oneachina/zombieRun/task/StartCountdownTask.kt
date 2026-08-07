@@ -12,26 +12,27 @@ import org.bukkit.entity.Player
 
 class StartCountdownTask(
     private val plugin: ZombieRun,
-    private val gameManager: GameManager
+    private val gameManager: GameManager,
+    private val game: GameManager.GameInstance
 ) {
 
     private var countdown = 15
     val getCountdown: Int
         get() = countdown
-    private val alphaZombie: Player = gameManager.selectAlphaZombie()
+    private val alphaZombie: Player = gameManager.selectAlphaZombie(game)
 
     init {
-        gameManager.alphaZombie = alphaZombie
-        gameManager.isCountdownActive = true
+        game.alphaZombie = alphaZombie
+        game.isCountdownActive = true
 
-        plugin.logger.info("准备阶段开始，母体: ${alphaZombie.name}，模式设为冒险")
+        plugin.logger.info("[${game.worldName}] 准备阶段开始，母体: ${alphaZombie.name}，模式设为冒险")
 
-        Bukkit.getOnlinePlayers().forEach { player ->
+        gameManager.getWorldPlayers(game.worldName).forEach { player ->
             if (player == alphaZombie) {
-                player.teleportAsync(plugin.respawnManager.getZombieMainRespawn()?.getLocation(player.world)
+                player.teleportAsync(plugin.respawnManager.getZombieMainRespawn(game.worldName)?.getLocation(player.world)
                     ?: plugin.respawnManager.getDefaultRespawn().getLocation(player.world))
             } else {
-                player.teleportAsync(plugin.respawnManager.getPlayerInitialRespawn()?.getLocation(player.world)
+                player.teleportAsync(plugin.respawnManager.getPlayerInitialRespawn(game.worldName)?.getLocation(player.world)
                     ?: plugin.respawnManager.getDefaultRespawn().getLocation(player.world))
             }
             player.gameMode = GameMode.ADVENTURE
@@ -44,9 +45,9 @@ class StartCountdownTask(
 
     fun start(): ScheduledTask {
         return Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { task ->
-            if (gameManager.getGameStatus() != GameManager.GameStatus.STARTING) {
+            if (game.status != GameManager.GameStatus.STARTING) {
                 task.cancel()
-                gameManager.isCountdownActive = false
+                game.isCountdownActive = false
                 return@runAtFixedRate
             }
 
@@ -54,12 +55,12 @@ class StartCountdownTask(
 
             if (countdown <= 0) {
                 task.cancel()
-                gameManager.isCountdownActive = false
-                gameManager.beginGame()
+                game.isCountdownActive = false
+                gameManager.beginGame(game)
                 return@runAtFixedRate
             }
 
-            Bukkit.getOnlinePlayers().forEach { player ->
+            gameManager.getWorldPlayers(game.worldName).forEach { player ->
                 player.showTitle(Title.title(
                     Component.text("准备阶段", NamedTextColor.AQUA),
                     Component.text("大门将在 $countdown 秒后打开", NamedTextColor.WHITE)
@@ -68,4 +69,3 @@ class StartCountdownTask(
         }, 1L, 20L)
     }
 }
-

@@ -58,7 +58,7 @@ sealed class SpecialDoorBehavior {
             val mm = MiniMessage.miniMessage()
             var remaining = countdown
             val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(context.plugin, { schedTask ->
-                if (context.plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
+                if (context.plugin.gameManager.getGameStatus(context.door.world) != GameManager.GameStatus.RUNNING) {
                     schedTask.cancel()
                     return@runAtFixedRate
                 }

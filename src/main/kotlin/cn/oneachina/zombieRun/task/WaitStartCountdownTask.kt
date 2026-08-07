@@ -11,33 +11,34 @@ import org.bukkit.Bukkit
 class WaitStartCountdownTask(
     private val plugin: ZombieRun,
     private val gameManager: GameManager,
+    private val game: GameManager.GameInstance,
     private var countdown: Int
 ) {
 
     fun start(): ScheduledTask {
         return Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { task ->
-            if (gameManager.getGameStatus() != GameManager.GameStatus.WAITING) {
-                gameManager.cancelWaitStartTask()
+            if (game.status != GameManager.GameStatus.WAITING) {
+                gameManager.cancelWaitStartTask(game)
                 task.cancel()
                 return@runAtFixedRate
             }
 
-            val onlineCount = Bukkit.getOnlinePlayers().size
+            val onlineCount = gameManager.getWorldPlayers(game.worldName).size
             val minPlayers = plugin.configManager.getMinPlayers()
             if (onlineCount < minPlayers) {
-                gameManager.cancelWaitStartTask()
+                gameManager.cancelWaitStartTask(game)
                 task.cancel()
                 return@runAtFixedRate
             }
 
             if (countdown <= 0) {
-                gameManager.cancelWaitStartTask()
-                gameManager.forceStartGame()
+                gameManager.cancelWaitStartTask(game)
+                gameManager.forceStartGame(game.worldName)
                 task.cancel()
                 return@runAtFixedRate
             }
 
-            Bukkit.getOnlinePlayers().forEach { player ->
+            gameManager.getWorldPlayers(game.worldName).forEach { player ->
                 player.showTitle(Title.title(
                     Component.text("", NamedTextColor.GREEN),
                     Component.text()
@@ -52,4 +53,3 @@ class WaitStartCountdownTask(
         }, 1L, 20L)
     }
 }
-

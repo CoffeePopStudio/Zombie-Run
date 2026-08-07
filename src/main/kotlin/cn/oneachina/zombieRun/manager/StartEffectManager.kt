@@ -26,13 +26,16 @@ class StartEffectManager(private val plugin: ZombieRun) {
         plugin.logger.info("已加载 ${effects.size} 个开场效果")
     }
 
-    fun executeStartEffects() {
+    fun executeStartEffects(world: String) {
         var cumulativeDelay = 0L
         for (effect in effects) {
             cumulativeDelay += effect.delay
             Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
                 when (effect.type.lowercase()) {
-                    "command" -> Bukkit.dispatchCommand(Bukkit.getConsoleSender(), effect.command)
+                    "command" -> Bukkit.dispatchCommand(
+                        Bukkit.getConsoleSender(),
+                        effect.command.replace("%world%", world)
+                    )
                     else -> plugin.logger.warning("未知的效果类型: ${effect.type}")
                 }
             }, cumulativeDelay)
