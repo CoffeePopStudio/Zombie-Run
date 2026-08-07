@@ -22,16 +22,20 @@ class ButtonManager(private val plugin: ZombieRun) {
         plugin.logger.info("共加载 ${buttons.size} 个按钮")
     }
 
-    fun getButton(x: Int, y: Int, z: Int): Button? {
-        return buttons.values.find { it.matches(x, y, z) }
+    fun getButton(worldName: String, x: Int, y: Int, z: Int): Button? {
+        return buttons.values.find { it.world == worldName && it.matches(x, y, z) }
     }
 
     fun getAllButtons(): Collection<Button> {
         return buttons.values
     }
 
-    fun getButtonByDoorNumber(doorNumber: Int): Button? {
-        return buttons.values.find { it.isNormal() && it.doorNumber == doorNumber }
+    fun getButtonByDoorNumber(worldName: String, doorNumber: Int): Button? {
+        return buttons.values.find { it.world == worldName && it.isNormal() && it.doorNumber == doorNumber }
+    }
+
+    fun getButtonsInWorld(worldName: String): List<Button> {
+        return buttons.values.filter { it.world == worldName }
     }
 
     fun addButton(button: Button) {
@@ -43,7 +47,7 @@ class ButtonManager(private val plugin: ZombieRun) {
     }
 
     fun setButtonLit(button: Button) {
-        val world = org.bukkit.Bukkit.getWorlds().first()
+        val world = plugin.worldService.getWorldOrFirst(button.world)
         val block = world.getBlockAt(button.x, button.y, button.z)
         if (block.type == Material.REDSTONE_LAMP || block.type == Material.LEVER) {
             originalButtonBlocks[block.location] = block.type

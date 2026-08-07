@@ -27,7 +27,6 @@ class DoorZoneManager {
             doorsByZone.computeIfAbsent(zoneKey) { mutableListOf() }.add(door)
         }
     }
-
     /**
      * 从分区管理器中移除门
      */
@@ -45,29 +44,29 @@ class DoorZoneManager {
      * 获取指定位置所在区域的所有门
      */
     fun getDoorsInZone(location: Location): List<Door> {
-        val zoneKey = getZoneKey(location.x.toInt(), location.z.toInt())
+        val zoneKey = getZoneKey(location.world.name, location.x.toInt(), location.z.toInt())
         return doorsByZone[zoneKey]?.toList() ?: emptyList()
     }
 
     /**
-     * 获取指定区域范围内的所有门
+     * 获取指定区域范围内的所有门（限定世界）
      */
-    fun getDoorsInArea(minX: Int, minZ: Int, maxX: Int, maxZ: Int): List<Door> {
+    fun getDoorsInArea(world: String, minX: Int, minZ: Int, maxX: Int, maxZ: Int): List<Door> {
         val result = mutableSetOf<Door>()
-        
+
         // 计算覆盖的所有区域
         val startZoneX = minX / zoneSize
         val startZoneZ = minZ / zoneSize
         val endZoneX = maxX / zoneSize
         val endZoneZ = maxZ / zoneSize
-        
+
         for (zoneX in startZoneX..endZoneX) {
             for (zoneZ in startZoneZ..endZoneZ) {
-                val zoneKey = getZoneKey(zoneX, zoneZ)
+                val zoneKey = getZoneKey(world, zoneX, zoneZ)
                 doorsByZone[zoneKey]?.forEach { result.add(it) }
             }
         }
-        
+
         return result.toList()
     }
 
@@ -76,26 +75,26 @@ class DoorZoneManager {
      */
     private fun getZonesForDoor(door: Door): Set<String> {
         val zones = mutableSetOf<String>()
-        
+
         val startZoneX = door.minX / zoneSize
         val startZoneZ = door.minZ / zoneSize
         val endZoneX = door.maxX / zoneSize
         val endZoneZ = door.maxZ / zoneSize
-        
+
         for (zoneX in startZoneX..endZoneX) {
             for (zoneZ in startZoneZ..endZoneZ) {
-                zones.add(getZoneKey(zoneX, zoneZ))
+                zones.add(getZoneKey(door.world, zoneX, zoneZ))
             }
         }
-        
+
         return zones
     }
 
     /**
-     * 获取区域的唯一键（调用方需传入已除以 zoneSize 的区域索引）
+     * 获取区域的唯一键（世界名 + 已除以 zoneSize 的区域索引）
      */
-    private fun getZoneKey(x: Int, z: Int): String {
-        return "$x,$z"
+    private fun getZoneKey(world: String, x: Int, z: Int): String {
+        return "$world:$x,$z"
     }
 
     /**

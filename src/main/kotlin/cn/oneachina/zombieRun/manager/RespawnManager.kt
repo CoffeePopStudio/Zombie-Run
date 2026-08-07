@@ -4,6 +4,7 @@ import cn.oneachina.zombieRun.ZombieRun
 import cn.oneachina.zombieRun.model.Respawn
 import org.bukkit.Bukkit
 import org.bukkit.Location
+import org.bukkit.World
 import org.bukkit.entity.Player
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
@@ -12,13 +13,13 @@ class RespawnManager(private val plugin: ZombieRun) {
 
     private val respawns: ConcurrentHashMap<String, Respawn> = ConcurrentHashMap()
 
-    private val waitRespawns: CopyOnWriteArrayList<Respawn> = CopyOnWriteArrayList()
-    private val playerRespawns: CopyOnWriteArrayList<Respawn> = CopyOnWriteArrayList()
-    private val zombieRespawns: CopyOnWriteArrayList<Respawn> = CopyOnWriteArrayList()
-    private val zombieMainRespawns: CopyOnWriteArrayList<Respawn> = CopyOnWriteArrayList()
-    private val doorPlayerRespawns: ConcurrentHashMap<Int, CopyOnWriteArrayList<Respawn>> = ConcurrentHashMap()
-    private val doorZombieRespawns: ConcurrentHashMap<Int, CopyOnWriteArrayList<Respawn>> = ConcurrentHashMap()
-    private val roomPlayerRespawns: ConcurrentHashMap<Int, CopyOnWriteArrayList<Respawn>> = ConcurrentHashMap()
+    private val waitRespawns: ConcurrentHashMap<String, CopyOnWriteArrayList<Respawn>> = ConcurrentHashMap()
+    private val playerRespawns: ConcurrentHashMap<String, CopyOnWriteArrayList<Respawn>> = ConcurrentHashMap()
+    private val zombieRespawns: ConcurrentHashMap<String, CopyOnWriteArrayList<Respawn>> = ConcurrentHashMap()
+    private val zombieMainRespawns: ConcurrentHashMap<String, CopyOnWriteArrayList<Respawn>> = ConcurrentHashMap()
+    private val doorPlayerRespawns: ConcurrentHashMap<String, ConcurrentHashMap<Int, CopyOnWriteArrayList<Respawn>>> = ConcurrentHashMap()
+    private val doorZombieRespawns: ConcurrentHashMap<String, ConcurrentHashMap<Int, CopyOnWriteArrayList<Respawn>>> = ConcurrentHashMap()
+    private val roomPlayerRespawns: ConcurrentHashMap<String, ConcurrentHashMap<Int, CopyOnWriteArrayList<Respawn>>> = ConcurrentHashMap()
 
     fun loadRespawns() {
         respawns.clear()
@@ -34,40 +35,59 @@ class RespawnManager(private val plugin: ZombieRun) {
 
         respawnList.forEach { respawn ->
             respawns[respawn.name] = respawn
+            addToIndexes(respawn)
 
-            when (respawn.type) {
-                Respawn.RespawnType.WAIT -> waitRespawns.add(respawn)
-                Respawn.RespawnType.PLAYER -> playerRespawns.add(respawn)
-                Respawn.RespawnType.ZOMBIE -> zombieRespawns.add(respawn)
-                Respawn.RespawnType.ZOMBIE_MAIN -> zombieMainRespawns.add(respawn)
-                Respawn.RespawnType.DOOR_PLAYER -> {
-                    if (respawn.doorNumber != null) {
-                        val list = doorPlayerRespawns.computeIfAbsent(respawn.doorNumber) { CopyOnWriteArrayList() }
-                        list.add(respawn)
-                    }
-                    if (respawn.roomNumber != null) {
-                        val list = roomPlayerRespawns.computeIfAbsent(respawn.roomNumber) { CopyOnWriteArrayList() }
-                        list.add(respawn)
-                    }
-                }
-                Respawn.RespawnType.DOOR_ZOMBIE -> {
-                    if (respawn.doorNumber != null) {
-                        val list = doorZombieRespawns.computeIfAbsent(respawn.doorNumber) { CopyOnWriteArrayList() }
-                        list.add(respawn)
-                    }
-                }
-            }
-
-            plugin.logger.info("重生点 '${respawn.name}' 加载成功，类型: ${respawn.type}")
+            plugin.logger.info("重生点 '${respawn.name}' 加载成功，类型: ${respawn.type}，世界: ${respawn.world}")
         }
 
         plugin.logger.info("共加载 ${respawns.size} 个重生点")
-        plugin.logger.info("等待出生点: ${waitRespawns.size}")
-        plugin.logger.info("玩家出生点: ${playerRespawns.size}")
-        plugin.logger.info("僵尸出生点: ${zombieRespawns.size}")
-        plugin.logger.info("母体僵尸出生点: ${zombieMainRespawns.size}")
-        plugin.logger.info("门玩家传送点: ${doorPlayerRespawns.size} 个门")
-        plugin.logger.info("门僵尸传送点: ${doorZombieRespawns.size} 个门")
+    }
+
+    private fun addToIndexes(respawn: Respawn) {
+        when (respawn.type) {
+            Respawn.RespawnType.WAIT -> waitRespawns.computeIfAbsent(respawn.world) { CopyOnWriteArrayList() }.add(respawn)
+            Respawn.RespawnType.PLAYER -> playerRespawns.computeIfAbsent(respawn.world) { CopyOnWriteArrayList() }.add(respawn)
+            Respawn.RespawnType.ZOMBIE -> zombieRespawns.computeIfAbsent(respawn.world) { CopyOnWriteArrayList() }.add(respawn)
+            Respawn.RespawnType.ZOMBIE_MAIN -> zombieMainRespawns.computeIfAbsent(respawn.world) { CopyOnWriteArrayList() }.add(respawn)
+            Respawn.RespawnType.DOOR_PLAYER -> {
+                if (respawn.doorNumber != null) {
+                    doorPlayerRespawns.computeIfAbsent(respawn.world) { ConcurrentHashMap() }
+                        .computeIfAbsent(respawn.doorNumber) { CopyOnWriteArrayList() }.add(respawn)
+                }
+                if (respawn.roomNumber != null) {
+                    roomPlayerRespawns.computeIfAbsent(respawn.world) { ConcurrentHashMap() }
+                        .computeIfAbsent(respawn.roomNumber) { CopyOnWriteArrayList() }.add(respawn)
+                }
+            }
+            Respawn.RespawnType.DOOR_ZOMBIE -> {
+                if (respawn.doorNumber != null) {
+                    doorZombieRespawns.computeIfAbsent(respawn.world) { ConcurrentHashMap() }
+                        .computeIfAbsent(respawn.doorNumber) { CopyOnWriteArrayList() }.add(respawn)
+                }
+            }
+        }
+    }
+
+    private fun removeFromIndexes(respawn: Respawn) {
+        when (respawn.type) {
+            Respawn.RespawnType.WAIT -> waitRespawns[respawn.world]?.remove(respawn)
+            Respawn.RespawnType.PLAYER -> playerRespawns[respawn.world]?.remove(respawn)
+            Respawn.RespawnType.ZOMBIE -> zombieRespawns[respawn.world]?.remove(respawn)
+            Respawn.RespawnType.ZOMBIE_MAIN -> zombieMainRespawns[respawn.world]?.remove(respawn)
+            Respawn.RespawnType.DOOR_PLAYER -> {
+                if (respawn.doorNumber != null) {
+                    doorPlayerRespawns[respawn.world]?.get(respawn.doorNumber)?.remove(respawn)
+                }
+                if (respawn.roomNumber != null) {
+                    roomPlayerRespawns[respawn.world]?.get(respawn.roomNumber)?.remove(respawn)
+                }
+            }
+            Respawn.RespawnType.DOOR_ZOMBIE -> {
+                if (respawn.doorNumber != null) {
+                    doorZombieRespawns[respawn.world]?.get(respawn.doorNumber)?.remove(respawn)
+                }
+            }
+        }
     }
 
     fun getRespawn(name: String): Respawn? {
@@ -80,62 +100,28 @@ class RespawnManager(private val plugin: ZombieRun) {
 
     fun addRespawn(respawn: Respawn) {
         respawns[respawn.name] = respawn
-
-        when (respawn.type) {
-            Respawn.RespawnType.WAIT -> waitRespawns.add(respawn)
-            Respawn.RespawnType.PLAYER -> playerRespawns.add(respawn)
-            Respawn.RespawnType.ZOMBIE -> zombieRespawns.add(respawn)
-            Respawn.RespawnType.ZOMBIE_MAIN -> zombieMainRespawns.add(respawn)
-            Respawn.RespawnType.DOOR_PLAYER -> {
-                if (respawn.doorNumber != null) {
-                    val list = doorPlayerRespawns.computeIfAbsent(respawn.doorNumber) { CopyOnWriteArrayList() }
-                    list.add(respawn)
-                }
-                if (respawn.roomNumber != null) {
-                    val list = roomPlayerRespawns.computeIfAbsent(respawn.roomNumber) { CopyOnWriteArrayList() }
-                    list.add(respawn)
-                }
-            }
-            Respawn.RespawnType.DOOR_ZOMBIE -> {
-                if (respawn.doorNumber != null) {
-                    val list = doorZombieRespawns.computeIfAbsent(respawn.doorNumber) { CopyOnWriteArrayList() }
-                    list.add(respawn)
-                }
-            }
-        }
+        addToIndexes(respawn)
     }
 
     fun removeRespawn(name: String) {
         val respawn = respawns.remove(name)
         if (respawn != null) {
-            when (respawn.type) {
-                Respawn.RespawnType.WAIT -> waitRespawns.remove(respawn)
-                Respawn.RespawnType.PLAYER -> playerRespawns.remove(respawn)
-                Respawn.RespawnType.ZOMBIE -> zombieRespawns.remove(respawn)
-                Respawn.RespawnType.ZOMBIE_MAIN -> zombieMainRespawns.remove(respawn)
-                Respawn.RespawnType.DOOR_PLAYER -> {
-                    if (respawn.doorNumber != null) {
-                        doorPlayerRespawns[respawn.doorNumber]?.remove(respawn)
-                    }
-                    if (respawn.roomNumber != null) {
-                        roomPlayerRespawns[respawn.roomNumber]?.remove(respawn)
-                    }
-                }
-                Respawn.RespawnType.DOOR_ZOMBIE -> {
-                    if (respawn.doorNumber != null) {
-                        doorZombieRespawns[respawn.doorNumber]?.remove(respawn)
-                    }
-                }
-            }
+            removeFromIndexes(respawn)
         }
     }
 
+    /** 重生点所在的世界（MV 或 Bukkit 查找，回退第一个世界） */
+    fun getRespawnWorld(respawn: Respawn): World {
+        return plugin.worldService.getWorldOrFirst(respawn.world)
+    }
+
     fun selectRespawn(player: Player): Respawn {
+        val world = player.world.name
         return when (plugin.gameManager.getPlayerTeam(player)) {
-            GameManager.Team.HUMAN -> getPlayerInitialRespawn() ?: getDefaultRespawn()
-            GameManager.Team.ZOMBIE -> getZombieRespawn() ?: getDefaultRespawn()
-            GameManager.Team.ZOMBIE_MAIN -> getZombieMainRespawn() ?: getDefaultRespawn()
-            else -> getWaitRespawn() ?: getDefaultRespawn()
+            GameManager.Team.HUMAN -> getPlayerInitialRespawn(world) ?: getDefaultRespawn()
+            GameManager.Team.ZOMBIE -> getZombieRespawn(world) ?: getDefaultRespawn()
+            GameManager.Team.ZOMBIE_MAIN -> getZombieMainRespawn(world) ?: getDefaultRespawn()
+            else -> getWaitRespawn(world) ?: getDefaultRespawn()
         }
     }
 
@@ -149,7 +135,8 @@ class RespawnManager(private val plugin: ZombieRun) {
                 loc.blockY,
                 loc.blockZ,
                 loc.yaw.toDouble(),
-                loc.pitch.toDouble()
+                loc.pitch.toDouble(),
+                world = world.name
             )
         } else {
             Respawn(
@@ -165,7 +152,7 @@ class RespawnManager(private val plugin: ZombieRun) {
 
     fun respawnPlayer(player: Player) {
         val respawn = getDefaultRespawn()
-        val location = respawn.getLocation(player.world)
+        val location = respawn.getLocation(getRespawnWorld(respawn))
         player.teleportAsync(location)
         plugin.logger.info("玩家 ${player.name} 重生至默认点")
     }
@@ -174,7 +161,7 @@ class RespawnManager(private val plugin: ZombieRun) {
         var nearestRespawn: Respawn? = null
         var minDistance = Double.MAX_VALUE
 
-        respawns.values.forEach { respawn ->
+        respawns.values.filter { it.world == location.world.name }.forEach { respawn ->
             val distance = respawn.getDistance(location)
             if (distance < minDistance) {
                 minDistance = distance
@@ -185,58 +172,61 @@ class RespawnManager(private val plugin: ZombieRun) {
         return nearestRespawn ?: getDefaultRespawn()
     }
 
-    fun getWaitRespawn(): Respawn? {
-        return waitRespawns.randomOrNull()
+    fun getWaitRespawn(world: String): Respawn? {
+        return waitRespawns[world]?.randomOrNull()
     }
 
-    fun getPlayerInitialRespawn(): Respawn? {
-        return playerRespawns.randomOrNull()
+    fun getPlayerInitialRespawn(world: String): Respawn? {
+        return playerRespawns[world]?.randomOrNull()
     }
 
-    fun getZombieRespawn(): Respawn? {
-        return zombieRespawns.randomOrNull()
+    fun getZombieRespawn(world: String): Respawn? {
+        return zombieRespawns[world]?.randomOrNull()
     }
 
-    fun getZombieMainRespawn(): Respawn? {
-        return zombieMainRespawns.randomOrNull() ?: zombieRespawns.randomOrNull()
+    fun getZombieMainRespawn(world: String): Respawn? {
+        return zombieMainRespawns[world]?.randomOrNull() ?: zombieRespawns[world]?.randomOrNull()
     }
 
-    fun getDoorPlayerRespawn(doorNumber: Int): Respawn? {
-        return doorPlayerRespawns[doorNumber]?.randomOrNull()
+    fun getDoorPlayerRespawn(world: String, doorNumber: Int): Respawn? {
+        return doorPlayerRespawns[world]?.get(doorNumber)?.randomOrNull()
     }
 
-    fun getRoomPlayerRespawn(roomNumber: Int): Respawn? {
-        return roomPlayerRespawns[roomNumber]?.randomOrNull()
+    fun getRoomPlayerRespawn(world: String, roomNumber: Int): Respawn? {
+        return roomPlayerRespawns[world]?.get(roomNumber)?.randomOrNull()
     }
 
-    fun getDoorZombieRespawn(doorNumber: Int): Respawn? {
-        return doorZombieRespawns[doorNumber]?.randomOrNull()
+    fun getDoorZombieRespawn(world: String, doorNumber: Int): Respawn? {
+        return doorZombieRespawns[world]?.get(doorNumber)?.randomOrNull()
     }
 
-    fun getSpecialZombieRespawn(doorNumber: Int): Respawn? {
+    fun getSpecialZombieRespawn(world: String, doorNumber: Int): Respawn? {
         if (doorNumber == 6 || doorNumber == 7) {
-            return doorZombieRespawns[doorNumber]?.randomOrNull()
+            return doorZombieRespawns[world]?.get(doorNumber)?.randomOrNull()
         }
         return null
     }
 
     fun teleportToWaitRespawn(player: Player) {
-        val respawn = getWaitRespawn() ?: getDefaultRespawn()
-        val location = respawn.getLocation(player.world)
+        val world = player.world.name
+        val respawn = getWaitRespawn(world) ?: getDefaultRespawn()
+        val location = respawn.getLocation(getRespawnWorld(respawn))
         player.teleportAsync(location)
         plugin.logger.info("玩家 ${player.name} 传送到等待出生点 ${respawn.name}")
     }
 
     fun teleportToPlayerInitialRespawn(player: Player) {
-        val respawn = getPlayerInitialRespawn() ?: getDefaultRespawn()
-        val location = respawn.getLocation(player.world)
+        val world = player.world.name
+        val respawn = getPlayerInitialRespawn(world) ?: getDefaultRespawn()
+        val location = respawn.getLocation(getRespawnWorld(respawn))
         player.teleportAsync(location)
         plugin.logger.info("玩家 ${player.name} 传送到初始出生点 ${respawn.name}")
     }
 
     fun teleportToZombieRespawn(zombie: Player) {
-        val respawn = getZombieRespawn() ?: getDefaultRespawn()
-        val location = respawn.getLocation(zombie.world)
+        val world = zombie.world.name
+        val respawn = getZombieRespawn(world) ?: getDefaultRespawn()
+        val location = respawn.getLocation(getRespawnWorld(respawn))
         zombie.teleportAsync(location)
         plugin.logger.info("僵尸传送到出生点 ${respawn.name}")
     }
@@ -247,10 +237,11 @@ class RespawnManager(private val plugin: ZombieRun) {
      * @param ahead    是否向"人类前方更远"布防：true 优先选门号 > progress 的最近门点；
      *                 false 优先选门号 == progress 的就近门点（无则回退到最近的更前门点）
      */
-    fun getProgressZombieRespawn(progress: Int, ahead: Boolean): Respawn? {
-        val nextDoors = doorZombieRespawns.keys.filter { it > progress }
-        val aheadPoint = nextDoors.minOrNull()?.let { doorZombieRespawns[it]?.randomOrNull() }
-        val currentPoint = doorZombieRespawns[progress]?.randomOrNull()
+    fun getProgressZombieRespawn(world: String, progress: Int, ahead: Boolean): Respawn? {
+        val worldDoorZombie = doorZombieRespawns[world] ?: return null
+        val nextDoors = worldDoorZombie.keys.filter { it > progress }
+        val aheadPoint = nextDoors.minOrNull()?.let { worldDoorZombie[it]?.randomOrNull() }
+        val currentPoint = worldDoorZombie[progress]?.randomOrNull()
         return if (ahead) {
             // 布防：更远门点优先；已到最后阶段则退回当前进度门点
             aheadPoint ?: currentPoint
@@ -261,45 +252,54 @@ class RespawnManager(private val plugin: ZombieRun) {
     }
 
     fun teleportZombieByProgress(zombie: Player, progress: Int, ahead: Boolean) {
-        val respawn = getProgressZombieRespawn(progress, ahead)
-            ?: getZombieRespawn()
+        val world = zombie.world.name
+        val respawn = getProgressZombieRespawn(world, progress, ahead)
+            ?: getZombieRespawn(world)
             ?: getDefaultRespawn()
-        val location = respawn.getLocation(zombie.world)
+        val location = respawn.getLocation(getRespawnWorld(respawn))
         zombie.teleportAsync(location)
         plugin.logger.info("僵尸按进度($progress, ahead=$ahead)传送到 ${respawn.name}")
     }
 
     fun teleportToZombieMainRespawn(zombie: Player) {
-        val respawn = getZombieMainRespawn() ?: getDefaultRespawn()
-        val location = respawn.getLocation(zombie.world)
+        val world = zombie.world.name
+        val respawn = getZombieMainRespawn(world) ?: getDefaultRespawn()
+        val location = respawn.getLocation(getRespawnWorld(respawn))
         zombie.teleportAsync(location)
         plugin.logger.info("母体僵尸传送到出生点 ${respawn.name}")
     }
 
     fun teleportPlayerByDoorClose(player: Player, doorNumber: Int) {
-        val respawn = getDoorPlayerRespawn(doorNumber) ?: getDefaultRespawn()
-        val location = respawn.getLocation(player.world)
+        val world = player.world.name
+        val respawn = getDoorPlayerRespawn(world, doorNumber) ?: getDefaultRespawn()
+        val location = respawn.getLocation(getRespawnWorld(respawn))
         player.teleportAsync(location)
         plugin.logger.info("玩家 ${player.name} 因门关闭传送到门${doorNumber}传送点 ${respawn.name}")
     }
 
     fun teleportPlayerByRoom(player: Player, roomNumber: Int) {
-        val respawn = getRoomPlayerRespawn(roomNumber) ?: getDefaultRespawn()
-        val location = respawn.getLocation(player.world)
+        val world = player.world.name
+        val respawn = getRoomPlayerRespawn(world, roomNumber) ?: getDefaultRespawn()
+        val location = respawn.getLocation(getRespawnWorld(respawn))
         player.teleportAsync(location)
         plugin.logger.info("玩家 ${player.name} 传送到房间${roomNumber}传送点 ${respawn.name}")
     }
 
     fun teleportZombieByDoorClose(zombie: Player, doorNumber: Int) {
-        val respawn = getDoorZombieRespawn(doorNumber) ?: getZombieRespawn() ?: getDefaultRespawn()
-        val location = respawn.getLocation(zombie.world)
+        val world = zombie.world.name
+        val respawn = getDoorZombieRespawn(world, doorNumber) ?: getZombieRespawn(world) ?: getDefaultRespawn()
+        val location = respawn.getLocation(getRespawnWorld(respawn))
         zombie.teleportAsync(location)
         plugin.logger.info("僵尸传送到门${doorNumber}传送点 ${respawn.name}")
     }
 
     fun teleportZombieSpecial(zombie: Player, doorNumber: Int) {
-        val respawn = getSpecialZombieRespawn(doorNumber) ?: getDoorZombieRespawn(doorNumber) ?: getZombieRespawn() ?: getDefaultRespawn()
-        val location = respawn.getLocation(zombie.world)
+        val world = zombie.world.name
+        val respawn = getSpecialZombieRespawn(world, doorNumber)
+            ?: getDoorZombieRespawn(world, doorNumber)
+            ?: getZombieRespawn(world)
+            ?: getDefaultRespawn()
+        val location = respawn.getLocation(getRespawnWorld(respawn))
         zombie.teleportAsync(location)
         plugin.logger.info("僵尸特殊传送到门${doorNumber}传送点 ${respawn.name}")
     }
