@@ -35,10 +35,10 @@ class ProgressionListener(private val plugin: ZombieRun) {
         plugin.progressionManager.addXp(player, plugin.economyConfig.passDoorXp, "通过门")
     }
 
-    fun onHumanWin() {
+    fun onHumanWin(world: String) {
         val pm = plugin.progressionManager
         val qm = plugin.questManager
-        org.bukkit.Bukkit.getOnlinePlayers().forEach { player ->
+        plugin.gameManager.getWorldPlayers(world).forEach { player ->
             val team = plugin.gameManager.getPlayerTeam(player)
             if (team == GameManager.Team.HUMAN) {
                 pm.addHumanWin(player.uniqueId)
@@ -48,10 +48,10 @@ class ProgressionListener(private val plugin: ZombieRun) {
         }
     }
 
-    fun onGameEnd() {
+    fun onGameEnd(world: String) {
         val pm = plugin.progressionManager
         val qm = plugin.questManager
-        org.bukkit.Bukkit.getOnlinePlayers().forEach { player ->
+        plugin.gameManager.getWorldPlayers(world).forEach { player ->
             pm.addGamePlayed(player.uniqueId)
             pm.addXp(player, plugin.economyConfig.participateXp, "参与对局")
             qm.incrementProgress(player, QuestType.PLAY_GAME, 1)

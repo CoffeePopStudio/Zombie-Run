@@ -13,28 +13,30 @@ class ZombieRunExpansion(private val plugin: ZombieRun) : PlaceholderExpansion()
     override fun getVersion(): String = plugin.pluginMeta.version
 
     override fun onRequest(player: OfflinePlayer?, params: String): String? {
+        val world = player?.player?.world?.name ?: plugin.configManager.getWorldName()
+        val game = plugin.gameManager.getGame(world)
         return when (params.lowercase()) {
-            "human_count" -> plugin.gameManager.getHumans().size.toString()
-            "zombie_count" -> (plugin.gameManager.getZombies().size + plugin.gameManager.getZombieMains().size).toString()
-            "alpha_zombie_name" -> plugin.gameManager.alphaZombie?.name ?: ""
-            "alpha_zombie_health" -> plugin.gameManager.alphaZombie?.health?.toInt()?.toString() ?: "0"
-            "alpha_zombie_max_health" -> plugin.gameManager.alphaZombie?.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH)?.baseValue?.toInt()?.toString() ?: "0"
+            "human_count" -> plugin.gameManager.getHumans(world).size.toString()
+            "zombie_count" -> (plugin.gameManager.getZombies(world).size + plugin.gameManager.getZombieMains(world).size).toString()
+            "alpha_zombie_name" -> game.alphaZombie?.name ?: ""
+            "alpha_zombie_health" -> game.alphaZombie?.health?.toInt()?.toString() ?: "0"
+            "alpha_zombie_max_health" -> game.alphaZombie?.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH)?.baseValue?.toInt()?.toString() ?: "0"
             "alpha_zombie_health_percent" -> {
-                val alpha = plugin.gameManager.alphaZombie ?: return "0.0"
+                val alpha = game.alphaZombie ?: return "0.0"
                 val max = alpha.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH)?.baseValue ?: 500.0
                 (alpha.health / max).toString()
             }
-            "game_state" -> plugin.gameManager.getGameStatus().name
-            "game_state_formatted" -> formatGameState(plugin.gameManager.getGameStatus())
+            "game_state" -> game.status.name
+            "game_state_formatted" -> formatGameState(game.status)
             "time_left" -> {
-                if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return "0"
-                val elapsed = (System.currentTimeMillis() - plugin.gameManager.getGameStartTime()) / 1000
+                if (game.status != GameManager.GameStatus.RUNNING) return "0"
+                val elapsed = (System.currentTimeMillis() - game.gameStartTime) / 1000
                 val max = plugin.configManager.getMaxDuration()
                 (max - elapsed).toInt().coerceAtLeast(0).toString()
             }
             "time_left_formatted" -> {
-                if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return "00:00"
-                val elapsed = (System.currentTimeMillis() - plugin.gameManager.getGameStartTime()) / 1000
+                if (game.status != GameManager.GameStatus.RUNNING) return "00:00"
+                val elapsed = (System.currentTimeMillis() - game.gameStartTime) / 1000
                 val max = plugin.configManager.getMaxDuration()
                 val left = (max - elapsed).toInt().coerceAtLeast(0)
                 formatTime(left)
@@ -43,14 +45,14 @@ class ZombieRunExpansion(private val plugin: ZombieRun) : PlaceholderExpansion()
             "max_players" -> plugin.configManager.getMaxPlayers().toString()
             "online_players" -> Bukkit.getOnlinePlayers().size.toString()
             "progress" -> {
-                when (plugin.gameManager.getGameStatus()) {
+                when (game.status) {
                     GameManager.GameStatus.WAITING -> {
-                        val online = Bukkit.getOnlinePlayers().size
+                        val online = plugin.gameManager.getWorldPlayers(world).size
                         val min = plugin.configManager.getMinPlayers()
                         (online.toDouble() / min).toString()
                     }
                     GameManager.GameStatus.RUNNING -> {
-                        val elapsed = (System.currentTimeMillis() - plugin.gameManager.getGameStartTime()) / 1000.0
+                        val elapsed = (System.currentTimeMillis() - game.gameStartTime) / 1000.0
                         val max = plugin.configManager.getMaxDuration()
                         (elapsed / max).toString()
                     }
@@ -58,19 +60,19 @@ class ZombieRunExpansion(private val plugin: ZombieRun) : PlaceholderExpansion()
                 }
             }
             "bossbar" -> {
-                when (plugin.gameManager.getGameStatus()) {
+                when (game.status) {
                     GameManager.GameStatus.WAITING -> {
-                        val online = Bukkit.getOnlinePlayers().size
+                        val online = plugin.gameManager.getWorldPlayers(world).size
                         val min = plugin.configManager.getMinPlayers()
                         "<white>等待玩家... (<yellow>$online<white>/<yellow>$min<white>)"
                     }
                     GameManager.GameStatus.STARTING -> {
-                        val remaining = plugin.gameManager.startCountdownTaskInstance?.getCountdown ?: 0
+                        val remaining = game.startCountdownTaskInstance?.getCountdown ?: 0
                         "<green>准备阶段 <gray>- <red>${remaining}s"
                     }
                     GameManager.GameStatus.RUNNING -> {
-                        val humans = plugin.gameManager.getHumans().size
-                        val zombies = plugin.gameManager.getZombies().size + plugin.gameManager.getZombieMains().size
+                        val humans = plugin.gameManager.getHumans(world).size
+                        val zombies = plugin.gameManager.getZombies(world).size + plugin.gameManager.getZombieMains(world).size
                         "<aqua>人类: $humans  <red>僵尸: $zombies"
                     }
                     else -> "<gray>游戏结束"

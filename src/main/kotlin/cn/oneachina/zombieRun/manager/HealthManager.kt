@@ -28,7 +28,7 @@ class HealthManager(private val plugin: ZombieRun) {
 
     fun damage(player: Player, amount: Double, damager: Player? = null) {
         // WAITING/STARTING/ENDED 状态下禁止任何伤害
-        if (!plugin.debugMode && plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return
+        if (!plugin.debugMode && plugin.gameManager.getGameStatus(player) != GameManager.GameStatus.RUNNING) return
 
         if (damager != null) {
             lastDamager[player.uniqueId] = damager.uniqueId

@@ -41,7 +41,7 @@ class CombatListener(
     fun onQAWeaponPrepareShoot(event: QAWeaponPrepareShootEvent) {
         if (plugin.debugMode) return
         val player = event.player
-        val allowed = plugin.gameManager.getGameStatus() == GameManager.GameStatus.RUNNING &&
+        val allowed = plugin.gameManager.getGameStatus(player) == GameManager.GameStatus.RUNNING &&
             plugin.gameManager.getPlayerTeam(player) == GameManager.Team.HUMAN
         if (!allowed) event.isCancelled = true
     }
@@ -53,7 +53,7 @@ class CombatListener(
         val victim = event.damaged as? Player ?: return
 
         if (!plugin.debugMode) {
-            if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
+            if (plugin.gameManager.getGameStatus(shooter) != GameManager.GameStatus.RUNNING) {
                 event.isCancelled = true
                 return
             }
@@ -147,7 +147,7 @@ class CombatListener(
         val attacker = event.damager as? Player ?: return
         val victim = event.entity as? Player ?: return
 
-        if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return
+        if (plugin.gameManager.getGameStatus(attacker) != GameManager.GameStatus.RUNNING) return
 
         val attackerTeam = plugin.gameManager.getPlayerTeam(attacker)
         val victimTeam = plugin.gameManager.getPlayerTeam(victim)
@@ -213,16 +213,18 @@ class CombatListener(
                     plugin.coinManager.addCoins(killer.uniqueId, reward)
                     killer.sendMessage(Component.text("+ $reward 硬币!", NamedTextColor.GOLD))
                     val teamColor = if (victimTeam == GameManager.Team.ZOMBIE_MAIN) NamedTextColor.DARK_PURPLE else NamedTextColor.DARK_GREEN
-                    Bukkit.broadcast(Component.text()
+                    val killMsg = Component.text()
                         .append(Component.text(killer.name, NamedTextColor.AQUA))
                         .append(Component.text(" 击杀了 ", NamedTextColor.WHITE))
                         .append(Component.text(victim.name, teamColor))
-                        .build())
+                        .build()
+                    plugin.gameManager.getWorldPlayers(victim.world.name).forEach { it.sendMessage(killMsg) }
                 } else {
-                    Bukkit.broadcast(Component.text()
+                    val deathMsg = Component.text()
                         .append(Component.text(victim.name, NamedTextColor.DARK_GREEN))
                         .append(Component.text(" 死亡了", NamedTextColor.WHITE))
-                        .build())
+                        .build()
+                    plugin.gameManager.getWorldPlayers(victim.world.name).forEach { it.sendMessage(deathMsg) }
                 }
 
                 DebugLogger.damage("${victim.name} 被击杀 (${victimTeam})")
@@ -264,11 +266,12 @@ class CombatListener(
         plugin.coinManager.addCoins(attacker.uniqueId, plugin.economyConfig.infectHumanCoins)
 
         val attackerColor = if (plugin.gameManager.getPlayerTeam(attacker) == GameManager.Team.ZOMBIE_MAIN) NamedTextColor.DARK_PURPLE else NamedTextColor.DARK_GREEN
-        Bukkit.broadcast(Component.text()
+        val infectMsg = Component.text()
             .append(Component.text(attacker.name, attackerColor))
             .append(Component.text(" 感染了 ", NamedTextColor.RED))
             .append(Component.text(victim.name, NamedTextColor.AQUA))
-            .build())
+            .build()
+        plugin.gameManager.getWorldPlayers(victim.world.name).forEach { it.sendMessage(infectMsg) }
 
         DebugLogger.damage("${victim.name} 被 ${attacker.name} 感染")
 
@@ -279,7 +282,7 @@ class CombatListener(
         var countdown = plugin.balanceConfig.infectCountdownSec
         var scheduledTask: ScheduledTask? = null
         scheduledTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { task ->
-            if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
+            if (plugin.gameManager.getGameStatus(victim) != GameManager.GameStatus.RUNNING) {
                 taskTracker.unregister(task, victim.uniqueId)
                 task.cancel()
                 return@runAtFixedRate
@@ -297,7 +300,7 @@ class CombatListener(
                 plugin.staminaManager.applyZombieEffects(victim)
                 // 被感染：就近复活到当前推进门附近的僵尸点
                 plugin.respawnManager.teleportZombieByProgress(
-                    victim, plugin.gameManager.getHumanProgress(), ahead = false
+                    victim, plugin.gameManager.getHumanProgress(victim), ahead = false
                 )
                 victim.sendMessage(Component.text("你现在是僵尸！阻止人类前进！", NamedTextColor.DARK_GREEN))
                 taskTracker.unregister(task, victim.uniqueId)
@@ -310,14 +313,14 @@ class CombatListener(
     private fun scheduleZombieRespawn(victim: Player, message: Component) {
         val scheduledTask = Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { task ->
             taskTracker.unregister(task, victim.uniqueId)
-            if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
+            if (plugin.gameManager.getGameStatus(victim) != GameManager.GameStatus.RUNNING) {
                 return@runDelayed
             }
             victim.gameMode = GameMode.ADVENTURE
             plugin.staminaManager.applyZombieEffects(victim)
             // 僵尸死亡：布防复活到人类前方更远的僵尸点
             plugin.respawnManager.teleportZombieByProgress(
-                victim, plugin.gameManager.getHumanProgress(), ahead = true
+                victim, plugin.gameManager.getHumanProgress(victim), ahead = true
             )
             victim.sendMessage(message)
         }, plugin.balanceConfig.respawnDelayTicks)

@@ -62,7 +62,7 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
     fun onAutoOpen(player: Player) {
         Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
             if (player.isOnline &&
-                plugin.gameManager.getGameStatus() == GameManager.GameStatus.WAITING) {
+                plugin.gameManager.getGameStatus(player) == GameManager.GameStatus.WAITING) {
                 open(player)
             }
         }, 20L)

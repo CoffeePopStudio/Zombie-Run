@@ -16,9 +16,9 @@ class NametagManager(private val plugin: ZombieRun) {
     fun init() {
         if (!plugin.isEnabled) return
         val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { _ ->
-            if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return@runAtFixedRate
-
             for (player in Bukkit.getOnlinePlayers()) {
+                if (plugin.gameManager.getGameStatus(player.world.name) != GameManager.GameStatus.RUNNING) continue
+
                 val team = plugin.gameManager.getPlayerTeam(player)
                 if (team == GameManager.Team.SPECTATOR) continue
 

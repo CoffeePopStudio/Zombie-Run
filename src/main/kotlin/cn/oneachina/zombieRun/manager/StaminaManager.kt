@@ -109,7 +109,7 @@ class StaminaManager(private val plugin: ZombieRun) {
     private fun startStaminaRegenTask() {
         val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { _ ->
             for ((player, ps) in playerStamina) {
-                if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
+                if (plugin.gameManager.getGameStatus(player) != GameManager.GameStatus.RUNNING) {
                     continue
                 }
 
@@ -163,7 +163,7 @@ class StaminaManager(private val plugin: ZombieRun) {
     private fun startActionBarTask() {
         val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { _ ->
             for ((player, ps) in playerStamina) {
-                if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
+                if (plugin.gameManager.getGameStatus(player) != GameManager.GameStatus.RUNNING) {
                     continue
                 }
 
@@ -242,7 +242,7 @@ class StaminaManager(private val plugin: ZombieRun) {
     private fun startStaminaEffectsTask() {
         val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { _ ->
             for ((player, ps) in playerStamina) {
-                if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) continue
+                if (plugin.gameManager.getGameStatus(player) != GameManager.GameStatus.RUNNING) continue
                 if (plugin.gameManager.getPlayerTeam(player) != GameManager.Team.HUMAN) continue
 
                 if (ps.staminastate == 2) {

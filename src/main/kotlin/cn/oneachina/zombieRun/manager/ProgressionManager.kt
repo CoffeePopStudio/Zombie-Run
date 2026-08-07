@@ -187,14 +187,13 @@ class ProgressionManager(private val plugin: ZombieRun) {
                 Title.Times.times(Duration.ofMillis(500), Duration.ofSeconds(2), Duration.ofMillis(500))
             ))
             player.playSound(player.location, Sound.ENTITY_PLAYER_LEVELUP, 1f, 1f)
-            Bukkit.broadcast(
-                Component.text()
-                    .append(Component.text(player.name, NamedTextColor.GOLD))
-                    .append(Component.text(" 升级到 ", NamedTextColor.GOLD))
-                    .append(Component.text("Lv.${profile.level}", NamedTextColor.YELLOW))
-                    .append(Component.text("！", NamedTextColor.GOLD))
-                    .build()
-            )
+            val lvlUpMsg = Component.text()
+                .append(Component.text(player.name, NamedTextColor.GOLD))
+                .append(Component.text(" 升级到 ", NamedTextColor.GOLD))
+                .append(Component.text("Lv.${profile.level}", NamedTextColor.YELLOW))
+                .append(Component.text("！", NamedTextColor.GOLD))
+                .build()
+            plugin.gameManager.getWorldPlayers(player.world.name).forEach { it.sendMessage(lvlUpMsg) }
 
             handleLevelUnlock(player.uniqueId, profile.level)
         }

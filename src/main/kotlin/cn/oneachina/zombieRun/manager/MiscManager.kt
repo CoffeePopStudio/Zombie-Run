@@ -107,8 +107,8 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
 
     fun getInfections(player: Player): Int = playerInfections.getOrDefault(player, 0)
 
-    fun getAllKills(): Map<Player, Int> = playerKills.toMap()
-    fun getAllInfections(): Map<Player, Int> = playerInfections.toMap()
+    fun getAllKills(world: String): Map<Player, Int> = playerKills.filterKeys { it.world.name == world }.toMap()
+    fun getAllInfections(world: String): Map<Player, Int> = playerInfections.filterKeys { it.world.name == world }.toMap()
 
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     fun onEntityDamage(event: EntityDamageEvent) {

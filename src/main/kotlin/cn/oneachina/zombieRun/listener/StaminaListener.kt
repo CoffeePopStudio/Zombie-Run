@@ -22,7 +22,7 @@ class StaminaListener(private val plugin: ZombieRun) : Listener {
         plugin.staminaManager.setMoving(player, true)
         plugin.staminaManager.setSprinting(player, player.isSprinting)
 
-        if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return
+        if (plugin.gameManager.getGameStatus(player) != GameManager.GameStatus.RUNNING) return
         if (plugin.gameManager.getPlayerTeam(player) != GameManager.Team.HUMAN) return
 
         if (player.isSprinting && !plugin.staminaManager.canSprintOrJump(player)) {
@@ -37,7 +37,7 @@ class StaminaListener(private val plugin: ZombieRun) : Listener {
         val player = event.player
         plugin.staminaManager.setSprinting(player, event.isSprinting)
 
-        if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return
+        if (plugin.gameManager.getGameStatus(player) != GameManager.GameStatus.RUNNING) return
         if (plugin.gameManager.getPlayerTeam(player) != GameManager.Team.HUMAN) return
 
         if (event.isSprinting && !plugin.staminaManager.canSprintOrJump(player)) {
@@ -49,7 +49,7 @@ class StaminaListener(private val plugin: ZombieRun) : Listener {
     @EventHandler(ignoreCancelled = true)
     fun onPlayerJump(event: PlayerJumpEvent) {
         val player = event.player
-        if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return
+        if (plugin.gameManager.getGameStatus(player) != GameManager.GameStatus.RUNNING) return
         if (plugin.gameManager.getPlayerTeam(player) != GameManager.Team.HUMAN) return
 
         if (!plugin.staminaManager.canSprintOrJump(player)) {

@@ -43,7 +43,7 @@ class GameListener(
         plugin.staminaManager.addPlayer(player)
         plugin.shopGUI.onAutoOpen(player)
 
-        when (plugin.gameManager.getGameStatus()) {
+        when (plugin.gameManager.getGameStatus(player)) {
             GameManager.GameStatus.WAITING, GameManager.GameStatus.ENDED -> {
                 plugin.gameManager.setPlayerTeam(player, GameManager.Team.SPECTATOR)
                 player.gameMode = GameMode.ADVENTURE
@@ -68,7 +68,7 @@ class GameListener(
                 Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
                     // 中途加入：布防复活到人类前方更远的僵尸点
                     plugin.respawnManager.teleportZombieByProgress(
-                        player, plugin.gameManager.getHumanProgress(), ahead = true
+                        player, plugin.gameManager.getHumanProgress(player), ahead = true
                     )
                 }, 1L)
             }
@@ -90,7 +90,7 @@ class GameListener(
     fun onPlayerMove(event: PlayerMoveEvent) {
         val to = event.to
         val player = event.player
-        if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return
+        if (plugin.gameManager.getGameStatus(player) != GameManager.GameStatus.RUNNING) return
         val team = plugin.gameManager.getPlayerTeam(player)
         if (team == GameManager.Team.SPECTATOR) return
         plugin.doorManager.tryRecordPlayerCrossing(player, event.from, to)
@@ -150,7 +150,7 @@ class GameListener(
         if (block == null) return
 
         if (block.type == Material.REDSTONE_LAMP || block.type == Material.LEVER) {
-            val button = plugin.buttonManager.getButton(block.x, block.y, block.z)
+            val button = plugin.buttonManager.getButton(player.world.name, block.x, block.y, block.z)
             if (button != null) {
                 val team = plugin.gameManager.getPlayerTeam(player)
 
@@ -165,7 +165,7 @@ class GameListener(
                         if (doorNumbers.isEmpty()) {
                             player.sendMessage(Component.text("此按钮配置错误：未指定门号", NamedTextColor.RED))
                         } else {
-                            plugin.doorManager.triggerDoor(doorNumbers.first(), player)
+                            plugin.doorManager.triggerDoor(doorNumbers.first(), player, player.world.name)
                         }
                     }
                     button.isEscape() -> {
@@ -174,8 +174,8 @@ class GameListener(
                             event.isCancelled = true
                             return
                         }
-                        if (plugin.doorManager.endtime < 0) {
-                            plugin.doorManager.startHelicopterEscape()
+                        if (plugin.doorManager.getEndtime(player.world.name) < 0) {
+                            plugin.doorManager.startHelicopterEscape(player.world.name)
                             plugin.buttonManager.setButtonLit(button)
                         }
                     }
@@ -242,7 +242,7 @@ class GameListener(
         val msg = rawMsg.replace("&", "")
 
         val title = plugin.titleManager.getPlayerTitle(player)
-        val gameStatus = plugin.gameManager.getGameStatus()
+        val gameStatus = plugin.gameManager.getGameStatus(player)
         val titlePrefix = if (title.isNotEmpty() && gameStatus == GameManager.GameStatus.RUNNING) {
             Component.text("[$title] ", NamedTextColor.GOLD)
         } else {
