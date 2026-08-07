@@ -25,7 +25,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         }
 
         when (args[0].lowercase()) {
-            "start", "spawn", "doors", "buttons", "reload", "open", "close", "reset", "debug" ->
+            "start", "spawn", "doors", "buttons", "reload", "open", "close", "reset", "debug", "game" ->
                 handleAdminCommand(sender, args)
             "postool" -> handlePostool(sender)
             "coins" -> CoinCommands.handle(plugin, sender, args.drop(1).toTypedArray())
@@ -49,15 +49,17 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
             return true
         }
         return when (args[0].lowercase()) {
-            "start" -> { handleStart(sender); true }
+            "start" -> { handleStart(sender, args.drop(1).toTypedArray()); true }
             "spawn" -> { handleSpawn(sender, args.drop(1).toTypedArray()); true }
             "doors" -> { handleDoors(sender, args.drop(1).toTypedArray()); true }
             "buttons" -> { handleButtons(sender, args.drop(1).toTypedArray()); true }
             "reload" -> { handleReload(sender); true }
-            "open" -> { handleOpen(); true }
-            "close" -> { handleClose(); true }
+            "open" -> { handleOpen(sender, args.drop(1).toTypedArray()); true }
+            "close" -> { handleClose(sender, args.drop(1).toTypedArray()); true }
             "reset" -> { handleReset(sender, args.drop(1).toTypedArray()); true }
             "debug" -> { handleDebug(sender); true }
+            "game" -> { handleGame(sender, args.drop(1).toTypedArray()); true }
+            "migrate" -> { handleMigrate(sender); true }
             else -> { sendHelp(sender); true }
         }
     }
@@ -251,15 +253,49 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         sender.sendMessage(Component.text("/zr randomgun - 随机获得枪械（仅人类）", NamedTextColor.GREEN))
         sender.sendMessage(Component.text("/zr lobby - 返回大厅", NamedTextColor.GREEN))
         sender.sendMessage(Component.text("/zr debug - 切换 Debug 模式（管理员）", NamedTextColor.GREEN))
+        sender.sendMessage(Component.text("/zr game list - 查看各世界游戏状态（管理员）", NamedTextColor.GREEN))
+        sender.sendMessage(Component.text("/zr migrate - 迁移旧配置格式（管理员）", NamedTextColor.GREEN))
+        sender.sendMessage(Component.text("提示: /zr start|open|close 可加 -w <世界名> 指定世界（控制台必填）", NamedTextColor.YELLOW))
     }
 
-    private fun handleStart(sender: CommandSender) {
-        if (sender !is Player) {
-            sender.sendMessage(Component.text("此命令只能由玩家执行！", NamedTextColor.RED))
+    private fun handleStart(sender: CommandSender, args: Array<out String>) {
+        val world = resolveWorld(sender, args)
+        plugin.gameManager.forceStartGame(world)
+        sender.sendMessage(Component.text("[$world] 游戏开始！", NamedTextColor.GREEN))
+    }
+
+    /** /zr migrate - 迁移旧配置格式（管理员） */
+    private fun handleMigrate(sender: CommandSender) {
+        plugin.configManager.migrateConfigIfNeeded()
+        sender.sendMessage(Component.text("配置迁移完成！", NamedTextColor.GREEN))
+    }
+
+    /** 解析目标世界：优先 -w <world> 参数，其次玩家所在世界，最后配置默认世界 */
+    private fun resolveWorld(sender: CommandSender, args: Array<out String>): String {
+        val wIdx = args.indexOf("-w")
+        val explicit = if (wIdx >= 0 && wIdx + 1 < args.size) args[wIdx + 1] else null
+        return explicit ?: (if (sender is Player) sender.world.name else plugin.configManager.getWorldName())
+    }
+
+    /** /zr game list - 查看各世界游戏状态 */
+    private fun handleGame(sender: CommandSender, args: Array<out String>) {
+        if (args.isEmpty() || args[0].lowercase() != "list") {
+            sender.sendMessage(Component.text("用法: /zr game list", NamedTextColor.RED))
             return
         }
-        plugin.gameManager.forceStartGame()
-        sender.sendMessage(Component.text("游戏开始！", NamedTextColor.GREEN))
+        val worlds = (plugin.gameManager.getAllGames().map { it.worldName } +
+            plugin.doorManager.getAllDoors().map { it.world } +
+            plugin.respawnManager.getAllRespawns().map { it.world }).distinct()
+        if (worlds.isEmpty()) {
+            sender.sendMessage(Component.text("当前没有任何游戏世界。", NamedTextColor.RED))
+            return
+        }
+        sender.sendMessage(Component.text("===== 游戏世界列表 =====", NamedTextColor.GREEN))
+        worlds.forEach { w ->
+            val status = plugin.gameManager.getGameStatus(w)
+            val players = plugin.gameManager.getWorldPlayers(w).size
+            sender.sendMessage(Component.text("- $w [${status.name}] 玩家: $players", NamedTextColor.GREEN))
+        }
     }
 
     private fun handleDebug(sender: CommandSender) {
@@ -288,7 +324,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
             sender.sendMessage(Component.text("门号必须是整数！", NamedTextColor.RED))
             return
         }
-        plugin.doorManager.triggerDoor(doorNumber, sender)
+        plugin.doorManager.triggerDoor(doorNumber, sender, sender.world.name)
     }
 
     private fun handleSpawn(sender: CommandSender, args: Array<out String>) {
@@ -338,7 +374,8 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
             pitch = sender.location.pitch.toDouble(),
             type = type,
             doorNumber = doorNumber,
-            roomNumber = null
+            roomNumber = null,
+            world = sender.world.name
         )
         plugin.configManager.addRespawn(respawn)
         plugin.respawnManager.addRespawn(respawn)
@@ -446,20 +483,23 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         val minX = coords[0]; val minY = coords[1]; val minZ = coords[2]
         val maxX = coords[3]; val maxY = coords[4]; val maxZ = coords[5]
 
-        // 门号
+        // 世界
+        val worldName = if (sender is Player) sender.world.name else plugin.configManager.getWorldName()
+
+        // 门号（按世界唯一）
         val doorNumber = when {
             doorMode != Door.DoorMode.NORMAL -> 0
             group != null -> {
-                val existing = plugin.doorManager.getDoorsInGroup(group)
+                val existing = plugin.doorManager.getDoorsInGroup(group).filter { it.world == worldName }
                 if (existing.isNotEmpty()) existing.first().doorNumber
-                else plugin.doorManager.getNextDoorNumber()
+                else plugin.doorManager.getNextDoorNumber(worldName)
             }
-            else -> plugin.doorManager.getNextDoorNumber()
+            else -> plugin.doorManager.getNextDoorNumber(worldName)
         }
 
         // 扫描方块
         val blocks = mutableMapOf<String, String>()
-        val world = if (sender is Player) sender.world else Bukkit.getWorlds().first()
+        val world = plugin.worldService.getWorldOrFirst(worldName)
         for (x in minX..maxX) {
             for (y in minY..maxY) {
                 for (z in minZ..maxZ) {
@@ -482,7 +522,8 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
             mode = doorMode,
             useScanData = true,
             blocks = blocks,
-            group = group
+            group = group,
+            world = worldName
         )
         plugin.configManager.addDoorFull(door)
         plugin.doorManager.addDoor(door)
@@ -613,16 +654,18 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         sender.sendMessage(Component.text("配置重载成功！", NamedTextColor.GREEN))
     }
 
-    private fun handleOpen() {
-        if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) {
-            plugin.gameManager.beginGame()
+    private fun handleOpen(sender: CommandSender, args: Array<out String>) {
+        val world = resolveWorld(sender, args)
+        if (plugin.gameManager.getGameStatus(world) != GameManager.GameStatus.RUNNING) {
+            plugin.gameManager.beginGame(plugin.gameManager.getGame(world))
         } else {
-            plugin.logger.warning("游戏已在运行中！")
+            plugin.logger.warning("[${world}] 游戏已在运行中！")
         }
     }
 
-    private fun handleClose() {
-        plugin.gameManager.endGame(GameManager.Team.SPECTATOR)
+    private fun handleClose(sender: CommandSender, args: Array<out String>) {
+        val world = resolveWorld(sender, args)
+        plugin.gameManager.endGame(plugin.gameManager.getGame(world), GameManager.Team.SPECTATOR)
     }
 
     private fun handleReset(sender: CommandSender, args: Array<out String>) {
@@ -750,12 +793,13 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                     val name = "button_${x}_${y}_${z}_normal"
                     Button(name, x, y, z, mode,
                         doorNumber = if (nums.size == 1) nums[0] else null,
-                        doorNumbers = if (nums.size > 1) nums else null
+                        doorNumbers = if (nums.size > 1) nums else null,
+                        world = sender.world.name
                     )
                 }
                 "escape" -> {
                     val name = "button_${x}_${y}_${z}_escape"
-                    Button(name, x, y, z, mode)
+                    Button(name, x, y, z, mode, world = sender.world.name)
                 }
                 else -> {
                     sender.sendMessage(Component.text("无效的模式！可用: normal, escape", NamedTextColor.RED))
@@ -841,7 +885,7 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         args: Array<out String>
     ): MutableList<String>? {
         val isAdmin = sender.hasPermission("zombie.run.admin")
-        val adminCmds = listOf("start", "spawn", "doors", "buttons", "reload", "open", "close", "reset", "debug", "xp", "level")
+        val adminCmds = listOf("start", "spawn", "doors", "buttons", "reload", "open", "close", "reset", "debug", "xp", "level", "game", "migrate")
         val playerCmds = listOf("door", "select", "unselect", "randomgun", "lobby", "profile", "quest", "title", "transfer", "shop", "coins")
 
         return when (args.size) {
@@ -868,6 +912,10 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                     "buttons" -> {
                         if (!isAdmin) return mutableListOf()
                         listOf("add", "remove", "list").filter { it.startsWith(args[1].lowercase()) }.toMutableList()
+                    }
+                    "game" -> {
+                        if (!isAdmin) return mutableListOf()
+                        listOf("list").filter { it.startsWith(args[1].lowercase()) }.toMutableList()
                     }
                     "select" -> {
                         val count = plugin.miscManager.getSelectableWeapons().size

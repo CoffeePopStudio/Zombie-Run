@@ -7,6 +7,10 @@ import net.kyori.adventure.text.format.NamedTextColor
 
 object DoorBehaviorCommands {
 
+    private fun senderWorld(plugin: ZombieRun, sender: org.bukkit.command.CommandSender): String {
+        return if (sender is org.bukkit.entity.Player) sender.world.name else plugin.configManager.getWorldName()
+    }
+
     fun handle(plugin: ZombieRun, sender: org.bukkit.command.CommandSender, args: Array<out String>, gListener: cn.oneachina.zombieRun.listener.GameListener) {
         if (args.isEmpty()) {
             sender.sendMessage(Component.text("用法: /zr door behavior <set|remove|info>", NamedTextColor.RED))
@@ -37,7 +41,7 @@ object DoorBehaviorCommands {
             return
         }
 
-        val door = plugin.doorManager.getDoorByNumber(doorNumber)
+        val door = plugin.doorManager.getDoorByNumber(senderWorld(plugin, sender), doorNumber)
         if (door == null) {
             sender.sendMessage(Component.text("门号 $doorNumber 不存在！", NamedTextColor.RED))
             return
@@ -194,7 +198,7 @@ object DoorBehaviorCommands {
             sender.sendMessage(Component.text("门号必须是数字！", NamedTextColor.RED))
             return
         }
-        val door = plugin.doorManager.getDoorByNumber(doorNumber)
+        val door = plugin.doorManager.getDoorByNumber(senderWorld(plugin, sender), doorNumber)
         if (door == null) {
             sender.sendMessage(Component.text("门号 $doorNumber 不存在！", NamedTextColor.RED))
             return
@@ -217,7 +221,7 @@ object DoorBehaviorCommands {
             sender.sendMessage(Component.text("门号必须是数字！", NamedTextColor.RED))
             return
         }
-        val door = plugin.doorManager.getDoorByNumber(doorNumber)
+        val door = plugin.doorManager.getDoorByNumber(senderWorld(plugin, sender), doorNumber)
         if (door == null) {
             sender.sendMessage(Component.text("门号 $doorNumber 不存在！", NamedTextColor.RED))
             return
