@@ -21,7 +21,7 @@ class WeaponManager(private val plugin: ZombieRun) {
     /** 可发放的枪械 ID（= QA 枪械名称），排除近战/投掷等非枪械类型 */
     fun getWeaponIds(): List<String> = buildList {
         QualityArmory.getGuns().forEachRemaining { gun ->
-            if (gun.weaponType.isGun) add(gun.name)
+            if (gun.weaponType?.isGun == true) add(gun.name)
         }
     }
 
