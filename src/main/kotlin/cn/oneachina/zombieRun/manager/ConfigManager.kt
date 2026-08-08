@@ -48,7 +48,8 @@ class ConfigManager(private val plugin: ZombieRun) {
             YamlConfiguration.loadConfiguration(it.bufferedReader())
         } ?: return
 
-        // 逐节迁移（只保留新模板中仍存在的路径）
+        // 逐节迁移：用户数据节（doors/buttons/respawns）整体复制，数值配置节只保留新模板中仍存在的路径
+        val dataSections = listOf("doors", "buttons", "respawns")
         val sectionsToKeep = listOf(
             "game", "spawn", "end", "doors", "buttons", "respawns",
             "zombie", "human", "stamina", "misc", "start-effects"
@@ -56,9 +57,15 @@ class ConfigManager(private val plugin: ZombieRun) {
         for (section in sectionsToKeep) {
             old.getConfigurationSection(section)?.let { oldSection ->
                 defaultConfig.getConfigurationSection(section)?.let { newSection ->
-                    for (key in oldSection.getKeys(true)) {
-                        if (newSection.contains(key) && oldSection.isSet(key)) {
+                    if (section in dataSections) {
+                        oldSection.getKeys(false).forEach { key ->
                             newSection.set(key, oldSection.get(key))
+                        }
+                    } else {
+                        for (key in oldSection.getKeys(true)) {
+                            if (newSection.contains(key) && oldSection.isSet(key)) {
+                                newSection.set(key, oldSection.get(key))
+                            }
                         }
                     }
                 }
