@@ -38,11 +38,19 @@ dependencies {
 }
 
 tasks.shadowJar {
+    // 完整依赖版直接产出 zombie-run-<version>.jar（不带 -all），
+    // 避免部署时误用不含 Kotlin/HikariCP 的瘦身 jar 导致 NoClassDefFoundError
+    archiveClassifier.set("")
     dependencies {
         include(dependency("org.jetbrains.kotlin:.*"))
         include(dependency("com.zaxxer:HikariCP:.*"))
     }
     mergeServiceFiles()
+}
+
+tasks.jar {
+    // 瘦身版改名，防止与 shadowJar 产物同名冲突
+    archiveClassifier.set("thin")
 }
 
 runPaper {
