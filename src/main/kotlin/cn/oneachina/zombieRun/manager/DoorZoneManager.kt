@@ -3,6 +3,7 @@ package cn.oneachina.zombieRun.manager
 import cn.oneachina.zombieRun.model.Door
 import org.bukkit.Location
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 
 class DoorZoneManager {
 
@@ -24,7 +25,7 @@ class DoorZoneManager {
         // 计算门占据的所有区域
         val zones = getZonesForDoor(door)
         zones.forEach { zoneKey ->
-            doorsByZone.computeIfAbsent(zoneKey) { mutableListOf() }.add(door)
+            doorsByZone.computeIfAbsent(zoneKey) { CopyOnWriteArrayList() }.add(door)
         }
     }
     /**

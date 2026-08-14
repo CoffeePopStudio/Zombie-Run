@@ -19,12 +19,13 @@ class ZombieRunExpansion(private val plugin: ZombieRun) : PlaceholderExpansion()
             "human_count" -> plugin.gameManager.getHumans(world).size.toString()
             "zombie_count" -> (plugin.gameManager.getZombies(world).size + plugin.gameManager.getZombieMains(world).size).toString()
             "alpha_zombie_name" -> game.alphaZombie?.name ?: ""
-            "alpha_zombie_health" -> game.alphaZombie?.health?.toInt()?.toString() ?: "0"
-            "alpha_zombie_max_health" -> game.alphaZombie?.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH)?.baseValue?.toInt()?.toString() ?: "0"
+            "alpha_zombie_health" -> game.alphaZombie?.let { plugin.healthManager.getHealth(it).toInt().toString() } ?: "0"
+            "alpha_zombie_max_health" -> game.alphaZombie?.let { plugin.healthManager.getMaxHealth(it).toInt().toString() } ?: "0"
             "alpha_zombie_health_percent" -> {
                 val alpha = game.alphaZombie ?: return "0.0"
-                val max = alpha.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH)?.baseValue ?: 500.0
-                (alpha.health / max).toString()
+                val max = plugin.healthManager.getMaxHealth(alpha)
+                if (max <= 0.0) return "0.0"
+                (plugin.healthManager.getHealth(alpha) / max).toString()
             }
             "game_state" -> game.status.name
             "game_state_formatted" -> formatGameState(game.status)

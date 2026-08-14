@@ -40,8 +40,9 @@ class Door(
         }
     }
 
-    var isOpen: Boolean = false
-    var isActive: Boolean = false
+    // 区域线程写入（开门/穿越判定）、全局调度线程读取（reset），需 volatile
+    @Volatile var isOpen: Boolean = false
+    @Volatile var isActive: Boolean = false
 
     fun getMinLocation(world: World): Location =
         Location(world, minX.toDouble(), minY.toDouble(), minZ.toDouble())

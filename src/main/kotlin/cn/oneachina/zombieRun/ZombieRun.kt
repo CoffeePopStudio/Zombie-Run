@@ -95,12 +95,13 @@ class ZombieRun : JavaPlugin() {
         }
         coinManager.close()
         databaseManager.close()
+        // 先同步还原按钮方块：doorManager.reset 会移除按钮还原记录，且其区域调度任务在插件禁用后不再执行
+        buttonManager.clear()
         doorManager.reset()
         respawnManager.clear()
         gameManager.clear()
         staminaManager.clear()
         progressionManager.close()
-        buttonManager.clear()
         nametagManager.clearAll()
         healthManager.clearAll()
     }

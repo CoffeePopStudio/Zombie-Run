@@ -29,17 +29,20 @@ class GameManager(private val plugin: ZombieRun) {
 
     /** 一局游戏的全部状态，按世界隔离 */
     class GameInstance(val worldName: String) {
-        var status = GameStatus.WAITING
+        // status/alphaZombie/gameStartTime 跨线程读写（区域线程结算、全局调度线程、PAPI），需 volatile 保证可见性
+        @Volatile var status = GameStatus.WAITING
         val playerTeams = ConcurrentHashMap<Player, Team>()
         val playerRooms = ConcurrentHashMap<Player, Int>()
 
-        var gameStartTime: Long = 0
+        @Volatile var gameStartTime: Long = 0
         val humans = CopyOnWriteArrayList<Player>()
         val zombies = CopyOnWriteArrayList<Player>()
         val zombieMains = CopyOnWriteArrayList<Player>()
 
         var waitStartCountdown: Int = 0
-        var alphaZombie: Player? = null
+        @Volatile var alphaZombie: Player? = null
+        /** 管理员手动强开标记（true 时不受"人数不足自动取消"影响），自动开局流程置 false */
+        @Volatile var manuallyForced = false
         var isCountdownActive = false
         var countdownTask: ScheduledTask? = null
         var startCountdownTaskInstance: StartCountdownTask? = null
@@ -97,6 +100,23 @@ class GameManager(private val plugin: ZombieRun) {
         game.humans.remove(player)
         game.zombies.remove(player)
         game.zombieMains.remove(player)
+        if (game.alphaZombie == player) game.alphaZombie = null
+
+        if (game.status == GameStatus.WAITING || game.status == GameStatus.STARTING) {
+            checkAutoStartCondition(game)
+        }
+        checkGameEnd(game)
+    }
+
+    /** 玩家跨世界移动时，从旧世界实例清理残留状态（等价于"离开旧世界"） */
+    fun removePlayerFromWorld(player: Player, world: String) {
+        val game = getGameIfExists(world) ?: return
+        game.playerTeams.remove(player)
+        game.playerRooms.remove(player)
+        game.humans.remove(player)
+        game.zombies.remove(player)
+        game.zombieMains.remove(player)
+        if (game.alphaZombie == player) game.alphaZombie = null
 
         if (game.status == GameStatus.WAITING || game.status == GameStatus.STARTING) {
             checkAutoStartCondition(game)
@@ -110,17 +130,21 @@ class GameManager(private val plugin: ZombieRun) {
         DebugLogger.game("[${game.worldName}] 游戏状态 $oldStatus → $newStatus")
     }
 
-    fun forceStartGame(world: String) {
+    /** 强制开始倒计时开局。返回 false 表示无法开始（已在运行/倒计时中或没有玩家）。manual=true 表示管理员手动强开 */
+    fun forceStartGame(world: String, countdownSeconds: Int = 15, manual: Boolean = false): Boolean {
         val game = getGame(world)
-        if (game.status != GameStatus.WAITING && game.status != GameStatus.ENDED) return
-        if (getWorldPlayers(world).isEmpty() && !plugin.debugMode) {
+        if (game.status != GameStatus.WAITING && game.status != GameStatus.ENDED) return false
+        if (getWorldPlayers(world).isEmpty()) {
+            // debug 模式也不例外：0 玩家开局会在选母体（selectAlphaZombie）时抛异常并卡死状态机，统一拒绝
             plugin.logger.warning("[${world}] 尝试开始游戏但没有玩家在线")
-            return
+            return false
         }
         cancelWaitStartTask(game)
+        game.manuallyForced = manual
         setGameStatus(game, GameStatus.STARTING)
-        game.startCountdownTaskInstance = StartCountdownTask(plugin, this, game)
+        game.startCountdownTaskInstance = StartCountdownTask(plugin, this, game, countdownSeconds)
         game.countdownTask = game.startCountdownTaskInstance!!.start()
+        return true
     }
 
     fun selectAlphaZombie(game: GameInstance): Player {
@@ -128,11 +152,21 @@ class GameManager(private val plugin: ZombieRun) {
         return if (online.isEmpty()) throw IllegalStateException("No players online in world ${game.worldName}") else online.random()
     }
 
-    fun beginGame(game: GameInstance) {
-        if (game.status != GameStatus.STARTING) return
+    /** 开局。返回 false 表示未能开局（状态不对或无玩家） */
+    fun beginGame(game: GameInstance): Boolean {
+        if (game.status != GameStatus.STARTING) return false
+        val worldName = game.worldName
+        if (getWorldPlayers(worldName).isEmpty()) {
+            // 开局瞬间已无玩家（如手动强开后全部离开），取消本局回到等待，避免 selectAlphaZombie 抛异常
+            cancelCountdownTask(game)
+            game.manuallyForced = false
+            setGameStatus(game, GameStatus.WAITING)
+            plugin.logger.warning("[${worldName}] 开局时无玩家，已取消开局")
+            return false
+        }
         setGameStatus(game, GameStatus.RUNNING)
         game.gameStartTime = System.currentTimeMillis()
-        val worldName = game.worldName
+        val startTime = game.gameStartTime
 
         plugin.doorManager.reset(worldName)
 
@@ -156,19 +190,24 @@ class GameManager(private val plugin: ZombieRun) {
             .forEach { plugin.doorManager.openDoorImmediatelyByName(it.name, broadcast = false) }
 
         Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
+            // 本局已结束/重新开局则不再执行，避免把僵尸门开在等待大厅
+            if (game.status != GameStatus.RUNNING || game.gameStartTime != startTime) return@runDelayed
             plugin.doorManager.getDoorsInWorld(worldName)
                 .filter { it.mode == Door.DoorMode.ZOMBIE }
                 .forEach { plugin.doorManager.openDoorImmediatelyByName(it.name, broadcast = false) }
         }, 100L)
 
         Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
+            if (game.status != GameStatus.RUNNING || game.gameStartTime != startTime) return@runDelayed
             getWorldPlayers(worldName).forEach { player ->
                 player.showTitle(Title.title(Component.text("警告！", NamedTextColor.RED), Component.text("收容装置发生破裂！请尽全力逃出！", NamedTextColor.RED)))
             }
         }, 100L)
 
         Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
-            if (alpha.isOnline && getPlayerTeam(game, alpha) == Team.ZOMBIE_MAIN) {
+            if (game.status == GameStatus.RUNNING && game.gameStartTime == startTime &&
+                alpha.isOnline && getPlayerTeam(game, alpha) == Team.ZOMBIE_MAIN
+            ) {
                 alpha.gameMode = GameMode.ADVENTURE
                 alpha.showTitle(Title.title(
                     Component.text("容器破裂！", NamedTextColor.RED),
@@ -180,9 +219,10 @@ class GameManager(private val plugin: ZombieRun) {
             }
         }, 120L)
 
+        // 非 NORMAL 门门号统一为 0，按门号查会命中错误的门，必须按名称开门
         plugin.doorManager.getDoorsInWorld(worldName)
             .filter { it.mode == Door.DoorMode.START }
-            .forEach { plugin.doorManager.openDoorImmediately(it.doorNumber, worldName) }
+            .forEach { plugin.doorManager.openDoorImmediatelyByName(it.name) }
 
         plugin.startEffectManager.executeStartEffects(worldName)
 
@@ -191,6 +231,7 @@ class GameManager(private val plugin: ZombieRun) {
         }
 
         startMaxDurationTimer(game)
+        return true
     }
 
     private fun startMaxDurationTimer(game: GameInstance) {
@@ -244,8 +285,10 @@ class GameManager(private val plugin: ZombieRun) {
         if (game.status != GameStatus.RUNNING) return
         game.status = GameStatus.ENDED
         val worldName = game.worldName
+        val endedStartTime = game.gameStartTime
 
         game.alphaZombie = null
+        game.manuallyForced = false
         plugin.doorManager.reset(worldName)
 
         val title = when (winner) {
@@ -264,7 +307,7 @@ class GameManager(private val plugin: ZombieRun) {
             it.clearActivePotionEffects()
         }
 
-        plugin.healthManager.clearAll()
+        plugin.healthManager.clearWorld(worldName)
 
         sendGameEndResult(game)
 
@@ -274,6 +317,8 @@ class GameManager(private val plugin: ZombieRun) {
         }
 
         Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
+            // 期间若已重新开局（对局标识/状态被改变），放弃收尾，避免覆盖新对局
+            if (game.status != GameStatus.ENDED || game.gameStartTime != endedStartTime) return@runDelayed
             getWorldPlayers(worldName).forEach { player ->
                 plugin.nametagManager.clear(player)
                 player.displayName(null)
@@ -283,7 +328,7 @@ class GameManager(private val plugin: ZombieRun) {
                 setPlayerRoom(player, 0)
                 setPlayerTeam(game, player, Team.SPECTATOR)
             }
-            plugin.healthManager.clearAll()
+            plugin.healthManager.clearWorld(worldName)
             game.status = GameStatus.WAITING
         }, 80L)
     }
@@ -425,6 +470,11 @@ class GameManager(private val plugin: ZombieRun) {
         plugin.respawnManager.getAllRespawns().forEach { candidateWorlds.add(it.world) }
         plugin.doorManager.getAllDoors().forEach { candidateWorlds.add(it.world) }
 
+        // 剪枝幽灵实例：非游戏世界且 WAITING（无任何任务）的实例直接移除，避免 games 无限增长
+        games.entries.removeIf { (world, game) ->
+            world !in candidateWorlds && game.status == GameStatus.WAITING
+        }
+
         candidateWorlds.filter { isGameWorld(it) }.forEach { world ->
             checkAutoStartCondition(getGame(world))
         }
@@ -450,7 +500,8 @@ class GameManager(private val plugin: ZombieRun) {
                 }
             }
             GameStatus.STARTING -> {
-                if (onlineCount < minPlayers) {
+                // 管理员手动强开（manuallyForced）不受人数不足取消影响
+                if (onlineCount < minPlayers && !game.manuallyForced) {
                     cancelCountdownTask(game)
                     setGameStatus(game, GameStatus.WAITING)
                     getWorldPlayers(game.worldName).forEach { it.sendMessage(Component.text("人数不足，游戏取消", NamedTextColor.RED)) }

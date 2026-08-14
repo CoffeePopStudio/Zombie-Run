@@ -30,7 +30,8 @@ class DoorManager(private val plugin: ZombieRun) {
     private val doorcloses: ConcurrentHashMap<String, Int> = ConcurrentHashMap()
 
     private val doorTasks: ConcurrentHashMap<String, CopyOnWriteArrayList<ScheduledTask>> = ConcurrentHashMap()
-    private val transferTasks = ConcurrentHashMap<Player, ScheduledTask>()
+    // 落后传送倒计时按世界隔离，避免 A 世界重置误取消 B 世界的倒计时
+    private val transferTasks = ConcurrentHashMap<String, ConcurrentHashMap<Player, ScheduledTask>>()
 
     private val doorGroups = ConcurrentHashMap<String, List<Door>>()
 
@@ -39,12 +40,13 @@ class DoorManager(private val plugin: ZombieRun) {
     private class Session(
         val worldName: String,
         val doors: List<Door>,
-        var countdown: Double,  // >0 = opening, <0 = closing (abs = seconds)
-        var phase: Phase = Phase.OPENING
+        var countdown: Double,  // >0 = opening, <0 = closing (abs = seconds)，仅全局调度任务线程访问
     ) {
         enum class Phase { OPENING, CLOSING }
-        /** 开门期间穿越过门的玩家 */
-        val crossedPlayers: MutableSet<UUID> = mutableSetOf()
+        /** 开门期间所处阶段（全局调度线程写入，区域线程读取，需 volatile） */
+        @Volatile var phase: Phase = Phase.OPENING
+        /** 开门期间穿越过门的玩家（区域线程写入，全局调度线程读取，需线程安全集合） */
+        val crossedPlayers: MutableSet<UUID> = ConcurrentHashMap.newKeySet()
     }
 
     // ==================== 数据加载 ====================
@@ -79,9 +81,9 @@ class DoorManager(private val plugin: ZombieRun) {
     fun triggerDoor(doorNumber: Int, player: Player? = null, world: String = player?.world?.name ?: plugin.configManager.getWorldName()) {
         val door = getDoorByNumber(world, doorNumber) ?: return
 
-        // 起始门：立即开
+        // 起始门：立即开（按名称，避免与其他非 NORMAL 门的门号 0 冲突）
         if (door.mode == Door.DoorMode.START) {
-            openDoorImmediately(doorNumber, world)
+            openDoorImmediatelyByName(door.name)
             player?.sendMessage(Component.text("起始门已开启！", NamedTextColor.GREEN))
             return
         }
@@ -140,7 +142,10 @@ class DoorManager(private val plugin: ZombieRun) {
 
         val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
             if (plugin.gameManager.getGameStatus(worldName) != GameManager.GameStatus.RUNNING) {
+                // 提前取消：清除会话并复位门的激活标记，避免阻塞该世界后续开门
                 session.countdown = -1.0
+                activeSessions.remove(worldName, session)
+                session.doors.forEach { it.isActive = false }
                 schedTask.cancel()
                 return@runAtFixedRate
             }
@@ -270,11 +275,6 @@ class DoorManager(private val plugin: ZombieRun) {
         }
     }
 
-    fun openDoorImmediately(doorNumber: Int, world: String, broadcast: Boolean = true) {
-        val door = getDoorByNumber(world, doorNumber) ?: return
-        openDoorBlocks(door)
-    }
-
     fun openDoorImmediatelyByName(name: String, broadcast: Boolean = true) {
         val door = doors[name] ?: return
         openDoorBlocks(door)
@@ -366,10 +366,18 @@ class DoorManager(private val plugin: ZombieRun) {
     // ==================== 落后传送 ====================
 
     private fun startTransferCountdown(player: Player, doorNumber: Int) {
-        transferTasks.remove(player)?.cancel()
+        val worldName = player.world.name
+        val worldTasks = transferTasks.computeIfAbsent(worldName) { ConcurrentHashMap() }
+        worldTasks.remove(player)?.cancel()
 
         var countdown = 10
         val taskId = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
+            if (!player.isOnline) {
+                // 玩家中途下线，直接取消
+                transferTasks[worldName]?.remove(player)
+                schedTask.cancel()
+                return@runAtFixedRate
+            }
             if (countdown > 0) {
                 player.showTitle(Title.title(
                     Component.text("$countdown", NamedTextColor.RED),
@@ -377,19 +385,28 @@ class DoorManager(private val plugin: ZombieRun) {
                 ))
                 countdown--
             } else {
-                plugin.respawnManager.teleportPlayerByDoorClose(player, doorNumber)
-                transferTasks.remove(player)
+                // 用开始倒计时时的世界名查传送点，避免玩家中途换世界后落点错乱
+                plugin.respawnManager.teleportPlayerByDoorClose(player, doorNumber, worldName)
+                transferTasks[worldName]?.remove(player)
                 schedTask.cancel()
             }
         }, 1L, 20L)
-        transferTasks[player] = taskId
+        worldTasks[player] = taskId
     }
 
     private fun startZombieTransferCountdown(player: Player, doorNumber: Int) {
-        transferTasks.remove(player)?.cancel()
+        val worldName = player.world.name
+        val worldTasks = transferTasks.computeIfAbsent(worldName) { ConcurrentHashMap() }
+        worldTasks.remove(player)?.cancel()
 
         var countdown = 10
         val taskId = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
+            if (!player.isOnline) {
+                // 玩家中途下线，直接取消
+                transferTasks[worldName]?.remove(player)
+                schedTask.cancel()
+                return@runAtFixedRate
+            }
             if (countdown > 0) {
                 player.showTitle(Title.title(
                     Component.text("$countdown", NamedTextColor.RED),
@@ -397,12 +414,13 @@ class DoorManager(private val plugin: ZombieRun) {
                 ))
                 countdown--
             } else {
-                plugin.respawnManager.teleportZombieByDoorClose(player, doorNumber)
-                transferTasks.remove(player)
+                // 用开始倒计时时的世界名查传送点，避免玩家中途换世界后落点错乱
+                plugin.respawnManager.teleportZombieByDoorClose(player, doorNumber, worldName)
+                transferTasks[worldName]?.remove(player)
                 schedTask.cancel()
             }
         }, 1L, 20L)
-        transferTasks[player] = taskId
+        worldTasks[player] = taskId
     }
 
     // ==================== CRUD ====================
@@ -530,10 +548,10 @@ class DoorManager(private val plugin: ZombieRun) {
 
     fun reset(world: String) {
         doorTasks.remove(world)?.forEach { it.cancel() }
-        transferTasks.values.forEach { it.cancel() }
-        transferTasks.clear()
+        // 只取消本世界的落后传送倒计时，避免误伤其他世界的对局
+        transferTasks.remove(world)?.values?.forEach { it.cancel() }
 
-        plugin.buttonManager.resetAllButtons()
+        plugin.buttonManager.resetButtonsInWorld(world)
 
         val worldObj = plugin.worldService.getWorldOrFirst(world)
         getDoorsInWorld(world).forEach { door ->

@@ -82,8 +82,44 @@ class GameListener(
         pos1.remove(player.uniqueId)
         pos2.remove(player.uniqueId)
         plugin.staminaManager.removePlayer(player)
+        plugin.healthManager.clear(player)
         plugin.coinManager.savePlayer(player.uniqueId, player.name)
         plugin.gameManager.removePlayer(player)
+    }
+
+    @EventHandler
+    fun onPlayerChangedWorld(event: PlayerChangedWorldEvent) {
+        val player = event.player
+        // 先清理旧世界实例中的残留状态（队伍/房间/母体），避免旧对局因幽灵玩家无法正常结算
+        plugin.gameManager.removePlayerFromWorld(player, event.from.name)
+        plugin.healthManager.clear(player)
+
+        // 再按新世界的游戏状态接入（与加入流程一致，但不再重复加载玩家数据）
+        plugin.gameManager.addPlayer(player)
+        when (plugin.gameManager.getGameStatus(player)) {
+            GameManager.GameStatus.WAITING, GameManager.GameStatus.ENDED -> {
+                plugin.gameManager.setPlayerTeam(player, GameManager.Team.SPECTATOR)
+                player.gameMode = GameMode.ADVENTURE
+                player.clearActivePotionEffects()
+                player.inventory.clear()
+                player.health = 20.0
+            }
+            GameManager.GameStatus.STARTING -> {
+                plugin.gameManager.setPlayerTeam(player, GameManager.Team.HUMAN)
+                player.gameMode = GameMode.ADVENTURE
+            }
+            GameManager.GameStatus.RUNNING -> {
+                plugin.gameManager.setPlayerTeam(player, GameManager.Team.ZOMBIE)
+                player.gameMode = GameMode.ADVENTURE
+                plugin.staminaManager.applyZombieEffects(player)
+                Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
+                    // 中途加入：布防复活到人类前方更远的僵尸点
+                    plugin.respawnManager.teleportZombieByProgress(
+                        player, plugin.gameManager.getHumanProgress(player), ahead = true
+                    )
+                }, 1L)
+            }
+        }
     }
 
     @EventHandler(ignoreCancelled = true)

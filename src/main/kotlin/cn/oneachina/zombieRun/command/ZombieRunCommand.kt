@@ -255,19 +255,27 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         sender.sendMessage(Component.text("/zr debug - 切换 Debug 模式（管理员）", NamedTextColor.GREEN))
         sender.sendMessage(Component.text("/zr game list - 查看各世界游戏状态（管理员）", NamedTextColor.GREEN))
         sender.sendMessage(Component.text("/zr migrate - 迁移旧配置格式（管理员）", NamedTextColor.GREEN))
-        sender.sendMessage(Component.text("提示: /zr start|open|close 可加 -w <世界名> 指定世界（控制台必填）", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("提示: /zr start|open|close 可加 -w <世界名> 指定世界（玩家默认当前世界，控制台默认配置世界）", NamedTextColor.YELLOW))
     }
 
     private fun handleStart(sender: CommandSender, args: Array<out String>) {
         val world = resolveWorld(sender, args)
-        plugin.gameManager.forceStartGame(world)
-        sender.sendMessage(Component.text("[$world] 游戏开始！", NamedTextColor.GREEN))
+        val started = plugin.gameManager.forceStartGame(world, manual = true)
+        if (started) {
+            sender.sendMessage(Component.text("[$world] 游戏开始！", NamedTextColor.GREEN))
+        } else {
+            sender.sendMessage(Component.text("[$world] 无法开始游戏：游戏已在运行/倒计时中或没有玩家在线！", NamedTextColor.RED))
+        }
     }
 
     /** /zr migrate - 迁移旧配置格式（管理员） */
     private fun handleMigrate(sender: CommandSender) {
-        plugin.configManager.migrateConfigIfNeeded()
-        sender.sendMessage(Component.text("配置迁移完成！", NamedTextColor.GREEN))
+        val migrated = plugin.configManager.migrateConfigIfNeeded()
+        if (migrated) {
+            sender.sendMessage(Component.text("配置迁移完成！", NamedTextColor.GREEN))
+        } else {
+            sender.sendMessage(Component.text("配置无需迁移或迁移失败（详见控制台日志）。", NamedTextColor.YELLOW))
+        }
     }
 
     /** 解析目标世界：优先 -w <world> 参数，其次玩家所在世界，最后配置默认世界 */
@@ -656,16 +664,53 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
 
     private fun handleOpen(sender: CommandSender, args: Array<out String>) {
         val world = resolveWorld(sender, args)
-        if (plugin.gameManager.getGameStatus(world) != GameManager.GameStatus.RUNNING) {
-            plugin.gameManager.beginGame(plugin.gameManager.getGame(world))
-        } else {
-            plugin.logger.warning("[${world}] 游戏已在运行中！")
+        val game = plugin.gameManager.getGame(world)
+        when (game.status) {
+            GameManager.GameStatus.RUNNING -> {
+                plugin.logger.warning("[$world] 游戏已在运行中！")
+                sender.sendMessage(Component.text("[$world] 游戏已在运行中！", NamedTextColor.RED))
+            }
+            GameManager.GameStatus.STARTING -> {
+                // 倒计时中：立即开局
+                val began = plugin.gameManager.beginGame(game)
+                if (began) {
+                    sender.sendMessage(Component.text("[$world] 已跳过倒计时立即开局！", NamedTextColor.GREEN))
+                } else {
+                    sender.sendMessage(Component.text("[$world] 无法开局：没有玩家在线！", NamedTextColor.RED))
+                }
+            }
+            else -> {
+                // 未开始时：1 秒倒计时立即开局（仍会执行传送/母体选定等开局流程）
+                if (plugin.gameManager.forceStartGame(world, countdownSeconds = 1, manual = true)) {
+                    sender.sendMessage(Component.text("[$world] 已立即开始（1 秒倒计时）！", NamedTextColor.GREEN))
+                } else {
+                    plugin.logger.warning("[$world] 无法开始游戏：没有玩家在线")
+                    sender.sendMessage(Component.text("[$world] 无法开始游戏：没有玩家在线！", NamedTextColor.RED))
+                }
+            }
         }
     }
 
     private fun handleClose(sender: CommandSender, args: Array<out String>) {
         val world = resolveWorld(sender, args)
-        plugin.gameManager.endGame(plugin.gameManager.getGame(world), GameManager.Team.SPECTATOR)
+        val game = plugin.gameManager.getGame(world)
+        when (game.status) {
+            GameManager.GameStatus.RUNNING -> {
+                plugin.gameManager.endGame(game, GameManager.Team.SPECTATOR)
+                sender.sendMessage(Component.text("[$world] 游戏已结束！", NamedTextColor.GREEN))
+            }
+            GameManager.GameStatus.STARTING -> {
+                // 倒计时中：取消开局，回到等待
+                plugin.gameManager.cancelCountdownTask(game)
+                game.manuallyForced = false
+                plugin.gameManager.setGameStatus(game, GameManager.GameStatus.WAITING)
+                plugin.gameManager.getWorldPlayers(world).forEach {
+                    it.sendMessage(Component.text("开局已取消，游戏回到等待", NamedTextColor.RED))
+                }
+                sender.sendMessage(Component.text("[$world] 已取消开局倒计时！", NamedTextColor.GREEN))
+            }
+            else -> sender.sendMessage(Component.text("[$world] 当前没有进行中的游戏。", NamedTextColor.YELLOW))
+        }
     }
 
     private fun handleReset(sender: CommandSender, args: Array<out String>) {

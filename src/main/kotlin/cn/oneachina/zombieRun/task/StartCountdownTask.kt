@@ -13,10 +13,12 @@ import org.bukkit.entity.Player
 class StartCountdownTask(
     private val plugin: ZombieRun,
     private val gameManager: GameManager,
-    private val game: GameManager.GameInstance
+    private val game: GameManager.GameInstance,
+    countdownSeconds: Int = 15
 ) {
 
-    private var countdown = 15
+    // PAPI 占位符（bossbar）跨线程读取，需 volatile
+    @Volatile private var countdown = countdownSeconds
     val getCountdown: Int
         get() = countdown
     private val alphaZombie: Player = gameManager.selectAlphaZombie(game)
@@ -28,13 +30,18 @@ class StartCountdownTask(
         plugin.logger.info("[${game.worldName}] 准备阶段开始，母体: ${alphaZombie.name}，模式设为冒险")
 
         gameManager.getWorldPlayers(game.worldName).forEach { player ->
-            if (player == alphaZombie) {
-                player.teleportAsync(plugin.respawnManager.getZombieMainRespawn(game.worldName)?.getLocation(player.world)
-                    ?: plugin.respawnManager.getDefaultRespawn().getLocation(player.world))
+            val respawn = if (player == alphaZombie) {
+                plugin.respawnManager.getZombieMainRespawn(game.worldName)
             } else {
-                player.teleportAsync(plugin.respawnManager.getPlayerInitialRespawn(game.worldName)?.getLocation(player.world)
-                    ?: plugin.respawnManager.getDefaultRespawn().getLocation(player.world))
+                plugin.respawnManager.getPlayerInitialRespawn(game.worldName)
             }
+            // 使用重生点配置的世界（多世界支持），未配置时回退游戏世界出生点
+            val target = if (respawn != null) {
+                respawn.getLocation(plugin.respawnManager.getRespawnWorld(respawn))
+            } else {
+                plugin.worldService.getWorldOrFirst(game.worldName).spawnLocation
+            }
+            player.teleportAsync(target)
             player.gameMode = GameMode.ADVENTURE
             player.showTitle(Title.title(
                 Component.text("准备阶段", NamedTextColor.AQUA),

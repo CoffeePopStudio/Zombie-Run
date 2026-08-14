@@ -81,4 +81,9 @@ class HealthManager(private val plugin: ZombieRun) {
         maxHealthMap.clear()
         lastDamager.clear()
     }
+
+    /** 仅清理指定世界在线玩家的血量数据（多世界隔离，避免误伤其他世界的对局） */
+    fun clearWorld(world: String) {
+        plugin.gameManager.getWorldPlayers(world).forEach { clear(it) }
+    }
 }

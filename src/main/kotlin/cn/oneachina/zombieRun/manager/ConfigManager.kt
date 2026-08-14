@@ -33,20 +33,24 @@ class ConfigManager(private val plugin: ZombieRun) {
         plugin.logger.info("配置文件加载成功")
     }
 
-    fun migrateConfigIfNeeded() {
+    /** 迁移旧配置格式。返回 true 表示实际执行了迁移，false 表示无需迁移或迁移失败 */
+    fun migrateConfigIfNeeded(): Boolean {
         val configFile = File(plugin.dataFolder, "config/config.yml")
-        if (!configFile.exists()) return
+        if (!configFile.exists()) return false
 
         val old = YamlConfiguration.loadConfiguration(configFile)
         // 标记：旧配置有 weapons 节（已移除），新配置没有
-        if (!old.contains("weapons")) return // 已是新格式
+        if (!old.contains("weapons")) return false // 已是新格式
 
         plugin.logger.info("检测到旧配置格式，开始自动迁移...")
 
         // 加载新默认模板
         val defaultConfig = plugin.getResource("config/config.yml")?.use {
             YamlConfiguration.loadConfiguration(it.bufferedReader())
-        } ?: return
+        } ?: run {
+            plugin.logger.severe("配置迁移失败：无法读取默认模板 config/config.yml")
+            return false
+        }
 
         // 逐节迁移：用户数据节（doors/buttons/respawns）整体复制，数值配置节只保留新模板中仍存在的路径
         val dataSections = listOf("doors", "buttons", "respawns")
@@ -99,6 +103,7 @@ class ConfigManager(private val plugin: ZombieRun) {
             "economy.yml", "config/economy.yml",
             mapOf("rank-reward-coins" to listOf(200, 150, 100))
         )
+        return true
     }
 
     private fun migrateSubConfigIfNeeded(fileName: String, defaultResourcePath: String, additionalKeys: Map<String, Any> = emptyMap()) {

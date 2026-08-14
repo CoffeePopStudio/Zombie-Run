@@ -32,7 +32,11 @@ class WorldService(private val plugin: ZombieRun) {
     }
 
     fun getWorldOrFirst(name: String): World {
-        return getWorld(name) ?: Bukkit.getWorlds().first()
+        getWorld(name)?.let { return it }
+        val fallback = Bukkit.getWorlds().firstOrNull()
+            ?: throw IllegalStateException("服务器上没有任何已加载的世界")
+        plugin.logger.warning("世界 $name 未加载，回退使用世界 ${fallback.name}")
+        return fallback
     }
 
     fun isMultiverseEnabled(): Boolean = mvCore != null
