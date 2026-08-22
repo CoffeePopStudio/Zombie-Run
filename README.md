@@ -2,7 +2,7 @@
 
 > ⚠️ 当前为 `v2` 重构分支：v1 稳定版在 `main` 分支。
 > 架构设计见 [docs/v2/ARCHITECTURE.md](docs/v2/ARCHITECTURE.md)，路线图见 [docs/v2/ROADMAP.md](docs/v2/ROADMAP.md)。
-> 当前进度：**M0 骨架 + M1 门系统垂直切片**。
+> 当前进度：**M0 骨架 + M1 门系统垂直切片 + M2 游戏状态机与对局流程**。
 
 非对称 PvP 小游戏插件 —— 人类通过层层大门逃生，僵尸全力感染。
 
@@ -17,6 +17,7 @@
 /zr2 respawn add --arena <名称> door_player <x> <y> <z> <门号>
 /zr2 door trigger <门号>
 /zr2 door test <门id>
+/zr2 game list | status <世界> | start <世界> | end <世界> <human|zombie> | reset <世界>
 /zr2 reload
 ```
 

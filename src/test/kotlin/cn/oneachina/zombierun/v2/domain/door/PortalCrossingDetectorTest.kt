@@ -4,6 +4,8 @@ import kotlin.test.Test
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * 门洞：X 轴穿越，plane=100.0，横向 Z ∈ [10, 20]，Y ∈ [64, 66]。
@@ -130,10 +132,10 @@ class PortalCrossingDetectorTest {
     fun `fallback projection is tight`() {
         val p = portal()
         // 正前方投影内：通过
-        PortalCrossingDetector.isInFrontProjection(Vec3(101.0, 65.0, 15.0), p).let { kotlin.test.assertTrue(it) }
+        PortalCrossingDetector.isInFrontProjection(Vec3(101.0, 65.0, 15.0), p).let { assertTrue(it) }
         // 偏离门洞 2 格：不通过（v1 ±5 会误判）
-        PortalCrossingDetector.isInFrontProjection(Vec3(101.0, 65.0, 23.0), p).let { kotlin.test.assertFalse(it) }
+        PortalCrossingDetector.isInFrontProjection(Vec3(101.0, 65.0, 23.0), p).let { assertFalse(it) }
         // 门前侧 2 格高：不通过
-        PortalCrossingDetector.isInFrontProjection(Vec3(101.0, 69.0, 15.0), p).let { kotlin.test.assertFalse(it) }
+        PortalCrossingDetector.isInFrontProjection(Vec3(101.0, 69.0, 15.0), p).let { assertFalse(it) }
     }
 }

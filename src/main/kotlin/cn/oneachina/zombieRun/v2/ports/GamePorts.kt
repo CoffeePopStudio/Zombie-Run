@@ -2,6 +2,7 @@ package cn.oneachina.zombierun.v2.ports
 
 import cn.oneachina.zombierun.v2.domain.door.BlockRegion
 import cn.oneachina.zombierun.v2.domain.door.Vec3
+import cn.oneachina.zombierun.v2.domain.game.GameTeam
 import java.util.UUID
 
 data class PlayerRef(
@@ -43,4 +44,11 @@ interface PlayerMessagePort {
 /** 传送端口。实现需使用 Paper 的 teleportAsync 语义。 */
 interface TeleporterPort {
     fun teleport(playerId: UUID, worldName: String, x: Double, y: Double, z: Double, yaw: Float, pitch: Float)
+}
+
+/** 对局状态读取/房间推进端口，门系统通过它向对局模块报告过门结果。 */
+interface GameContextPort {
+    fun teamOf(worldName: String, playerId: UUID): GameTeam?
+
+    fun setRoom(worldName: String, playerId: UUID, room: Int)
 }

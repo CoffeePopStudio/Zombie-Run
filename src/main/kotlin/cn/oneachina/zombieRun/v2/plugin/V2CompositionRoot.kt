@@ -1,12 +1,15 @@
 package cn.oneachina.zombierun.v2.plugin
 
 import cn.oneachina.zombierun.v2.application.door.DoorApplicationService
+import cn.oneachina.zombierun.v2.application.event.ApplicationEventBus
+import cn.oneachina.zombierun.v2.application.game.GameFlowService
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.BukkitBlockOpsPort
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.BukkitPlayerMessagePort
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.BukkitTeleporterPort
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.BukkitWorldAccessPort
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.command.Zr2Command
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2DoorListener
+import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2GameListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.scheduler.BukkitSchedulerPort
 import cn.oneachina.zombierun.v2.infrastructure.config.ArenaYamlRepository
 import cn.oneachina.zombierun.v2.infrastructure.config.BlockSnapshotStore
@@ -32,12 +35,16 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
     val blockOps: BlockOpsPort = BukkitBlockOpsPort(scheduler)
     val messages: PlayerMessagePort = BukkitPlayerMessagePort()
     val teleporter: TeleporterPort = BukkitTeleporterPort()
+    val eventBus = ApplicationEventBus()
 
     val settingsLoader = V2SettingsLoader(plugin.dataFolder, logger)
     val arenaRepository = ArenaYamlRepository(plugin.dataFolder, logger)
     val snapshotStore = BlockSnapshotStore(plugin.dataFolder)
 
-    val doorService = DoorApplicationService(
+    lateinit var gameFlow: GameFlowService
+        private set
+
+    val doorService: DoorApplicationService = DoorApplicationService(
         arenaRepository = arenaRepository,
         snapshotStore = snapshotStore,
         blockOps = blockOps,
@@ -47,7 +54,19 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         messages = messages,
         teleporter = teleporter,
         logger = logger,
+        gameContext = GameContextBridge(),
+        eventBus = eventBus,
     )
+
+    /** 门系统通过该桥访问对局状态（对局模块可能在 enable 时构造）。 */
+    private inner class GameContextBridge : cn.oneachina.zombierun.v2.ports.GameContextPort {
+        override fun teamOf(worldName: String, playerId: java.util.UUID) =
+            if (::gameFlow.isInitialized) gameFlow.teamOf(worldName, playerId) else null
+
+        override fun setRoom(worldName: String, playerId: java.util.UUID, room: Int) {
+            if (::gameFlow.isInitialized) gameFlow.setRoom(worldName, playerId, room)
+        }
+    }
 
     fun enable() {
         services.register(SchedulerPort::class, scheduler)
@@ -58,7 +77,6 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         services.register(TaskRegistry::class, taskRegistry)
         services.register(ArenaYamlRepository::class, arenaRepository)
         services.register(BlockSnapshotStore::class, snapshotStore)
-        services.register(DoorApplicationService::class, doorService)
 
         val settings = settingsLoader.load()
         try {
@@ -67,8 +85,24 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
             logger.severe("arena config load failed: ${e.message}")
         }
 
-        val doorListener = V2DoorListener(doorService, arenaRepository)
-        plugin.server.pluginManager.registerEvents(doorListener, plugin)
+        gameFlow = GameFlowService(
+            settings = settings,
+            arenaRepository = arenaRepository,
+            worldAccess = worldAccess,
+            scheduler = scheduler,
+            taskRegistry = taskRegistry,
+            messages = messages,
+            teleporter = teleporter,
+            logger = logger,
+            eventBus = eventBus,
+        )
+        services.register(GameFlowService::class, gameFlow)
+        services.register(DoorApplicationService::class, doorService)
+
+        plugin.server.pluginManager.registerEvents(V2DoorListener(doorService, arenaRepository), plugin)
+        plugin.server.pluginManager.registerEvents(V2GameListener(gameFlow), plugin)
+
+        gameFlow.start()
 
         val command = Zr2Command(this, settings.defaultWorld)
         plugin.getCommand("zr2")?.setExecutor(command)
@@ -77,6 +111,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
 
     fun disable() {
         doorService.cancelAllSessions()
+        if (::gameFlow.isInitialized) gameFlow.stop()
         taskRegistry.cancelAll()
     }
 }

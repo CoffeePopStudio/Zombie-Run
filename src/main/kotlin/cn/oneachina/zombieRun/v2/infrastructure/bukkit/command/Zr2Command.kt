@@ -38,6 +38,7 @@ class Zr2Command(
             "door" -> handleDoor(sender, args.drop(1))
             "button" -> handleButton(sender, args.drop(1))
             "respawn" -> handleRespawn(sender, args.drop(1))
+            "game" -> handleGame(sender, args.drop(1))
             else -> {
                 sender.sendMessage(Component.text("未知子命令：${args[0]}，输入 /zr2 help 查看帮助", NamedTextColor.RED))
             }
@@ -68,6 +69,7 @@ class Zr2Command(
         sender.sendMessage(Component.text("/zr2 door add --arena <名称> <x1> <y1> <z1> <x2> <y2> <z2> <axis> <front> [--number N] [--group G] [--open N] [--close N]", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 button add --arena <名称> <x> <y> <z> normal <门号>", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 respawn add --arena <名称> <type> <x> <y> <z> [door-number] [yaw] [pitch]", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 game list | status <世界> | start <世界> | end <世界> <human|zombie> | reset <世界>", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 reload", NamedTextColor.YELLOW))
     }
 
@@ -366,11 +368,93 @@ class Zr2Command(
         sender.sendMessage(Component.text("respawn '$id' 已添加", NamedTextColor.GREEN))
     }
 
+    // ---------- game ----------
+
+    private fun handleGame(sender: CommandSender, args: List<String>) {
+        if (args.isEmpty()) {
+            sender.sendMessage(Component.text("用法: /zr2 game list|status|start|end|reset", NamedTextColor.RED))
+            return
+        }
+        val world = args.getOrNull(1) ?: (sender as? Player)?.world?.name ?: defaultWorld
+        when (args[0].lowercase()) {
+            "list" -> {
+                val worlds = root.gameFlow.gameWorlds()
+                if (worlds.isEmpty()) {
+                    sender.sendMessage(Component.text("没有配置 arena 的世界", NamedTextColor.YELLOW))
+                } else {
+                    worlds.forEach { w ->
+                        val phase = root.gameFlow.phaseOf(w)?.name ?: "-"
+                        sender.sendMessage(Component.text("- $w  phase=$phase", NamedTextColor.GREEN))
+                    }
+                }
+            }
+            "status" -> {
+                val instance = root.gameFlow.instance(world)
+                if (instance == null) {
+                    sender.sendMessage(Component.text("世界 $world 没有对局实例（需先配置 arena）", NamedTextColor.RED))
+                    return
+                }
+                sender.sendMessage(Component.text("===== game $world =====", NamedTextColor.GREEN))
+                sender.sendMessage(Component.text("phase=${instance.phaseSnapshot().name} alpha=${instance.alphaId()} humans=${instance.humanIds().size} zombies=${instance.zombieIds().size}", NamedTextColor.GREEN))
+                instance.humanIds().forEach { id ->
+                    val name = root.worldAccess.player(id)?.name ?: id.toString()
+                    sender.sendMessage(Component.text("- HUMAN $name room=${instance.roomOf(id)}", NamedTextColor.AQUA))
+                }
+                instance.zombieIds().forEach { id ->
+                    val name = root.worldAccess.player(id)?.name ?: id.toString()
+                    sender.sendMessage(Component.text("- ZOMBIE $name${if (id == instance.alphaId()) " (母体)" else ""}", NamedTextColor.AQUA))
+                }
+            }
+            "start" -> {
+                if (!sender.hasPermission("zombie.run.v2.admin")) {
+                    noPermission(sender)
+                    return
+                }
+                if (root.gameFlow.forceStart(world)) {
+                    sender.sendMessage(Component.text("已强制开始世界 $world 的对局", NamedTextColor.GREEN))
+                } else {
+                    sender.sendMessage(Component.text("无法开始：世界无 arena 或没有在线玩家", NamedTextColor.RED))
+                }
+            }
+            "end" -> {
+                if (!sender.hasPermission("zombie.run.v2.admin")) {
+                    noPermission(sender)
+                    return
+                }
+                val winner = when (args.getOrNull(2)?.lowercase()) {
+                    "human" -> cn.oneachina.zombierun.v2.domain.game.GameTeam.HUMAN
+                    "zombie" -> cn.oneachina.zombierun.v2.domain.game.GameTeam.ZOMBIE_MAIN
+                    else -> {
+                        sender.sendMessage(Component.text("用法: /zr2 game end <世界> <human|zombie>", NamedTextColor.RED))
+                        return
+                    }
+                }
+                if (root.gameFlow.endGame(world, winner)) {
+                    sender.sendMessage(Component.text("对局已结束（$winner）", NamedTextColor.GREEN))
+                } else {
+                    sender.sendMessage(Component.text("世界 $world 没有对局实例", NamedTextColor.RED))
+                }
+            }
+            "reset" -> {
+                if (!sender.hasPermission("zombie.run.v2.admin")) {
+                    noPermission(sender)
+                    return
+                }
+                if (root.gameFlow.reset(world)) {
+                    sender.sendMessage(Component.text("世界 $world 对局已重置", NamedTextColor.GREEN))
+                } else {
+                    sender.sendMessage(Component.text("世界 $world 没有对局实例", NamedTextColor.RED))
+                }
+            }
+            else -> sender.sendMessage(Component.text("未知子命令", NamedTextColor.RED))
+        }
+    }
+
     // ---------- tab ----------
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): List<String> {
         if (args.size == 1) {
-            return listOf("help", "version", "reload", "arena", "door", "button", "respawn")
+            return listOf("help", "version", "reload", "arena", "door", "button", "respawn", "game")
                 .filter { it.startsWith(args[0].lowercase()) }
         }
         return when (args[0].lowercase()) {
@@ -390,6 +474,15 @@ class Zr2Command(
             }
             "button" -> if (args.size == 2) listOf("add").filter { it.startsWith(args[1].lowercase()) } else emptyList()
             "respawn" -> if (args.size == 2) listOf("add").filter { it.startsWith(args[1].lowercase()) } else emptyList()
+            "game" -> when (args.size) {
+                2 -> listOf("list", "status", "start", "end", "reset").filter { it.startsWith(args[1].lowercase()) }
+                3 -> when (args[1].lowercase()) {
+                    "status", "start", "end", "reset" -> root.gameFlow.gameWorlds().filter { it.startsWith(args[2], true) }
+                    else -> emptyList()
+                }
+                4 -> if (args[1].equals("end", true)) listOf("human", "zombie").filter { it.startsWith(args[3].lowercase()) } else emptyList()
+                else -> emptyList()
+            }
             else -> emptyList()
         }
     }

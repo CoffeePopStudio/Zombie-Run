@@ -1,5 +1,7 @@
 package cn.oneachina.zombierun.v2.application.door
 
+import cn.oneachina.zombierun.v2.application.event.ApplicationEventBus
+import cn.oneachina.zombierun.v2.application.event.PlayerPassedDoorEvent
 import cn.oneachina.zombierun.v2.domain.arena.ArenaDefinition
 import cn.oneachina.zombierun.v2.domain.arena.RespawnDefinition
 import cn.oneachina.zombierun.v2.domain.arena.RespawnType
@@ -8,9 +10,11 @@ import cn.oneachina.zombierun.v2.domain.door.DoorPassDecision
 import cn.oneachina.zombierun.v2.domain.door.DoorSessionPhase
 import cn.oneachina.zombierun.v2.domain.door.DoorSessionStateMachine
 import cn.oneachina.zombierun.v2.domain.door.Vec3
+import cn.oneachina.zombierun.v2.domain.game.GameTeam
 import cn.oneachina.zombierun.v2.infrastructure.config.ArenaYamlRepository
 import cn.oneachina.zombierun.v2.infrastructure.config.BlockSnapshotStore
 import cn.oneachina.zombierun.v2.ports.BlockOpsPort
+import cn.oneachina.zombierun.v2.ports.GameContextPort
 import cn.oneachina.zombierun.v2.ports.PlayerMessagePort
 import cn.oneachina.zombierun.v2.ports.SchedulerPort
 import cn.oneachina.zombierun.v2.ports.TaskHandle
@@ -31,6 +35,8 @@ class DoorApplicationService(
     private val messages: PlayerMessagePort,
     private val teleporter: TeleporterPort,
     private val logger: V2Logger,
+    private val gameContext: GameContextPort? = null,
+    private val eventBus: ApplicationEventBus? = null,
 ) {
     private class RuntimeSession(
         val worldName: String,
@@ -162,10 +168,12 @@ class DoorApplicationService(
             val player = worldAccess.player(outcome.playerId) ?: return@forEach
             when (outcome.decision) {
                 DoorPassDecision.PASSED -> {
+                    recordRoomProgress(session, outcome.playerId)
                     messages.chat(outcome.playerId, "你已通过 ${doorLabel(session.doors)}（实时检测）")
                     logger.info("[${session.worldName}] ${player.name} passed door via ${outcome.reason}")
                 }
                 DoorPassDecision.PASSED_FALLBACK -> {
+                    recordRoomProgress(session, outcome.playerId)
                     messages.chat(outcome.playerId, "你已通过 ${doorLabel(session.doors)}（兜底检测）")
                     logger.warn("[${session.worldName}] ${player.name} passed via fallback: ${outcome.reason}")
                 }
@@ -181,6 +189,15 @@ class DoorApplicationService(
         logger.info("[${session.worldName}] ${doorLabel(session.doors)} closed; outcomes=${outcomes.map { it.decision }}")
     }
 
+    private fun recordRoomProgress(session: RuntimeSession, playerId: UUID) {
+        val numbers = session.doors.mapNotNull { it.number }.distinct()
+        val game = gameContext ?: return
+        numbers.forEach { number ->
+            game.setRoom(session.worldName, playerId, number)
+        }
+        eventBus?.publish(PlayerPassedDoorEvent(session.worldName, playerId, numbers))
+    }
+
     private fun startTransferCountdown(session: RuntimeSession, playerId: UUID) {
         transferTasks.remove(playerId)?.cancel()
         var remaining = 10
@@ -191,7 +208,7 @@ class DoorApplicationService(
                 messages.title(playerId, "$remaining", "门已关闭，等待传送")
                 remaining--
             } else {
-                val target = resolveBehindRespawn(session.worldName, doorNumber)
+                val target = resolveBehindRespawn(session.worldName, doorNumber, playerId)
                 if (target != null) {
                     teleporter.teleport(
                         playerId = playerId,
@@ -213,9 +230,14 @@ class DoorApplicationService(
         transferTasks[playerId] = handle
     }
 
-    private fun resolveBehindRespawn(worldName: String, doorNumber: Int?): RespawnDefinition? {
+    private fun resolveBehindRespawn(worldName: String, doorNumber: Int?, playerId: UUID): RespawnDefinition? {
         val respawns = arenaRepository.byWorld(worldName).flatMap { it.respawns }
-        return respawns.firstOrNull { it.type == RespawnType.DOOR_PLAYER && it.doorNumber == doorNumber }
+        val team = gameContext?.teamOf(worldName, playerId)
+        val type = when (team) {
+            GameTeam.ZOMBIE, GameTeam.ZOMBIE_MAIN -> RespawnType.DOOR_ZOMBIE
+            else -> RespawnType.DOOR_PLAYER
+        }
+        return respawns.firstOrNull { it.type == type && it.doorNumber == doorNumber }
             ?: respawns.firstOrNull { it.type == RespawnType.WAIT }
     }
 
