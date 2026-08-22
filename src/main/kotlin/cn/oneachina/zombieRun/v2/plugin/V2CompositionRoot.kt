@@ -1,13 +1,16 @@
 package cn.oneachina.zombierun.v2.plugin
 
+import cn.oneachina.zombierun.v2.application.combat.StaminaService
 import cn.oneachina.zombierun.v2.application.door.DoorApplicationService
 import cn.oneachina.zombierun.v2.application.event.ApplicationEventBus
 import cn.oneachina.zombierun.v2.application.game.GameFlowService
+import cn.oneachina.zombierun.v2.domain.combat.StaminaRules
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.BukkitBlockOpsPort
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.BukkitPlayerMessagePort
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.BukkitTeleporterPort
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.BukkitWorldAccessPort
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.command.Zr2Command
+import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2CombatListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2DoorListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2GameListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.scheduler.BukkitSchedulerPort
@@ -40,6 +43,8 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
     val settingsLoader = V2SettingsLoader(plugin.dataFolder, logger)
     val arenaRepository = ArenaYamlRepository(plugin.dataFolder, logger)
     val snapshotStore = BlockSnapshotStore(plugin.dataFolder)
+    val staminaService = StaminaService(logger)
+    val combatListener = V2CombatListener(staminaService, scheduler, taskRegistry)
 
     lateinit var gameFlow: GameFlowService
         private set
@@ -79,6 +84,14 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         services.register(BlockSnapshotStore::class, snapshotStore)
 
         val settings = settingsLoader.load()
+        staminaService.applyRules(
+            StaminaRules(
+                max = settings.staminaMax,
+                sprintDrainPerTick = settings.staminaSprintDrain,
+                regenPerTick = settings.staminaRegen,
+                exhaustRecoveryDelayTicks = settings.staminaExhaustDelayTicks,
+            ),
+        )
         try {
             arenaRepository.loadAll()
         } catch (e: Exception) {
@@ -101,8 +114,10 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
 
         plugin.server.pluginManager.registerEvents(V2DoorListener(doorService, arenaRepository), plugin)
         plugin.server.pluginManager.registerEvents(V2GameListener(gameFlow), plugin)
+        plugin.server.pluginManager.registerEvents(combatListener, plugin)
 
         gameFlow.start()
+        combatListener.start()
 
         val command = Zr2Command(this, settings.defaultWorld)
         plugin.getCommand("zr2")?.setExecutor(command)
@@ -110,6 +125,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
     }
 
     fun disable() {
+        combatListener.stop()
         doorService.cancelAllSessions()
         if (::gameFlow.isInitialized) gameFlow.stop()
         taskRegistry.cancelAll()

@@ -398,7 +398,7 @@ class Zr2Command(
                 sender.sendMessage(Component.text("phase=${instance.phaseSnapshot().name} alpha=${instance.alphaId()} humans=${instance.humanIds().size} zombies=${instance.zombieIds().size}", NamedTextColor.GREEN))
                 instance.humanIds().forEach { id ->
                     val name = root.worldAccess.player(id)?.name ?: id.toString()
-                    sender.sendMessage(Component.text("- HUMAN $name room=${instance.roomOf(id)}", NamedTextColor.AQUA))
+                    sender.sendMessage(Component.text("- HUMAN $name room=${instance.roomOf(id)} kills=${root.gameFlow.killCount(id)}", NamedTextColor.AQUA))
                 }
                 instance.zombieIds().forEach { id ->
                     val name = root.worldAccess.player(id)?.name ?: id.toString()

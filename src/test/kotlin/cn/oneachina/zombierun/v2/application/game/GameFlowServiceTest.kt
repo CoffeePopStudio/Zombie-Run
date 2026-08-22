@@ -117,7 +117,18 @@ private class Fixture {
     val eventBus = ApplicationEventBus()
     val repo = ArenaYamlRepository(temp, V2Logger(Logger.getLogger("test")))
     val service = GameFlowService(
-        settings = V2Settings(2, false, "world", startDelaySeconds = 5, minPlayers = 2, maxDurationSeconds = 60),
+        settings = V2Settings(
+            schema = 2,
+            debug = false,
+            defaultWorld = "world",
+            startDelaySeconds = 5,
+            minPlayers = 2,
+            maxDurationSeconds = 60,
+            staminaMax = 20.0,
+            staminaSprintDrain = 0.25,
+            staminaRegen = 0.08,
+            staminaExhaustDelayTicks = 40,
+        ),
         arenaRepository = repo,
         worldAccess = world,
         scheduler = scheduler,

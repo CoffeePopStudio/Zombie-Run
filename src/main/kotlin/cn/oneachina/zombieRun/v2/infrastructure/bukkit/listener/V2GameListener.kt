@@ -1,6 +1,7 @@
 package cn.oneachina.zombierun.v2.infrastructure.bukkit.listener
 
 import cn.oneachina.zombierun.v2.application.game.GameFlowService
+import cn.oneachina.zombierun.v2.domain.game.GameTeam
 import org.bukkit.entity.Player
 import org.bukkit.entity.Projectile
 import org.bukkit.event.EventHandler
@@ -59,6 +60,16 @@ class V2GameListener(
         } ?: return
 
         val lethal = victim.health - event.finalDamage <= 0.0
+
+        // 人类击杀僵尸：记录统计，僵尸死亡后由重生逻辑送回僵尸出生点
+        val victimTeam = gameFlow.teamOf(world, victim.uniqueId)
+        val attackerTeam = gameFlow.teamOf(world, attacker.uniqueId)
+        if (lethal && attackerTeam == GameTeam.HUMAN &&
+            (victimTeam == GameTeam.ZOMBIE || victimTeam == GameTeam.ZOMBIE_MAIN)
+        ) {
+            gameFlow.onZombieKilled(world, attacker.uniqueId, victim.uniqueId)
+        }
+
         val infected = gameFlow.onCombat(victim.uniqueId, attacker.uniqueId, world, lethal)
         if (infected) {
             event.isCancelled = true

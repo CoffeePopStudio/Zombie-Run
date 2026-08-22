@@ -11,6 +11,10 @@ data class V2Settings(
     val startDelaySeconds: Int,
     val minPlayers: Int,
     val maxDurationSeconds: Int,
+    val staminaMax: Double,
+    val staminaSprintDrain: Double,
+    val staminaRegen: Double,
+    val staminaExhaustDelayTicks: Int,
 )
 
 class V2SettingsLoader(
@@ -34,6 +38,10 @@ class V2SettingsLoader(
             startDelaySeconds = yaml.getInt("game.start-delay", 30),
             minPlayers = yaml.getInt("game.min-players", 8),
             maxDurationSeconds = yaml.getInt("game.max-duration", 1800),
+            staminaMax = yaml.getDouble("stamina.max", 20.0),
+            staminaSprintDrain = yaml.getDouble("stamina.sprint-drain", 0.25),
+            staminaRegen = yaml.getDouble("stamina.regen", 0.08),
+            staminaExhaustDelayTicks = yaml.getInt("stamina.exhaust-delay-ticks", 40),
         ).also {
             logger.info("settings loaded: schema=${it.schema}, world=${it.defaultWorld}")
         }
@@ -48,6 +56,11 @@ class V2SettingsLoader(
               start-delay: 30
               min-players: 8
               max-duration: 1800
+            stamina:
+              max: 20.0
+              sprint-drain: 0.25
+              regen: 0.08
+              exhaust-delay-ticks: 40
         """.trimIndent() + "\n"
     }
 }

@@ -48,6 +48,7 @@ class GameFlowService(
     private val games = ConcurrentHashMap<String, GameInstance>()
     private val countdowns = ConcurrentHashMap<String, Countdown>()
     private val maxDurationTasks = ConcurrentHashMap<String, TaskHandle>()
+    private val zombieKills = ConcurrentHashMap<UUID, Int>()
     private var autoTickTask: TaskHandle? = null
 
     init {
@@ -299,6 +300,22 @@ class GameFlowService(
             endGame(worldName, game, GameTeam.ZOMBIE_MAIN, "人类被感染殆尽，僵尸获胜")
         }
         return true
+    }
+
+    fun killCount(playerId: UUID): Int = zombieKills[playerId] ?: 0
+
+    /** 僵尸被击杀：记录击杀统计（僵尸死亡由监听器取消、按重生点传送）。 */
+    fun onZombieKilled(worldName: String, killerId: UUID, victimId: UUID) {
+        val game = games[worldName] ?: return
+        if (game.phaseSnapshot() != GamePhase.RUNNING) return
+        if (game.teamOf(victimId) != GameTeam.ZOMBIE && game.teamOf(victimId) != GameTeam.ZOMBIE_MAIN) return
+        zombieKills.merge(killerId, 1, Int::plus)
+        val killerName = worldAccess.player(killerId)?.name ?: killerId.toString()
+        val victimName = worldAccess.player(victimId)?.name ?: victimId.toString()
+        worldAccess.playersIn(worldName).forEach {
+            messages.chat(it.id, "$killerName 击杀了僵尸 $victimName")
+        }
+        logger.info("[$worldName] $killerName killed zombie $victimName")
     }
 
     fun onPlayerRespawn(worldName: String, playerId: UUID) {
