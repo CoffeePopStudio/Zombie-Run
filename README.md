@@ -1,8 +1,26 @@
-# Zombie Run
+# Zombie Run v2（重构分支）
+
+> ⚠️ 当前为 `v2` 重构分支：v1 稳定版在 `main` 分支。
+> 架构设计见 [docs/v2/ARCHITECTURE.md](docs/v2/ARCHITECTURE.md)，路线图见 [docs/v2/ROADMAP.md](docs/v2/ROADMAP.md)。
+> 当前进度：**M0 骨架 + M1 门系统垂直切片**。
 
 非对称 PvP 小游戏插件 —— 人类通过层层大门逃生，僵尸全力感染。
 
 > 适用于 Paper / Folia，Kotlin 开发。
+
+## v2 当前可用命令（垂直切片）
+
+```bash
+/zr2 arena create <名称> [世界]
+/zr2 door add --arena <名称> <x1> <y1> <z1> <x2> <y2> <z2> <axis:x|z> <front:positive|negative>
+/zr2 button add --arena <名称> <x> <y> <z> normal <门号>
+/zr2 respawn add --arena <名称> door_player <x> <y> <z> <门号>
+/zr2 door trigger <门号>
+/zr2 door test <门id>
+/zr2 reload
+```
+
+其余 v1 功能将在后续里程碑迁移，v1 稳定版仍可切回 `main` 分支使用。
 
 ## 游戏机制
 

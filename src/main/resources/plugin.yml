@@ -1,44 +1,26 @@
-name: zombie-run
+name: zombie-run-v2
 version: '${version}'
-main: cn.oneachina.zombieRun.ZombieRun
+main: cn.oneachina.zombierun.v2.plugin.ZombieRunV2Plugin
 api-version: '1.21'
 folia-supported: true
-prefix: ZombieRun
+prefix: ZombieRunV2
 depend:
   - QualityArmory
 softdepend:
   - Multiverse-Core
+  - PlaceholderAPI
 authors: [ oneachina ]
 
 commands:
-  zr:
-    description: 僵尸跑快插件命令
-    usage: /zr <help>
-  start:
-    description: 开始游戏
-    usage: /start
-    permission: zombie.run.start
-    permission-message: §c你没有权限使用此命令！
-  open:
-    description: 打开门
-    usage: /open <doorNumber>
-    permission: zombie.run.admin
-    permission-message: §c你没有权限使用此命令！
-  close:
-    description: 关闭门
-    usage: /close <doorNumber>
-    permission: zombie.run.admin
-    permission-message: §c你没有权限使用此命令！
-  door:
-    description: 门操作命令（控制台命令）
-    usage: /door <n>
-    permission: zombie.run.admin
-    permission-message: §c你没有权限使用此命令！
+  zr2:
+    description: ZombieRun v2 命令
+    usage: /zr2 <help>
+    aliases: [zombierun2]
 
 permissions:
-  zombie.run.admin:
-    description: 允许使用僵尸快跑插件管理命令
+  zombie.run.v2.admin:
+    description: 允许使用 ZombieRun v2 管理命令
     default: op
-  zombie.run.start:
-    description: 允许使用开始游戏命令
-    default: op
+  zombie.run.v2.player:
+    description: 玩家基础命令
+    default: true

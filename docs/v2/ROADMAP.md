@@ -1,6 +1,6 @@
 # Zombie Run v2 任务拆解与路线图（Draft v0.1）
 
-> 状态：**待确认**。批准后按 M0 开始执行。
+> 状态：**已批准，M0 + M1 垂直切片已落地**（2026-08-22）。
 > 架构说明见 [ARCHITECTURE.md](./ARCHITECTURE.md)。
 
 ---
@@ -21,21 +21,22 @@
 
 **目标**：空插件可加载，分层与生命周期就位。
 
-- [ ] 创建 `v2` 分支（从当前 `main`）
-- [ ] 新建 v2 包 `cn.oneachina.zombierun.v2`
-- [ ] `ZombieRunV2Plugin`：薄启动器，只做注册与生命周期转发
-- [ ] `V2ServiceRegistry`：类型安全的注册/获取，重复注册报错
-- [ ] `V2CompositionRoot`：对象装配唯一入口
-- [ ] `TaskRegistry`：定时任务统一登记与取消
-- [ ] `SchedulerPort` + Paper/Folia 适配实现
-- [ ] 日志封装（正常日志 + debug 频道）
-- [ ] 插件名/数据目录使用 `zombie-run-v2`，与 v1 隔离
-- [ ] `settings.yml` schema v2 读取与默认模板生成
+- [x] 创建 `v2` 分支（从当前 `main`）
+- [x] 新建 v2 包 `cn.oneachina.zombierun.v2`
+- [x] `ZombieRunV2Plugin`：薄启动器，只做注册与生命周期转发
+- [x] `V2ServiceRegistry`：类型安全的注册/获取，重复注册报错
+- [x] `V2CompositionRoot`：对象装配唯一入口
+- [x] `TaskRegistry`：定时任务统一登记与取消
+- [x] `SchedulerPort` + Paper/Folia 适配实现
+- [x] 日志封装（正常日志 + debug 频道）
+- [x] 插件名/数据目录使用 `zombie-run-v2`，与 v1 隔离
+- [x] `settings.yml` schema v2 读取与默认模板生成
 
 **验收**：
-- 空插件在 Paper 26.1.2 与 Folia 上均能加载/卸载，无异常
-- `zr2 version` 可输出版本（或 `/zr2` 帮助页）
-- 单元测试可运行
+- [x] 插件在 Paper 26.1.2 上加载/卸载无异常（runServer 实测）
+- [ ] Folia 加载实测（待 Folia 测试服验证）
+- [x] `zr2 version` 可输出版本（或 `/zr2` 帮助页）
+- [x] 单元测试可运行（16 个 domain 测试全部通过）
 
 ---
 
@@ -45,45 +46,46 @@
 
 ### M1.1 配置
 
-- [ ] `arenas/*.yml` v2 schema：doors/buttons/respawns
-- [ ] `DoorDefinition` 与 `Portal` 模型
-- [ ] 配置校验器：缺失字段/坐标非法/门号重复/方向非法，报错带文件与路径
-- [ ] 方块快照 `BlockSnapshotPort` 读写
+- [x] `arenas/*.yml` v2 schema：doors/buttons/respawns
+- [x] `DoorDefinition` 与 `Portal` 模型
+- [x] 配置校验器：缺失字段/坐标非法/门号重复/方向非法，报错带文件与路径
+- [x] 方块快照 `BlockSnapshotPort` 读写（实现为 `BlockSnapshotStore`）
 
 ### M1.2 检测核心（纯 Kotlin + 单测）
 
-- [ ] `PortalCrossingDetector`：线段-平面交点 + 门洞范围校验
-- [ ] `DoorSessionStateMachine`：OPENING/CLOSING/CLOSED，玩家侧边状态 BEHIND/FRONT/UNKNOWN
-- [ ] 穿越记录：`BEHIND→FRONT` 且交点合法
-- [ ] 关门判定：记录优先；严格兜底 + warning 日志
-- [ ] 单元测试覆盖 ARCHITECTURE.md 4.4 列出的全部场景
+- [x] `PortalCrossingDetector`：线段-平面交点 + 门洞范围校验
+- [x] `DoorSessionStateMachine`：OPENING/CLOSING/CLOSED，玩家侧边状态 BEHIND/FRONT/UNKNOWN
+- [x] 穿越记录：`BEHIND→FRONT` 且交点合法
+- [x] 关门判定：记录优先；严格兜底 + warning 日志
+- [x] 单元测试覆盖 ARCHITECTURE.md 4.4 列出的全部场景
 
 ### M1.3 Bukkit 适配
 
-- [ ] `PlayerMoveEvent` 监听器 → 领域事件
-- [ ] `PlayerTeleportEvent` 标记传送，传送不参与穿越判定
-- [ ] 门开启/关闭方块操作（region scheduler）
-- [ ] 按钮交互监听（人类权限、门号、escape 类型）
-- [ ] 落后传送倒计时（人类/僵尸独立）
+- [x] `PlayerMoveEvent` 监听器 → 领域事件
+- [x] `PlayerTeleportEvent` 标记传送，传送不参与穿越判定
+- [x] 门开启/关闭方块操作（region scheduler）
+- [x] 按钮交互监听（normal 已接通，escape 待 M2 撤离流程）
+- [x] 落后传送倒计时（DOOR_PLAYER 已接通；人类/僵尸分流待 M2 队伍系统）
 
 ### M1.4 命令
 
-- [ ] `/zr2 arena create/edit/info/list`
-- [ ] `/zr2 door add/edit/remove/list/info/test`
-- [ ] `/zr2 door trigger <number>`
-- [ ] `/zr2 button add/remove/list`
-- [ ] `test` 子命令：显示指定门的 axis/front/门洞范围，并可选开启可视化检测框
-- [ ] Tab 补全
+- [x] `/zr2 arena create/info/list/remove`（edit 待后续）
+- [x] `/zr2 door add/list/info/test`（edit/remove 待后续）
+- [x] `/zr2 door trigger <number>`
+- [x] `/zr2 button add`（remove/list 待后续）
+- [x] `test` 子命令：显示指定门的 axis/front/门洞范围（可视化框待后续）
+- [x] Tab 补全
 
 ### M1.5 玩家反馈
 
-- [ ] 穿越成功即时提示（ActionBar/Title）
-- [ ] 关门判定结果显示原因（`passed` / `fallback` / `behind`）
+- [x] 穿越成功即时提示（ActionBar/Title）
+- [x] 关门判定结果显示原因（`passed` / `fallback` / `behind`）
 
 **验收**：
-- 用门检测单测矩阵全部通过
-- 在测试服完成低 TPS 模拟、穿门折返、门侧站立、传送穿门四类实测
-- 单人可以完成：创建 arena → 创建门/按钮 → 触发开门 → 穿门 → 关门判定 → 落后传送
+- [x] 用门检测单测矩阵全部通过
+- [x] 单元测试覆盖低 TPS 大位移、折返、门侧站立、传送穿门等场景
+- [x] runServer 实测：创建 arena → 创建门/按钮/重生点 → 触发开门 → 15s 开门 → 15s 关门 → 会话结束
+- [ ] 真实玩家客户端穿门/落后传送实测（待联机）
 
 ---
 

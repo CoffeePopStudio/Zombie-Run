@@ -35,11 +35,15 @@ dependencies {
     compileOnly("com.onarandombox.multiversecore:multiverse-core:4.3.14")
     implementation(kotlin("stdlib-jdk8"))
     implementation("com.zaxxer:HikariCP:7.0.2")
+
+    testImplementation(kotlin("test"))
+    testImplementation(platform("org.junit:junit-bom:5.12.2"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 tasks.shadowJar {
-    // 完整依赖版直接产出 zombie-run-<version>.jar（不带 -all），
-    // 避免部署时误用不含 Kotlin/HikariCP 的瘦身 jar 导致 NoClassDefFoundError
+    archiveBaseName.set("zombie-run-v2")
     archiveClassifier.set("")
     dependencies {
         include(dependency("org.jetbrains.kotlin:.*"))
@@ -49,7 +53,7 @@ tasks.shadowJar {
 }
 
 tasks.jar {
-    // 瘦身版改名，防止与 shadowJar 产物同名冲突
+    archiveBaseName.set("zombie-run-v2")
     archiveClassifier.set("thin")
 }
 
@@ -62,7 +66,6 @@ tasks {
         minecraftVersion("26.1.2")
         dependsOn("shadowJar")
         downloadPlugins {
-            // QualityArmory 2.1.3（Modrinth 版本 ID，与 compileOnly 依赖版本一致）
             modrinth("qualityarmory", "fdVKuHYp")
         }
     }
