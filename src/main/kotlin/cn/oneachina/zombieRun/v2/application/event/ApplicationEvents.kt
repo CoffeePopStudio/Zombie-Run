@@ -17,3 +17,9 @@ data class GameEndedEvent(
     val worldName: String,
     val winner: String,
 )
+
+data class ZombieKilledEvent(
+    val worldName: String,
+    val killerId: UUID,
+    val victimId: UUID,
+)

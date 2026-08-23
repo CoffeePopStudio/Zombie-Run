@@ -16,6 +16,7 @@ import cn.oneachina.zombierun.v2.domain.weapon.WeaponDefinition
 import cn.oneachina.zombierun.v2.plugin.V2CompositionRoot
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
+import org.bukkit.Bukkit
 import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
@@ -42,6 +43,10 @@ class Zr2Command(
             "respawn" -> handleRespawn(sender, args.drop(1))
             "game" -> handleGame(sender, args.drop(1))
             "weapon" -> handleWeapon(sender, args.drop(1))
+            "profile" -> handleProfile(sender, args.drop(1))
+            "coins" -> handleCoins(sender, args.drop(1))
+            "xp" -> handleXp(sender, args.drop(1))
+            "title" -> handleTitle(sender, args.drop(1))
             else -> {
                 sender.sendMessage(Component.text("未知子命令：${args[0]}，输入 /zr2 help 查看帮助", NamedTextColor.RED))
             }
@@ -75,6 +80,7 @@ class Zr2Command(
         sender.sendMessage(Component.text("/zr2 respawn add --arena <名称> <type> <x> <y> <z> [door-number] [yaw] [pitch]", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 game list | status <世界> | start <世界> | end <世界> <human|zombie> | reset <世界>", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 weapon list | info <id> | add <id> <type> <category> <price> [name] | remove <id> | give <id> | random [category]", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 profile [玩家] | coins add|give|spend | xp add | title set|clear", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 reload", NamedTextColor.YELLOW))
     }
 
@@ -560,11 +566,104 @@ class Zr2Command(
         sender.sendMessage(Component.text("武器 '$id' 已保存", NamedTextColor.GREEN))
     }
 
+    // ---------- player profile / economy ----------
+
+    private fun handleProfile(sender: CommandSender, args: List<String>) {
+        val target = if (args.isNullOrEmpty()) {
+            sender as? Player ?: run {
+                sender.sendMessage(Component.text("控制台必须指定玩家名", NamedTextColor.RED))
+                return
+            }
+        } else {
+            Bukkit.getPlayerExact(args[0]) ?: run {
+                sender.sendMessage(Component.text("玩家不在线：${args[0]}", NamedTextColor.RED))
+                return
+            }
+        }
+        val profile = root.playerDataService.profileOf(target.uniqueId)
+        sender.sendMessage(Component.text("===== ${target.name} 资料 =====", NamedTextColor.GREEN))
+        sender.sendMessage(Component.text("等级 ${profile.level}  经验 ${profile.xp}  硬币 ${profile.coins}  称号 ${profile.title ?: "-"}", NamedTextColor.GREEN))
+        sender.sendMessage(Component.text("门数 ${profile.doorPasses}  击杀 ${profile.zombieKills}", NamedTextColor.GREEN))
+    }
+
+    private fun handleCoins(sender: CommandSender, args: List<String>) {
+        if (args.isEmpty()) {
+            sender.sendMessage(Component.text("用法: /zr2 coins add|give|spend", NamedTextColor.RED))
+            return
+        }
+        when (args[0].lowercase()) {
+            "add" -> {
+                if (!sender.hasPermission("zombie.run.v2.admin")) { noPermission(sender); return }
+                val amount = args.getOrNull(1)?.toIntOrNull() ?: return badNumber(sender)
+                val player = sender as? Player ?: run { sender.sendMessage(Component.text("add 需要玩家执行", NamedTextColor.RED)); return }
+                val profile = root.playerDataService.addCoins(player.uniqueId, amount)
+                sender.sendMessage(Component.text("已添加 $amount 硬币，当前 ${profile.coins}", NamedTextColor.GREEN))
+            }
+            "give" -> {
+                if (!sender.hasPermission("zombie.run.v2.admin")) { noPermission(sender); return }
+                val target = Bukkit.getPlayerExact(args.getOrNull(1) ?: "") ?: run {
+                    sender.sendMessage(Component.text("玩家不在线：${args.getOrNull(1)}", NamedTextColor.RED)); return
+                }
+                val amount = args.getOrNull(2)?.toIntOrNull() ?: return badNumber(sender)
+                val profile = root.playerDataService.addCoins(target.uniqueId, amount)
+                sender.sendMessage(Component.text("已给 ${target.name} $amount 硬币，当前 ${profile.coins}", NamedTextColor.GREEN))
+            }
+            "spend" -> {
+                val player = sender as? Player ?: run { sender.sendMessage(Component.text("spend 需要玩家执行", NamedTextColor.RED)); return }
+                val amount = args.getOrNull(1)?.toIntOrNull() ?: return badNumber(sender)
+                val profile = root.playerDataService.spendCoins(player.uniqueId, amount)
+                if (profile == null) sender.sendMessage(Component.text("硬币不足", NamedTextColor.RED))
+                else sender.sendMessage(Component.text("已花费 $amount，剩余 ${profile.coins}", NamedTextColor.GREEN))
+            }
+            else -> sender.sendMessage(Component.text("未知子命令", NamedTextColor.RED))
+        }
+    }
+
+    private fun handleXp(sender: CommandSender, args: List<String>) {
+        if (!sender.hasPermission("zombie.run.v2.admin")) { noPermission(sender); return }
+        if (args.size < 2) {
+            sender.sendMessage(Component.text("用法: /zr2 xp add <玩家> <数量>", NamedTextColor.RED))
+            return
+        }
+        val target = Bukkit.getPlayerExact(args[0]) ?: run {
+            sender.sendMessage(Component.text("玩家不在线：${args[0]}", NamedTextColor.RED)); return
+        }
+        val amount = args[1].toIntOrNull() ?: return badNumber(sender)
+        val profile = root.playerDataService.addXp(target.uniqueId, amount)
+        sender.sendMessage(Component.text("已给 ${target.name} $amount 经验，当前等级 ${profile.level}", NamedTextColor.GREEN))
+    }
+
+    private fun handleTitle(sender: CommandSender, args: List<String>) {
+        if (!sender.hasPermission("zombie.run.v2.admin")) { noPermission(sender); return }
+        when (args.getOrNull(0)?.lowercase()) {
+            "set" -> {
+                val target = Bukkit.getPlayerExact(args.getOrNull(1) ?: "") ?: run {
+                    sender.sendMessage(Component.text("玩家不在线：${args.getOrNull(1)}", NamedTextColor.RED)); return
+                }
+                val title = args.drop(2).joinToString(" ").ifBlank { null }
+                root.playerDataService.setTitle(target.uniqueId, title)
+                sender.sendMessage(Component.text("已设置 ${target.name} 称号：${title ?: "无"}", NamedTextColor.GREEN))
+            }
+            "clear" -> {
+                val target = Bukkit.getPlayerExact(args.getOrNull(1) ?: "") ?: run {
+                    sender.sendMessage(Component.text("玩家不在线：${args.getOrNull(1)}", NamedTextColor.RED)); return
+                }
+                root.playerDataService.setTitle(target.uniqueId, null)
+                sender.sendMessage(Component.text("已清除 ${target.name} 称号", NamedTextColor.GREEN))
+            }
+            else -> sender.sendMessage(Component.text("用法: /zr2 title set|clear <玩家> [称号]", NamedTextColor.RED))
+        }
+    }
+
+    private fun badNumber(sender: CommandSender) {
+        sender.sendMessage(Component.text("数量必须是整数", NamedTextColor.RED))
+    }
+
     // ---------- tab ----------
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): List<String> {
         if (args.size == 1) {
-            return listOf("help", "version", "reload", "arena", "door", "button", "respawn", "game", "weapon")
+            return listOf("help", "version", "reload", "arena", "door", "button", "respawn", "game", "weapon", "profile", "coins", "xp", "title")
                 .filter { it.startsWith(args[0].lowercase()) }
         }
         return when (args[0].lowercase()) {
@@ -603,6 +702,16 @@ class Zr2Command(
                 4 -> if (args[1].equals("add", true)) listOf("gun", "melee", "special").filter { it.startsWith(args[3].lowercase()) } else emptyList()
                 else -> emptyList()
             }
+            "coins" -> when (args.size) {
+                2 -> listOf("add", "give", "spend").filter { it.startsWith(args[1].lowercase()) }
+                else -> emptyList()
+            }
+            "title" -> when (args.size) {
+                2 -> listOf("set", "clear").filter { it.startsWith(args[1].lowercase()) }
+                else -> emptyList()
+            }
+            "xp" -> if (args.size == 2) listOf("add").filter { it.startsWith(args[1].lowercase()) } else emptyList()
+            "profile" -> emptyList()
             else -> emptyList()
         }
     }

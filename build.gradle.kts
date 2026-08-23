@@ -35,6 +35,7 @@ dependencies {
     compileOnly("com.onarandombox.multiversecore:multiverse-core:4.3.14")
     implementation(kotlin("stdlib-jdk8"))
     implementation("com.zaxxer:HikariCP:7.0.2")
+    implementation("org.xerial:sqlite-jdbc:3.49.1.0")
 
     testImplementation(kotlin("test"))
     testImplementation(platform("org.junit:junit-bom:5.12.2"))
@@ -49,6 +50,7 @@ tasks.shadowJar {
     dependencies {
         include(dependency("org.jetbrains.kotlin:.*"))
         include(dependency("com.zaxxer:HikariCP:.*"))
+        include(dependency("org.xerial:sqlite-jdbc:.*"))
     }
     mergeServiceFiles()
 }

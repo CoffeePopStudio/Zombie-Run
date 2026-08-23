@@ -4,6 +4,7 @@ import cn.oneachina.zombierun.v2.application.event.ApplicationEventBus
 import cn.oneachina.zombierun.v2.application.event.GameEndedEvent
 import cn.oneachina.zombierun.v2.application.event.GameStartedEvent
 import cn.oneachina.zombierun.v2.application.event.PlayerPassedDoorEvent
+import cn.oneachina.zombierun.v2.application.event.ZombieKilledEvent
 import cn.oneachina.zombierun.v2.domain.arena.RespawnDefinition
 import cn.oneachina.zombierun.v2.domain.arena.RespawnType
 import cn.oneachina.zombierun.v2.domain.game.GameInstance
@@ -310,6 +311,7 @@ class GameFlowService(
         if (game.phaseSnapshot() != GamePhase.RUNNING) return
         if (game.teamOf(victimId) != GameTeam.ZOMBIE && game.teamOf(victimId) != GameTeam.ZOMBIE_MAIN) return
         zombieKills.merge(killerId, 1, Int::plus)
+        eventBus.publish(ZombieKilledEvent(worldName, killerId, victimId))
         val killerName = worldAccess.player(killerId)?.name ?: killerId.toString()
         val victimName = worldAccess.player(victimId)?.name ?: victimId.toString()
         worldAccess.playersIn(worldName).forEach {
