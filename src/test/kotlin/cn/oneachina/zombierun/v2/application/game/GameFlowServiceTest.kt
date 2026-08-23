@@ -116,6 +116,7 @@ private class Fixture {
     val teleporter = FakeTeleporter()
     val eventBus = ApplicationEventBus()
     val repo = ArenaYamlRepository(temp, V2Logger(Logger.getLogger("test")))
+    val taskRegistry = TaskRegistry()
     val service = GameFlowService(
         settings = V2Settings(
             schema = 2,
@@ -132,7 +133,7 @@ private class Fixture {
         arenaRepository = repo,
         worldAccess = world,
         scheduler = scheduler,
-        taskRegistry = TaskRegistry(),
+        taskRegistry = taskRegistry,
         messages = messages,
         teleporter = teleporter,
         logger = V2Logger(Logger.getLogger("test")),
@@ -258,5 +259,26 @@ class GameFlowServiceTest {
 
         f.service.setRoom("w", uuid(1), 2)
         assertEquals(2, f.service.instance("w")?.roomOf(uuid(1)))
+    }
+
+    @Test
+    fun `one hundred repeated matches keep task registry bounded`() {
+        val f = Fixture()
+        f.repo.save(ArenaDefinition("a", "w"))
+        f.world.setPlayers("w", listOf(uuid(1), uuid(2)))
+        f.service.start()
+
+        repeat(100) {
+            f.service.forceStart("w")
+            f.scheduler.runLaters()
+            assertEquals(GamePhase.ENDED, f.service.phaseOf("w"))
+            f.service.reset("w")
+        }
+
+        assertEquals(GamePhase.WAITING, f.service.phaseOf("w"))
+        assertTrue(f.taskRegistry.size() <= 5, "task registry leaked: size=${f.taskRegistry.size()}")
+        f.service.stop()
+        f.taskRegistry.cancelAll()
+        assertEquals(0, f.taskRegistry.size())
     }
 }

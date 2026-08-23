@@ -11,6 +11,7 @@ class TaskRegistry {
     private val handles = CopyOnWriteArrayList<TaskHandle>()
 
     fun register(handle: TaskHandle): TaskHandle {
+        handles.removeAll { it.isCancelled }
         handles.add(handle)
         return handle
     }

@@ -29,6 +29,16 @@ class Zr2Command(
 ) : CommandExecutor, TabCompleter {
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
+        try {
+            return handleCommand(sender, args)
+        } catch (e: Exception) {
+            root.logger.severe("command /$label ${args.joinToString(" ")} error: ${e.message}")
+            sender.sendMessage(Component.text("命令执行出错：${e.message}", NamedTextColor.RED))
+            return true
+        }
+    }
+
+    private fun handleCommand(sender: CommandSender, args: Array<out String>): Boolean {
         if (args.isEmpty()) {
             help(sender)
             return true
