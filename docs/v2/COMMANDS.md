@@ -66,6 +66,25 @@
 | `/zr2 menu profile` | 打开个人资料菜单 |
 | `/zr2 menu shop` | 打开武器商店菜单 |
 
+## 任务
+
+| 命令 | 说明 |
+| --- | --- |
+| `/zr2 task list` | 查看每日/每周任务进度 |
+| `/zr2 task claim <任务id>` | 领取已完成任务奖励 |
+
+任务定义在 `plugins/zombie-run-v2/config/tasks.yml`：
+```yaml
+tasks:
+  daily_doors:
+    description: 通过 5 扇门
+    type: DOOR_PASSES
+    target: 5
+    reward-coins: 100
+    reward-xp: 50
+    period: DAILY
+```
+
 ## PlaceholderAPI
 
 前缀 `zombierun`，示例：

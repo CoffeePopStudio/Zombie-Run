@@ -142,14 +142,16 @@
 
 - [x] 硬币系统 + SQLite 持久化（v2 独立 `player_data_v2` 表；v1 数据迁移待 M7）
 - [x] XP/等级/称号（升级制 100*level/级，称号可设置/清除）
-- [ ] 每日/每周任务定义与进度（当前为事件计数：门数/击杀，任务模板待扩展）
+- [x] 每日/每周任务定义与进度（TaskYamlRepository + PlayerTaskPort + TaskService）
 - [x] 过门任务/击杀任务计数接入应用事件总线（PlayerPassedDoorEvent / ZombieKilledEvent）
 - [x] 玩家数据仓库抽象与缓存（PlayerDataPort / PlayerDataService / SqlitePlayerDataRepository）
-- [x] `/zr2 profile | coins add|give|spend | xp add | title set|clear`
+- [x] `/zr2 task list|claim`
+- [x] 任务奖励领取：硬币/经验发放并防止重复领取
 
 **验收**：
 - [x] SQLite 初始化/WAL/关闭正常（Paper 实测）
 - [x] 事件计数在服务重启后持久化（单测覆盖存储）
+- [x] 每日/每周任务完成 + 领取奖励单测通过
 - [ ] v1 SQLite 数据库导入后数据完整（待 M7 迁移）
 
 ---

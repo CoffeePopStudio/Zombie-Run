@@ -58,6 +58,7 @@ class Zr2Command(
             "xp" -> handleXp(sender, args.drop(1))
             "title" -> handleTitle(sender, args.drop(1))
             "menu" -> handleMenu(sender, args.drop(1))
+            "task" -> handleTask(sender, args.drop(1))
             "v1" -> handleV1(sender, args.drop(1))
             else -> {
                 sender.sendMessage(Component.text("未知子命令：${args[0]}，输入 /zr2 help 查看帮助", NamedTextColor.RED))
@@ -94,6 +95,7 @@ class Zr2Command(
         sender.sendMessage(Component.text("/zr2 weapon list | info <id> | add <id> <type> <category> <price> [name] | remove <id> | give <id> | random [category]", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 profile [玩家] | coins add|give|spend | xp add | title set|clear", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 menu profile|shop", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 task list|claim <任务id>", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 v1 migrate", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 reload", NamedTextColor.YELLOW))
     }
@@ -686,6 +688,36 @@ class Zr2Command(
         }
     }
 
+    // ---------- task ----------
+
+    private fun handleTask(sender: CommandSender, args: List<String>) {
+        val player = sender as? Player ?: run {
+            sender.sendMessage(Component.text("task 命令需要玩家执行", NamedTextColor.RED)); return
+        }
+        when (args.getOrNull(0)?.lowercase()) {
+            "list" -> {
+                sender.sendMessage(Component.text("===== 任务列表 =====", NamedTextColor.GREEN))
+                root.taskService.progressOf(player.uniqueId).forEach { (task, progress) ->
+                    val status = when {
+                        progress.claimed -> "§7已领取"
+                        progress.progress >= task.target -> "§a可领取"
+                        else -> "${progress.progress}/${task.target}"
+                    }
+                    sender.sendMessage(
+                        Component.text("[${task.period.name.lowercase()}] ${task.description} - $status（奖励 ${task.rewardCoins} 币/${task.rewardXp} 经验）"),
+                    )
+                }
+            }
+            "claim" -> {
+                val taskId = args.getOrNull(1) ?: run {
+                    sender.sendMessage(Component.text("用法: /zr2 task claim <任务id>", NamedTextColor.RED)); return
+                }
+                sender.sendMessage(Component.text(root.taskService.claim(player.uniqueId, taskId), NamedTextColor.GREEN))
+            }
+            else -> sender.sendMessage(Component.text("用法: /zr2 task list|claim <任务id>", NamedTextColor.RED))
+        }
+    }
+
     // ---------- v1 migration ----------
 
     private fun handleV1(sender: CommandSender, args: List<String>) {
@@ -710,7 +742,7 @@ class Zr2Command(
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): List<String> {
         if (args.size == 1) {
-            return listOf("help", "version", "reload", "arena", "door", "button", "respawn", "game", "weapon", "profile", "coins", "xp", "title", "menu", "v1")
+            return listOf("help", "version", "reload", "arena", "door", "button", "respawn", "game", "weapon", "profile", "coins", "xp", "title", "menu", "task", "v1")
                 .filter { it.startsWith(args[0].lowercase()) }
         }
         return when (args[0].lowercase()) {
@@ -759,6 +791,7 @@ class Zr2Command(
             }
             "xp" -> if (args.size == 2) listOf("add").filter { it.startsWith(args[1].lowercase()) } else emptyList()
             "menu" -> if (args.size == 2) listOf("profile", "shop").filter { it.startsWith(args[1].lowercase()) } else emptyList()
+            "task" -> if (args.size == 2) listOf("list", "claim").filter { it.startsWith(args[1].lowercase()) } else if (args.size == 3 && args[1].equals("claim", true)) root.taskService.allTasks().map { it.id }.filter { it.startsWith(args[2], true) } else emptyList()
             "v1" -> if (args.size == 2) listOf("migrate").filter { it.startsWith(args[1].lowercase()) } else emptyList()
             "profile" -> emptyList()
             else -> emptyList()

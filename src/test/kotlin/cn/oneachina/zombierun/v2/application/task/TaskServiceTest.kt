@@ -1,0 +1,131 @@
+package cn.oneachina.zombierun.v2.application.task
+
+import cn.oneachina.zombierun.v2.application.event.ApplicationEventBus
+import cn.oneachina.zombierun.v2.application.event.PlayerPassedDoorEvent
+import cn.oneachina.zombierun.v2.application.event.ZombieKilledEvent
+import cn.oneachina.zombierun.v2.application.player.PlayerDataService
+import cn.oneachina.zombierun.v2.domain.player.PlayerProfile
+import cn.oneachina.zombierun.v2.domain.task.TaskProgress
+import cn.oneachina.zombierun.v2.infrastructure.config.TaskYamlRepository
+import cn.oneachina.zombierun.v2.ports.PlayerDataPort
+import cn.oneachina.zombierun.v2.ports.PlayerMessagePort
+import cn.oneachina.zombierun.v2.ports.PlayerTaskPort
+import cn.oneachina.zombierun.v2.support.V2Logger
+import java.io.File
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.logging.Logger
+import kotlin.io.path.createTempDirectory
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+class TaskServiceTest {
+
+    private class FakeTaskStorage : PlayerTaskPort {
+        val store = ConcurrentHashMap<UUID, MutableMap<String, TaskProgress>>()
+        override fun load(playerId: UUID): Map<String, TaskProgress> =
+            store[playerId]?.toMap() ?: emptyMap()
+        override fun save(playerId: UUID, progress: Map<String, TaskProgress>) {
+            store[playerId] = progress.toMutableMap()
+        }
+        override fun close() = Unit
+    }
+
+    private class FakeDataStorage : PlayerDataPort {
+        val store = ConcurrentHashMap<UUID, PlayerProfile>()
+        override fun load(playerId: UUID): PlayerProfile? = store[playerId]
+        override fun save(profile: PlayerProfile) { store[profile.playerId] = profile }
+        override fun close() = Unit
+    }
+
+    private class FakeMessages : PlayerMessagePort {
+        override fun actionBar(playerId: UUID, message: String) = Unit
+        override fun chat(playerId: UUID, message: String) = Unit
+        override fun title(playerId: UUID, title: String, subtitle: String) = Unit
+        override fun soundBell(worldName: String) = Unit
+    }
+
+    private class Fixture(
+        val service: TaskService,
+        val bus: ApplicationEventBus,
+        val storage: FakeTaskStorage,
+        val playerData: PlayerDataService,
+    )
+
+    private fun fixture(dir: File): Fixture {
+        val tasksYaml = File(dir, "config/tasks.yml")
+        tasksYaml.parentFile.mkdirs()
+        tasksYaml.writeText(
+            """
+            tasks:
+              daily_doors:
+                description: 通过5扇门
+                type: DOOR_PASSES
+                target: 5
+                reward-coins: 50
+                reward-xp: 10
+                period: DAILY
+              weekly_kills:
+                description: 击杀3只僵尸
+                type: ZOMBIE_KILLS
+                target: 3
+                reward-coins: 100
+                reward-xp: 30
+                period: WEEKLY
+            """.trimIndent(),
+        )
+        val bus = ApplicationEventBus()
+        val taskStorage = FakeTaskStorage()
+        val dataStorage = FakeDataStorage()
+        val messages = FakeMessages()
+        val playerData = PlayerDataService(dataStorage, messages, V2Logger(Logger.getLogger("test")), bus)
+        val service = TaskService(
+            storage = taskStorage,
+            taskRepository = TaskYamlRepository(dir, V2Logger(Logger.getLogger("test"))),
+            playerData = playerData,
+            messages = messages,
+            logger = V2Logger(Logger.getLogger("test")),
+            eventBus = bus,
+        )
+        return Fixture(service, bus, taskStorage, playerData)
+    }
+
+    @Test
+    fun `door and kill events increment task progress`() {
+        val f = fixture(createTempDirectory("zr2-task-test").toFile())
+        val id = UUID.randomUUID()
+
+        repeat(5) {
+            f.bus.publish(PlayerPassedDoorEvent("w", id, listOf(1)))
+        }
+        repeat(3) {
+            f.bus.publish(ZombieKilledEvent("w", id, UUID.randomUUID()))
+        }
+
+        val tasks = f.service.progressOf(id).associate { it.first.id to it.second }
+        assertEquals(5, tasks["daily_doors"]?.progress)
+        assertEquals(3, tasks["weekly_kills"]?.progress)
+        assertFalse(tasks["daily_doors"]!!.claimed)
+        assertTrue(f.storage.store[id]?.get("daily_doors")?.progress == 5)
+    }
+
+    @Test
+    fun `claim awards coins and xp once`() {
+        val f = fixture(createTempDirectory("zr2-task-test").toFile())
+        val id = UUID.randomUUID()
+
+        repeat(5) {
+            f.bus.publish(PlayerPassedDoorEvent("w", id, listOf(1)))
+        }
+        assertTrue(f.service.claim(id, "daily_doors").contains("已领取"))
+        assertEquals("任务尚未完成", f.service.claim(id, "weekly_kills"))
+        assertEquals("该任务奖励已领取", f.service.claim(id, "daily_doors"))
+
+        val profile = f.playerData.profileOf(id)
+        assertEquals(50, profile.coins)
+        assertEquals(10, profile.xp)
+        assertTrue(f.service.progressOf(id).first { it.first.id == "daily_doors" }.second.claimed)
+    }
+}

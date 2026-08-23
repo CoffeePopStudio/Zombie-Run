@@ -5,6 +5,7 @@ import cn.oneachina.zombierun.v2.application.door.DoorApplicationService
 import cn.oneachina.zombierun.v2.application.event.ApplicationEventBus
 import cn.oneachina.zombierun.v2.application.game.GameFlowService
 import cn.oneachina.zombierun.v2.application.player.PlayerDataService
+import cn.oneachina.zombierun.v2.application.task.TaskService
 import cn.oneachina.zombierun.v2.application.weapon.WeaponService
 import cn.oneachina.zombierun.v2.domain.combat.StaminaRules
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.BukkitBlockOpsPort
@@ -18,17 +19,21 @@ import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2CombatListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2DoorListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2GameListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2PlayerDataListener
+import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2TaskListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.scheduler.BukkitSchedulerPort
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.weapon.QaWeaponIntegrationPort
 import cn.oneachina.zombierun.v2.infrastructure.config.ArenaYamlRepository
 import cn.oneachina.zombierun.v2.infrastructure.config.BlockSnapshotStore
 import cn.oneachina.zombierun.v2.infrastructure.config.V2SettingsLoader
 import cn.oneachina.zombierun.v2.infrastructure.config.V1MigrationService
+import cn.oneachina.zombierun.v2.infrastructure.config.TaskYamlRepository
 import cn.oneachina.zombierun.v2.infrastructure.config.WeaponYamlRepository
 import cn.oneachina.zombierun.v2.infrastructure.storage.SqlitePlayerDataRepository
+import cn.oneachina.zombierun.v2.infrastructure.storage.SqlitePlayerTaskRepository
 import cn.oneachina.zombierun.v2.ports.BlockOpsPort
 import cn.oneachina.zombierun.v2.ports.PlayerDataPort
 import cn.oneachina.zombierun.v2.ports.PlayerMessagePort
+import cn.oneachina.zombierun.v2.ports.PlayerTaskPort
 import cn.oneachina.zombierun.v2.ports.SchedulerPort
 import cn.oneachina.zombierun.v2.ports.TeleporterPort
 import cn.oneachina.zombierun.v2.ports.WeaponIntegrationPort
@@ -61,6 +66,10 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
     val playerDataRepository: PlayerDataPort = SqlitePlayerDataRepository(plugin.dataFolder, logger)
     val playerDataService = PlayerDataService(playerDataRepository, messages, logger, eventBus)
     val playerDataListener = V2PlayerDataListener(playerDataService)
+    val taskRepository = TaskYamlRepository(plugin.dataFolder, logger)
+    val taskStorage: PlayerTaskPort = SqlitePlayerTaskRepository(plugin.dataFolder, logger)
+    val taskService = TaskService(taskStorage, taskRepository, playerDataService, messages, logger, eventBus)
+    val taskListener = V2TaskListener(taskService)
     val guiService = GuiService(playerDataService, weaponService, logger)
     val staminaService = StaminaService(logger)
     val combatListener = V2CombatListener(staminaService, scheduler, taskRegistry)
@@ -107,6 +116,8 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         services.register(WeaponService::class, weaponService)
         services.register(PlayerDataPort::class, playerDataRepository)
         services.register(PlayerDataService::class, playerDataService)
+        services.register(PlayerTaskPort::class, taskStorage)
+        services.register(TaskService::class, taskService)
 
         val settings = settingsLoader.load()
         staminaService.applyRules(
@@ -150,6 +161,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         plugin.server.pluginManager.registerEvents(V2DoorListener(doorService, arenaRepository, gameFlow), plugin)
         plugin.server.pluginManager.registerEvents(V2GameListener(gameFlow), plugin)
         plugin.server.pluginManager.registerEvents(V2PlayerDataListener(playerDataService), plugin)
+        plugin.server.pluginManager.registerEvents(V2TaskListener(taskService), plugin)
         plugin.server.pluginManager.registerEvents(combatListener, plugin)
         plugin.server.pluginManager.registerEvents(guiService, plugin)
 
@@ -166,6 +178,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         doorService.cancelAllSessions()
         if (::gameFlow.isInitialized) gameFlow.stop()
         taskRegistry.cancelAll()
+        taskService.close()
         playerDataService.close()
     }
 }

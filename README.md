@@ -3,7 +3,7 @@
 > ⚠️ 当前为 `v2` 重构分支：v1 稳定版在 `main` 分支。
 > 架构设计见 [docs/v2/ARCHITECTURE.md](docs/v2/ARCHITECTURE.md)，路线图见 [docs/v2/ROADMAP.md](docs/v2/ROADMAP.md)。
 > 命令参考见 [docs/v2/COMMANDS.md](docs/v2/COMMANDS.md)，升级指南见 [docs/v2/UPGRADE.md](docs/v2/UPGRADE.md)，发布说明见 [docs/v2/RELEASE.md](docs/v2/RELEASE.md)。
-> 当前进度：**M0–M8 已全部落地 + M9 扩展：特殊门行为/直升机撤离/方块快照迁移**。
+> 当前进度：**M0–M10：门系统/游戏流程/体力/武器/经济/等级/GUI/PAPI/迁移/特殊门/任务系统**。
 
 非对称 PvP 小游戏插件 —— 人类通过层层大门逃生，僵尸全力感染。
 
@@ -22,6 +22,7 @@
 /zr2 weapon list | info <id> | add <id> <type> <category> <price> [name] | remove <id> | give <id> | random [category]
 /zr2 profile [玩家] | coins add|give|spend | xp add | title set|clear
 /zr2 menu profile|shop
+/zr2 task list|claim <任务id>
 /zr2 v1 migrate
 /zr2 reload
 ```
@@ -40,7 +41,7 @@
 | 人类 | 按顺序通过大门抵达终点，或用直升机撤离 |
 | 僵尸（含 1 名母体） | 近战感染所有人类 |
 
-**特色系统：** 多阶段门流程 · 门检测可靠性 · 体力限制 · 自定义枪械 · 硬币经济 · 等级称号 · GUI 商店 · 事件总线进度计数 · 特殊门行为（电梯/地铁/机场） · 直升机撤离
+**特色系统：** 多阶段门流程 · 门检测可靠性 · 体力限制 · 自定义枪械 · 硬币经济 · 等级称号 · GUI 商店 · 事件总线进度计数 · 特殊门行为（电梯/地铁/机场） · 直升机撤离 · 每日/每周任务
 
 ## 安装
 
