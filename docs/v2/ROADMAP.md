@@ -124,14 +124,17 @@
 
 ## M4：武器系统
 
-- [ ] `WeaponDefinition` 领域模型
-- [ ] QualityArmory 适配器（`WeaponIntegrationPort`）
-- [ ] 选枪/随机枪/武器购买用例
-- [ ] 武器伤害与战斗系统解耦
+- [x] `WeaponDefinition` 领域模型（类型/分类/价格/启用）
+- [x] QualityArmory 适配器（`WeaponIntegrationPort` + `QaWeaponIntegrationPort`）
+- [x] 选枪/随机枪用例（`WeaponService`：add/give/random/remove/reload）
+- [x] `/zr2 weapon list|info|add|remove|give|random` 管理命令
+- [ ] 武器购买结算（价格字段已定义，扣款/购买界面待 M5 经济）
+- [ ] 武器伤害与战斗系统解耦（伤害数值仍由 QualityArmory 负责，事件接入待 M5）
 
 **验收**：
-- v1 配置迁移后枪械行为一致
-- QualityArmory 缺失时明确报错，不静默失败
+- [x] v2 weapons.yml 配置可加载（默认 3 把武器），QA 缺失时 `give` 返回失败并提示
+- [x] QualityArmory 缺失时不静默失败（`QaWeaponIntegrationPort` 返回 false 并 warn）
+- [x] 单元测试覆盖随机/过滤/发放用例（45 个测试全部通过）
 
 ---
 

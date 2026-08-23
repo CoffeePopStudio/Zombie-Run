@@ -4,6 +4,7 @@ import cn.oneachina.zombierun.v2.application.combat.StaminaService
 import cn.oneachina.zombierun.v2.application.door.DoorApplicationService
 import cn.oneachina.zombierun.v2.application.event.ApplicationEventBus
 import cn.oneachina.zombierun.v2.application.game.GameFlowService
+import cn.oneachina.zombierun.v2.application.weapon.WeaponService
 import cn.oneachina.zombierun.v2.domain.combat.StaminaRules
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.BukkitBlockOpsPort
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.BukkitPlayerMessagePort
@@ -14,13 +15,16 @@ import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2CombatListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2DoorListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2GameListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.scheduler.BukkitSchedulerPort
+import cn.oneachina.zombierun.v2.infrastructure.bukkit.weapon.QaWeaponIntegrationPort
 import cn.oneachina.zombierun.v2.infrastructure.config.ArenaYamlRepository
 import cn.oneachina.zombierun.v2.infrastructure.config.BlockSnapshotStore
 import cn.oneachina.zombierun.v2.infrastructure.config.V2SettingsLoader
+import cn.oneachina.zombierun.v2.infrastructure.config.WeaponYamlRepository
 import cn.oneachina.zombierun.v2.ports.BlockOpsPort
 import cn.oneachina.zombierun.v2.ports.PlayerMessagePort
 import cn.oneachina.zombierun.v2.ports.SchedulerPort
 import cn.oneachina.zombierun.v2.ports.TeleporterPort
+import cn.oneachina.zombierun.v2.ports.WeaponIntegrationPort
 import cn.oneachina.zombierun.v2.ports.WorldAccessPort
 import cn.oneachina.zombierun.v2.support.TaskRegistry
 import cn.oneachina.zombierun.v2.support.V2Logger
@@ -43,6 +47,9 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
     val settingsLoader = V2SettingsLoader(plugin.dataFolder, logger)
     val arenaRepository = ArenaYamlRepository(plugin.dataFolder, logger)
     val snapshotStore = BlockSnapshotStore(plugin.dataFolder)
+    val weaponRepository = WeaponYamlRepository(plugin.dataFolder, logger)
+    val weaponIntegration: WeaponIntegrationPort = QaWeaponIntegrationPort(logger)
+    val weaponService = WeaponService(weaponRepository, weaponIntegration, messages, logger)
     val staminaService = StaminaService(logger)
     val combatListener = V2CombatListener(staminaService, scheduler, taskRegistry)
 
@@ -82,6 +89,9 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         services.register(TaskRegistry::class, taskRegistry)
         services.register(ArenaYamlRepository::class, arenaRepository)
         services.register(BlockSnapshotStore::class, snapshotStore)
+        services.register(WeaponYamlRepository::class, weaponRepository)
+        services.register(WeaponIntegrationPort::class, weaponIntegration)
+        services.register(WeaponService::class, weaponService)
 
         val settings = settingsLoader.load()
         staminaService.applyRules(
@@ -96,6 +106,11 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
             arenaRepository.loadAll()
         } catch (e: Exception) {
             logger.severe("arena config load failed: ${e.message}")
+        }
+        try {
+            weaponService.reload()
+        } catch (e: Exception) {
+            logger.severe("weapon config load failed: ${e.message}")
         }
 
         gameFlow = GameFlowService(

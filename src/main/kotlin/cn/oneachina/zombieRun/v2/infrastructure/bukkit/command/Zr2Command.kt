@@ -11,6 +11,8 @@ import cn.oneachina.zombierun.v2.domain.door.DoorMode
 import cn.oneachina.zombierun.v2.domain.door.Portal
 import cn.oneachina.zombierun.v2.domain.door.PortalAxis
 import cn.oneachina.zombierun.v2.domain.door.PortalFront
+import cn.oneachina.zombierun.v2.domain.weapon.WeaponCategory
+import cn.oneachina.zombierun.v2.domain.weapon.WeaponDefinition
 import cn.oneachina.zombierun.v2.plugin.V2CompositionRoot
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -39,6 +41,7 @@ class Zr2Command(
             "button" -> handleButton(sender, args.drop(1))
             "respawn" -> handleRespawn(sender, args.drop(1))
             "game" -> handleGame(sender, args.drop(1))
+            "weapon" -> handleWeapon(sender, args.drop(1))
             else -> {
                 sender.sendMessage(Component.text("未知子命令：${args[0]}，输入 /zr2 help 查看帮助", NamedTextColor.RED))
             }
@@ -58,7 +61,8 @@ class Zr2Command(
             return
         }
         root.doorService.reload()
-        sender.sendMessage(Component.text("已重载 v2 arena 配置", NamedTextColor.GREEN))
+        root.weaponService.reload()
+        sender.sendMessage(Component.text("已重载 v2 arena + weapon 配置", NamedTextColor.GREEN))
     }
 
     private fun help(sender: CommandSender) {
@@ -70,6 +74,7 @@ class Zr2Command(
         sender.sendMessage(Component.text("/zr2 button add --arena <名称> <x> <y> <z> normal <门号>", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 respawn add --arena <名称> <type> <x> <y> <z> [door-number] [yaw] [pitch]", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 game list | status <世界> | start <世界> | end <世界> <human|zombie> | reset <世界>", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 weapon list | info <id> | add <id> <type> <category> <price> [name] | remove <id> | give <id> | random [category]", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 reload", NamedTextColor.YELLOW))
     }
 
@@ -450,11 +455,116 @@ class Zr2Command(
         }
     }
 
+    // ---------- weapon ----------
+
+    private fun handleWeapon(sender: CommandSender, args: List<String>) {
+        if (args.isEmpty()) {
+            sender.sendMessage(Component.text("用法: /zr2 weapon list|info|add|remove|give|random", NamedTextColor.RED))
+            return
+        }
+        when (args[0].lowercase()) {
+            "list" -> {
+                val weapons = root.weaponService.all()
+                if (weapons.isEmpty()) {
+                    sender.sendMessage(Component.text("还没有武器配置", NamedTextColor.YELLOW))
+                } else {
+                    weapons.forEach {
+                        sender.sendMessage(Component.text("- ${it.id}  ${it.displayName}  type=${it.type}  category=${it.category.name.lowercase()}  price=${it.price}  enabled=${it.enabled}", NamedTextColor.GREEN))
+                    }
+                }
+            }
+            "info" -> {
+                val weapon = root.weaponService.byId(args.getOrNull(1) ?: "")
+                if (weapon == null) {
+                    sender.sendMessage(Component.text("武器不存在：${args.getOrNull(1)}", NamedTextColor.RED))
+                    return
+                }
+                sender.sendMessage(Component.text("===== weapon ${weapon.id} =====", NamedTextColor.GREEN))
+                sender.sendMessage(Component.text("displayName=${weapon.displayName} type=${weapon.type} category=${weapon.category.name.lowercase()} price=${weapon.price} enabled=${weapon.enabled}", NamedTextColor.GREEN))
+                val available = root.weaponIntegration.isAvailable(weapon.type)
+                sender.sendMessage(Component.text("QA available=$available", if (available) NamedTextColor.GREEN else NamedTextColor.RED))
+            }
+            "add" -> addWeapon(sender, args.drop(1))
+            "remove" -> {
+                if (!sender.hasPermission("zombie.run.v2.admin")) {
+                    noPermission(sender)
+                    return
+                }
+                val id = args.getOrNull(1) ?: run {
+                    sender.sendMessage(Component.text("用法: /zr2 weapon remove <id>", NamedTextColor.RED))
+                    return
+                }
+                if (root.weaponService.remove(id)) {
+                    sender.sendMessage(Component.text("武器 '$id' 已删除", NamedTextColor.GREEN))
+                } else {
+                    sender.sendMessage(Component.text("武器不存在：$id", NamedTextColor.RED))
+                }
+            }
+            "give" -> {
+                if (!sender.hasPermission("zombie.run.v2.admin")) {
+                    noPermission(sender)
+                    return
+                }
+                val id = args.getOrNull(1) ?: run {
+                    sender.sendMessage(Component.text("用法: /zr2 weapon give <id>", NamedTextColor.RED))
+                    return
+                }
+                val player = sender as? Player ?: run {
+                    sender.sendMessage(Component.text("give 命令需要玩家执行", NamedTextColor.RED))
+                    return
+                }
+                root.weaponService.giveWeapon(player.uniqueId, id)
+            }
+            "random" -> {
+                val player = sender as? Player ?: run {
+                    sender.sendMessage(Component.text("random 命令需要玩家执行", NamedTextColor.RED))
+                    return
+                }
+                val category = WeaponCategory.entries.firstOrNull {
+                    it.name.equals(args.getOrNull(1), ignoreCase = true)
+                }
+                val weapon = root.weaponService.giveRandom(player.uniqueId, category)
+                if (weapon == null) sender.sendMessage(Component.text("没有可用武器", NamedTextColor.RED))
+            }
+            else -> sender.sendMessage(Component.text("未知子命令", NamedTextColor.RED))
+        }
+    }
+
+    private fun addWeapon(sender: CommandSender, args: List<String>) {
+        if (!sender.hasPermission("zombie.run.v2.admin")) {
+            noPermission(sender)
+            return
+        }
+        if (args.size < 4) {
+            sender.sendMessage(Component.text("用法: /zr2 weapon add <id> <type> <category> <price> [display-name]", NamedTextColor.RED))
+            return
+        }
+        val id = args[0]
+        if (root.weaponService.byId(id) != null) {
+            sender.sendMessage(Component.text("武器 id '$id' 已存在", NamedTextColor.RED))
+            return
+        }
+        val type = args[1]
+        val category = WeaponCategory.entries.firstOrNull {
+            it.name.equals(args[2], ignoreCase = true)
+        } ?: run {
+            sender.sendMessage(Component.text("category 必须是 ${WeaponCategory.entries.joinToString("|") { it.name.lowercase() }}", NamedTextColor.RED))
+            return
+        }
+        val price = args[3].toDoubleOrNull() ?: run {
+            sender.sendMessage(Component.text("价格必须是数字", NamedTextColor.RED))
+            return
+        }
+        val name = args.getOrNull(4) ?: id
+        root.weaponService.add(WeaponDefinition(id, name, type, category, price))
+        sender.sendMessage(Component.text("武器 '$id' 已保存", NamedTextColor.GREEN))
+    }
+
     // ---------- tab ----------
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): List<String> {
         if (args.size == 1) {
-            return listOf("help", "version", "reload", "arena", "door", "button", "respawn", "game")
+            return listOf("help", "version", "reload", "arena", "door", "button", "respawn", "game", "weapon")
                 .filter { it.startsWith(args[0].lowercase()) }
         }
         return when (args[0].lowercase()) {
@@ -481,6 +591,16 @@ class Zr2Command(
                     else -> emptyList()
                 }
                 4 -> if (args[1].equals("end", true)) listOf("human", "zombie").filter { it.startsWith(args[3].lowercase()) } else emptyList()
+                else -> emptyList()
+            }
+            "weapon" -> when (args.size) {
+                2 -> listOf("list", "info", "add", "remove", "give", "random").filter { it.startsWith(args[1].lowercase()) }
+                3 -> when (args[1].lowercase()) {
+                    "info", "remove", "give" -> root.weaponService.all().map { it.id }.filter { it.startsWith(args[2], true) }
+                    "random" -> listOf("gun", "melee", "special").filter { it.startsWith(args[2].lowercase()) }
+                    else -> emptyList()
+                }
+                4 -> if (args[1].equals("add", true)) listOf("gun", "melee", "special").filter { it.startsWith(args[3].lowercase()) } else emptyList()
                 else -> emptyList()
             }
             else -> emptyList()
