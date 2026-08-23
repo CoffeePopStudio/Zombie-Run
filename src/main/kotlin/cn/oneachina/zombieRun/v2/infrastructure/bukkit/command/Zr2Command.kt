@@ -47,6 +47,7 @@ class Zr2Command(
             "coins" -> handleCoins(sender, args.drop(1))
             "xp" -> handleXp(sender, args.drop(1))
             "title" -> handleTitle(sender, args.drop(1))
+            "menu" -> handleMenu(sender, args.drop(1))
             else -> {
                 sender.sendMessage(Component.text("未知子命令：${args[0]}，输入 /zr2 help 查看帮助", NamedTextColor.RED))
             }
@@ -81,6 +82,7 @@ class Zr2Command(
         sender.sendMessage(Component.text("/zr2 game list | status <世界> | start <世界> | end <世界> <human|zombie> | reset <世界>", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 weapon list | info <id> | add <id> <type> <category> <price> [name] | remove <id> | give <id> | random [category]", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 profile [玩家] | coins add|give|spend | xp add | title set|clear", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 menu profile|shop", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 reload", NamedTextColor.YELLOW))
     }
 
@@ -659,11 +661,24 @@ class Zr2Command(
         sender.sendMessage(Component.text("数量必须是整数", NamedTextColor.RED))
     }
 
+    // ---------- menu ----------
+
+    private fun handleMenu(sender: CommandSender, args: List<String>) {
+        val player = sender as? Player ?: run {
+            sender.sendMessage(Component.text("menu 命令需要玩家执行", NamedTextColor.RED)); return
+        }
+        when (args.getOrNull(0)?.lowercase()) {
+            "profile" -> root.guiService.openProfile(player)
+            "shop" -> root.guiService.openShop(player)
+            else -> sender.sendMessage(Component.text("用法: /zr2 menu profile|shop", NamedTextColor.RED))
+        }
+    }
+
     // ---------- tab ----------
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): List<String> {
         if (args.size == 1) {
-            return listOf("help", "version", "reload", "arena", "door", "button", "respawn", "game", "weapon", "profile", "coins", "xp", "title")
+            return listOf("help", "version", "reload", "arena", "door", "button", "respawn", "game", "weapon", "profile", "coins", "xp", "title", "menu")
                 .filter { it.startsWith(args[0].lowercase()) }
         }
         return when (args[0].lowercase()) {
@@ -711,6 +726,7 @@ class Zr2Command(
                 else -> emptyList()
             }
             "xp" -> if (args.size == 2) listOf("add").filter { it.startsWith(args[1].lowercase()) } else emptyList()
+            "menu" -> if (args.size == 2) listOf("profile", "shop").filter { it.startsWith(args[1].lowercase()) } else emptyList()
             "profile" -> emptyList()
             else -> emptyList()
         }

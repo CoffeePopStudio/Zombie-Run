@@ -156,16 +156,17 @@
 
 ## M6：GUI
 
-- [ ] 菜单框架：菜单 ID + session 注册，替代裸 InventoryHolder
-- [ ] 商店 GUI
-- [ ] 个人资料 GUI
-- [ ] 任务 GUI
-- [ ] 称号 GUI
-- [ ] GUI 权限与点击安全
+- [x] 菜单框架：菜单 ID + session 注册（Holder + ConcurrentHashMap 点击回调）
+- [x] 商店 GUI（点击购买武器，扣硬币 + 发枪）
+- [x] 个人资料 GUI（等级/经验/硬币/称号/门数/击杀）
+- [ ] 任务 GUI（任务模板待 M5 扩展后接入）
+- [ ] 称号 GUI（命令已支持 set/clear，选择界面待接入）
+- [x] GUI 权限与点击安全（点击取消搬运，关闭清理 session）
 
 **验收**：
-- 多玩家同时打开互不串扰
-- 关闭/重载/世界切换后菜单状态正确
+- [x] 多玩家同时打开互不串扰（按 UUID 隔离）
+- [x] 关闭/重载/世界切换后菜单状态清理（InventoryCloseEvent 清理）
+- [x] `/zr2 menu profile|shop` 命令可用，Paper 加载无异常
 
 ---
 

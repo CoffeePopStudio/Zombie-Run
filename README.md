@@ -2,7 +2,7 @@
 
 > ⚠️ 当前为 `v2` 重构分支：v1 稳定版在 `main` 分支。
 > 架构设计见 [docs/v2/ARCHITECTURE.md](docs/v2/ARCHITECTURE.md)，路线图见 [docs/v2/ROADMAP.md](docs/v2/ROADMAP.md)。
-> 当前进度：**M0 骨架 + M1 门系统 + M2 游戏状态机 + M3 体力/战斗 + M4 武器 + M5 经济/等级/称号**。
+> 当前进度：**M0 骨架 + M1 门系统 + M2 游戏状态机 + M3 体力/战斗 + M4 武器 + M5 经济/等级/称号 + M6 GUI**。
 
 非对称 PvP 小游戏插件 —— 人类通过层层大门逃生，僵尸全力感染。
 
@@ -20,6 +20,7 @@
 /zr2 game list | status <世界> | start <世界> | end <世界> <human|zombie> | reset <世界>
 /zr2 weapon list | info <id> | add <id> <type> <category> <price> [name] | remove <id> | give <id> | random [category]
 /zr2 profile [玩家] | coins add|give|spend | xp add | title set|clear
+/zr2 menu profile|shop
 /zr2 reload
 ```
 

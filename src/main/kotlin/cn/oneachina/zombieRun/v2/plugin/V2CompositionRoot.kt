@@ -12,6 +12,7 @@ import cn.oneachina.zombierun.v2.infrastructure.bukkit.BukkitPlayerMessagePort
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.BukkitTeleporterPort
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.BukkitWorldAccessPort
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.command.Zr2Command
+import cn.oneachina.zombierun.v2.infrastructure.bukkit.gui.GuiService
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2CombatListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2DoorListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2GameListener
@@ -57,6 +58,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
     val playerDataRepository: PlayerDataPort = SqlitePlayerDataRepository(plugin.dataFolder, logger)
     val playerDataService = PlayerDataService(playerDataRepository, messages, logger, eventBus)
     val playerDataListener = V2PlayerDataListener(playerDataService)
+    val guiService = GuiService(playerDataService, weaponService, logger)
     val staminaService = StaminaService(logger)
     val combatListener = V2CombatListener(staminaService, scheduler, taskRegistry)
 
@@ -140,6 +142,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         plugin.server.pluginManager.registerEvents(V2GameListener(gameFlow), plugin)
         plugin.server.pluginManager.registerEvents(V2PlayerDataListener(playerDataService), plugin)
         plugin.server.pluginManager.registerEvents(combatListener, plugin)
+        plugin.server.pluginManager.registerEvents(guiService, plugin)
 
         gameFlow.start()
         combatListener.start()
