@@ -39,6 +39,11 @@ data class MapFlowDefinition(
     val maxDurationSeconds: Int,
     val stages: List<MapFlowStage>,
     val finish: MapFlowFinish,
+    val rewardCoinsHuman: Int = 0,
+    val rewardXpHuman: Int = 0,
+    val rewardCoinsZombie: Int = 0,
+    val rewardXpZombie: Int = 0,
+    val starterWeaponId: String? = null,
 ) {
     init {
         require(stages.isNotEmpty()) { "map flow must have at least one stage" }

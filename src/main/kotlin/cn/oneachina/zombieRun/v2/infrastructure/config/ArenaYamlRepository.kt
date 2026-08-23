@@ -124,6 +124,11 @@ class ArenaYamlRepository(
             maxDurationSeconds = section.getInt("max-duration-seconds", 600),
             stages = stages,
             finish = finish,
+            rewardCoinsHuman = section.getInt("reward-coins-human", 0),
+            rewardXpHuman = section.getInt("reward-xp-human", 0),
+            rewardCoinsZombie = section.getInt("reward-coins-zombie", 0),
+            rewardXpZombie = section.getInt("reward-xp-zombie", 0),
+            starterWeaponId = section.getString("starter-weapon"),
         )
     }
 
@@ -357,6 +362,11 @@ class ArenaYamlRepository(
         "min-players" to minPlayers,
         "start-delay-seconds" to startDelaySeconds,
         "max-duration-seconds" to maxDurationSeconds,
+        "reward-coins-human" to rewardCoinsHuman,
+        "reward-xp-human" to rewardXpHuman,
+        "reward-coins-zombie" to rewardCoinsZombie,
+        "reward-xp-zombie" to rewardXpZombie,
+        "starter-weapon" to starterWeaponId,
         "stages" to stages.associate { stage ->
             stage.id to linkedMapOf<String, Any?>(
                 "label" to stage.label,

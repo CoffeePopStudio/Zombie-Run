@@ -50,6 +50,11 @@ map-flow:
   min-players: 1
   start-delay-seconds: 5
   max-duration-seconds: 120
+  reward-coins-human: 50
+  reward-xp-human: 10
+  reward-coins-zombie: 30
+  reward-xp-zombie: 5
+  starter-weapon: ""
   stages:
     s1: {label: 第一扇门, door-numbers: [2], next-stage-id: s2}
     s2: {label: 第二扇门, door-numbers: [3], next-stage-id: s3}

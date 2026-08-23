@@ -5,6 +5,8 @@ import cn.oneachina.zombierun.v2.application.event.GameEndedEvent
 import cn.oneachina.zombierun.v2.application.event.GameStartedEvent
 import cn.oneachina.zombierun.v2.application.event.PlayerPassedDoorEvent
 import cn.oneachina.zombierun.v2.application.event.ZombieKilledEvent
+import cn.oneachina.zombierun.v2.application.player.PlayerDataService
+import cn.oneachina.zombierun.v2.application.weapon.WeaponService
 import cn.oneachina.zombierun.v2.domain.arena.RespawnDefinition
 import cn.oneachina.zombierun.v2.domain.arena.RespawnType
 import cn.oneachina.zombierun.v2.domain.game.GameInstance
@@ -43,6 +45,8 @@ class GameFlowService(
     private val teleporter: TeleporterPort,
     private val logger: V2Logger,
     private val eventBus: ApplicationEventBus,
+    private val playerData: PlayerDataService? = null,
+    private val weaponService: WeaponService? = null,
 ) : GameContextPort {
 
     private class Countdown(
@@ -261,6 +265,11 @@ class GameFlowService(
             val spawn = spawnForTeam(worldName, assignment.team)
             if (spawn != null) {
                 teleportTo(worldName, assignment.playerId, spawn)
+            }
+            if (assignment.team == GameTeam.HUMAN) {
+                mapFlowDef(worldName)?.starterWeaponId?.let { weaponId ->
+                    weaponService?.giveWeapon(assignment.playerId, weaponId)
+                }
             }
         }
 
@@ -482,6 +491,7 @@ class GameFlowService(
         maxDurationTasks.remove(worldName)?.cancel()
         game.end(winner)
         worldAccess.playersIn(worldName).forEach { messages.chat(it.id, message) }
+        awardMapFlowRewards(worldName, game, winner)
         logger.info("[$worldName] game ended: winner=$winner - $message")
         eventBus.publish(GameEndedEvent(worldName, winner.name))
 
@@ -507,6 +517,28 @@ class GameFlowService(
         games[worldName] = fresh
         logger.info("[$worldName] game reset to WAITING")
         return true
+    }
+
+    private fun awardMapFlowRewards(worldName: String, game: GameInstance, winner: GameTeam) {
+        val flow = mapFlowDef(worldName) ?: return
+        val pd = playerData ?: return
+        val (coins, xp) = if (winner == GameTeam.HUMAN) {
+            flow.rewardCoinsHuman to flow.rewardXpHuman
+        } else {
+            flow.rewardCoinsZombie to flow.rewardXpZombie
+        }
+        if (coins == 0 && xp == 0) return
+
+        val rewardedIds = when (winner) {
+            GameTeam.HUMAN -> game.humanIds()
+            GameTeam.ZOMBIE_MAIN -> game.zombieIds()
+            else -> emptySet()
+        }
+        rewardedIds.forEach { id ->
+            if (coins > 0) pd.addCoins(id, coins)
+            if (xp > 0) pd.addXp(id, xp)
+            messages.chat(id, "对局结束奖励：${coins} 硬币 / ${xp} 经验")
+        }
     }
 
     private fun stopAutoTick() {

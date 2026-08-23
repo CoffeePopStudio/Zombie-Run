@@ -98,9 +98,10 @@ Zombie感染人类 ─▶ GameFlowService.onCombat ─▶ onAllHumansInfected
 
 ## 5. 结算与奖励
 
-- `HUMAN_WIN`：全员获得胜利奖励（硬币/经验），广播
-- `ZOMBIE_WIN`：存活僵尸/母体获得胜利奖励
-- 结算后 `MapFlowStateMachine` 复位到 `WAITING`（由调度器延迟执行）
+- `HUMAN_WIN`：全体人类获得 `reward-coins-human` / `reward-xp-human`（通过 `PlayerDataService` 发放）
+- `ZOMBIE_WIN`：存活僵尸获得 `reward-coins-zombie` / `reward-xp-zombie`
+- 结算后 `MapFlowStateMachine` 复位到 `WAITING`（5 秒后自动重置，准备下一局）
+- 开局时人类可自动获得 `starter-weapon` 指定武器（通过 `WeaponService`）
 
 ## 6. 配置示例
 

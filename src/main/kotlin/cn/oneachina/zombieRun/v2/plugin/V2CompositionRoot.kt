@@ -149,6 +149,8 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
             teleporter = teleporter,
             logger = logger,
             eventBus = eventBus,
+            playerData = playerDataService,
+            weaponService = weaponService,
         )
         services.register(GameFlowService::class, gameFlow)
         services.register(DoorApplicationService::class, doorService)
