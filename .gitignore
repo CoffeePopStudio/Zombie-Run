@@ -81,8 +81,6 @@ gradle-app.setting
 run/
 !gradle-wrapper.jar
 
-.trae/
-.tmp_wm_src/
 .kotlin/
 .opencode/
 docs/superpowers
