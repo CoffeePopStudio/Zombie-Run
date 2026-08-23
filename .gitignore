@@ -1,28 +1,12 @@
-# User-specific stuff
-.idea/
-
 *.iml
 *.ipr
 *.iws
-
-# IntelliJ
 out/
-# mpeltonen/sbt-idea plugin
 .idea_modules/
-
-# JIRA plugin
 atlassian-ide-plugin.xml
-
-# Compiled class file
 *.class
-
-# Log file
 *.log
-
-# BlueJ files
 *.ctxt
-
-# Package Files #
 *.jar
 *.war
 *.nar
@@ -59,7 +43,6 @@ Icon
 # Thumbnails
 ._*
 
-# Files that might appear in the root of a volume
 .DocumentRevisions-V100
 .fseventsd
 .Spotlight-V100
@@ -68,55 +51,34 @@ Icon
 .VolumeIcon.icns
 .com.apple.timemachine.donotpresent
 
-# Directories potentially created on remote AFP share
 .AppleDB
 .AppleDesktop
 Network Trash Folder
 Temporary Items
 .apdisk
 
-# Windows thumbnail cache files
 Thumbs.db
 Thumbs.db:encryptable
 ehthumbs.db
 ehthumbs_vista.db
 
-# Dump file
 *.stackdump
 
-# Folder config file
 [Dd]esktop.ini
 
-# Recycle Bin used on file shares
 $RECYCLE.BIN/
-
-# Windows Installer files
-*.cab
-*.msi
-*.msix
-*.msm
-*.msp
-
-# Windows shortcuts
-*.lnk
 
 .gradle
 .gradle-user-home/
 build/
 
-# Ignore Gradle GUI config
 gradle-app.setting
 
-# Cache of project
 .gradletasknamecache
 
 **/build/
 
-# Common working directory
 run/
-runs/
-
-# Avoid ignoring Gradle wrapper jar file (.jar files are usually ignored)
 !gradle-wrapper.jar
 
 .trae/
@@ -124,6 +86,3 @@ runs/
 .kotlin/
 .opencode/
 docs/superpowers
-
-# 本地修复记录（不进版本库/远程）
-修复记录.md
