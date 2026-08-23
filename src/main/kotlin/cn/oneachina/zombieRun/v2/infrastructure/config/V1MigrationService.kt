@@ -6,6 +6,8 @@ import cn.oneachina.zombierun.v2.domain.arena.ButtonMode
 import cn.oneachina.zombierun.v2.domain.arena.RespawnDefinition
 import cn.oneachina.zombierun.v2.domain.arena.RespawnType
 import cn.oneachina.zombierun.v2.domain.door.BlockRegion
+import cn.oneachina.zombierun.v2.domain.door.DoorBehavior
+import cn.oneachina.zombierun.v2.domain.door.DoorBehaviorType
 import cn.oneachina.zombierun.v2.domain.door.DoorDefinition
 import cn.oneachina.zombierun.v2.domain.door.DoorMode
 import cn.oneachina.zombierun.v2.domain.door.Portal
@@ -92,6 +94,7 @@ class V1MigrationService(
                 region = region,
                 snapshotId = null,
                 fallbackMaterial = "STONE",
+                behavior = parseBehavior(d.getConfigurationSection("special-behavior")),
             )
         }
         if (skipped.isNotEmpty()) logger.warn("v1 migration skipped doors: $skipped")
@@ -133,5 +136,29 @@ class V1MigrationService(
                 doorNumber = r.getString("door-number")?.toIntOrNull(),
             )
         }
+    }
+
+    private fun parseBehavior(section: ConfigurationSection?): DoorBehavior? {
+        if (section == null) return null
+        val type = DoorBehaviorType.entries.firstOrNull {
+            it.name.equals(section.getString("type"), ignoreCase = true)
+        } ?: return null
+        fun d(key: String): Double? =
+            if (section.contains(key)) section.getDouble(key) else null
+        fun s(key: String): String? = section.getString(key)
+        return DoorBehavior(
+            type = type,
+            humanTargetX = d("human-target-x"),
+            humanTargetY = d("human-target-y"),
+            humanTargetZ = d("human-target-z"),
+            zombieTargetX = d("zombie-target-x"),
+            zombieTargetY = d("zombie-target-y"),
+            zombieTargetZ = d("zombie-target-z"),
+            lineName = s("line-name"),
+            countdown = section.getInt("countdown", 5),
+            delayTicks = section.getLong("delay-ticks", 0),
+            departureMessage = s("departure-msg"),
+            arrivalMessage = s("arrival-msg"),
+        )
     }
 }

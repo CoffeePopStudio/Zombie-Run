@@ -5,6 +5,7 @@ import cn.oneachina.zombierun.v2.application.event.PlayerPassedDoorEvent
 import cn.oneachina.zombierun.v2.domain.arena.ArenaDefinition
 import cn.oneachina.zombierun.v2.domain.arena.RespawnDefinition
 import cn.oneachina.zombierun.v2.domain.arena.RespawnType
+import cn.oneachina.zombierun.v2.domain.door.DoorBehavior
 import cn.oneachina.zombierun.v2.domain.door.DoorDefinition
 import cn.oneachina.zombierun.v2.domain.door.DoorPassDecision
 import cn.oneachina.zombierun.v2.domain.door.DoorSessionPhase
@@ -49,6 +50,7 @@ class DoorApplicationService(
 
     private val activeSessions = ConcurrentHashMap<String, RuntimeSession>()
     private val transferTasks = ConcurrentHashMap<UUID, TaskHandle>()
+    private val behaviorTasks = ConcurrentHashMap<UUID, TaskHandle>()
 
     fun reload() {
         cancelAllSessions()
@@ -170,11 +172,13 @@ class DoorApplicationService(
                 DoorPassDecision.PASSED -> {
                     recordRoomProgress(session, outcome.playerId)
                     messages.chat(outcome.playerId, "你已通过 ${doorLabel(session.doors)}（实时检测）")
+                    startSpecialBehavior(session, outcome.playerId)
                     logger.info("[${session.worldName}] ${player.name} passed door via ${outcome.reason}")
                 }
                 DoorPassDecision.PASSED_FALLBACK -> {
                     recordRoomProgress(session, outcome.playerId)
                     messages.chat(outcome.playerId, "你已通过 ${doorLabel(session.doors)}（兜底检测）")
+                    startSpecialBehavior(session, outcome.playerId)
                     logger.warn("[${session.worldName}] ${player.name} passed via fallback: ${outcome.reason}")
                 }
                 DoorPassDecision.BEHIND -> {
@@ -230,6 +234,54 @@ class DoorApplicationService(
         transferTasks[playerId] = handle
     }
 
+    /** 特殊门行为：通过后按阵营传送到配置目标（电梯/地铁/机场）。 */
+    private fun startSpecialBehavior(session: RuntimeSession, playerId: UUID) {
+        val behavior = session.doors.firstNotNullOfOrNull { it.behavior } ?: return
+        val team = gameContext?.teamOf(session.worldName, playerId) ?: GameTeam.HUMAN
+        val isZombie = team == GameTeam.ZOMBIE || team == GameTeam.ZOMBIE_MAIN
+        val target = if (isZombie) {
+            Triple(behavior.zombieTargetX, behavior.zombieTargetY, behavior.zombieTargetZ)
+        } else {
+            Triple(behavior.humanTargetX, behavior.humanTargetY, behavior.humanTargetZ)
+        }
+        val (tx, ty, tz) = target
+        if (tx == null || ty == null || tz == null) {
+            logger.warn("[${session.worldName}] door behavior ${behavior.type} missing target for team ${team.name}")
+            return
+        }
+
+        behaviorTasks.remove(playerId)?.cancel()
+        val line = behavior.lineName
+        behavior.departureMessage
+            ?.replace("{line}", line ?: "")
+            ?.let { messages.chat(playerId, it) }
+        var remaining = behavior.countdown
+        val label = doorLabel(session.doors)
+        val handle = scheduler.globalTimer(1L, 20L) { taskHandle ->
+            if (remaining > 0) {
+                messages.title(playerId, "$remaining", "$label 传送倒计时")
+                remaining--
+            } else {
+                teleporter.teleport(
+                    playerId = playerId,
+                    worldName = session.worldName,
+                    x = tx,
+                    y = ty,
+                    z = tz,
+                    yaw = 0f,
+                    pitch = 0f,
+                )
+                behavior.arrivalMessage
+                    ?.replace("{line}", line ?: "")
+                    ?.let { messages.chat(playerId, it) }
+                logger.info("[${session.worldName}] player $playerId teleported by ${behavior.type}")
+                behaviorTasks.remove(playerId)
+                taskHandle.cancel()
+            }
+        }
+        behaviorTasks[playerId] = handle
+    }
+
     private fun resolveBehindRespawn(worldName: String, doorNumber: Int?, playerId: UUID): RespawnDefinition? {
         val respawns = arenaRepository.byWorld(worldName).flatMap { it.respawns }
         val team = gameContext?.teamOf(worldName, playerId)
@@ -278,6 +330,8 @@ class DoorApplicationService(
         activeSessions.clear()
         transferTasks.values.forEach { it.cancel() }
         transferTasks.clear()
+        behaviorTasks.values.forEach { it.cancel() }
+        behaviorTasks.clear()
     }
 
     private fun doorLabel(doors: List<DoorDefinition>): String =

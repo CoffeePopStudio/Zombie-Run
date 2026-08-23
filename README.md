@@ -3,7 +3,7 @@
 > ⚠️ 当前为 `v2` 重构分支：v1 稳定版在 `main` 分支。
 > 架构设计见 [docs/v2/ARCHITECTURE.md](docs/v2/ARCHITECTURE.md)，路线图见 [docs/v2/ROADMAP.md](docs/v2/ROADMAP.md)。
 > 命令参考见 [docs/v2/COMMANDS.md](docs/v2/COMMANDS.md)，升级指南见 [docs/v2/UPGRADE.md](docs/v2/UPGRADE.md)，发布说明见 [docs/v2/RELEASE.md](docs/v2/RELEASE.md)。
-> 当前进度：**M0 骨架 + M1 门系统 + M2 游戏状态机 + M3 体力/战斗 + M4 武器 + M5 经济/等级/称号 + M6 GUI + M7 兼容/PAPI/Multiverse/v1 迁移 + M8 加固/文档/beta**。
+> 当前进度：**M0–M8 已全部落地 + M9 扩展：特殊门行为/直升机撤离/方块快照迁移**。
 
 非对称 PvP 小游戏插件 —— 人类通过层层大门逃生，僵尸全力感染。
 
@@ -31,7 +31,7 @@
 `%zombierun_profile_level%`, `%zombierun_profile_xp%`, `%zombierun_profile_coins%`, `%zombierun_profile_title%`, `%zombierun_profile_kills%`, `%zombierun_profile_doors%`, `%zombierun_game_phase%`
 兼容别名：`%zombierun_level%`, `%zombierun_money%`, `%zombierun_kills%` 等。
 
-其余 v1 功能（特殊门/直升机/任务模板等）将在后续里程碑迁移，v1 稳定版仍可切回 `main` 分支使用。配置迁移见 `/zr2 v1 migrate`。
+其余 v1 功能（任务模板等）将在后续里程碑迁移，v1 稳定版仍可切回 `main` 分支使用。配置迁移见 `/zr2 v1 migrate`。
 
 ## 游戏机制
 
@@ -40,7 +40,7 @@
 | 人类 | 按顺序通过大门抵达终点，或用直升机撤离 |
 | 僵尸（含 1 名母体） | 近战感染所有人类 |
 
-**特色系统：** 多阶段门流程 · 门检测可靠性 · 体力限制 · 自定义枪械 · 硬币经济 · 等级称号 · GUI 商店 · 事件总线进度计数（特殊门行为规划中）
+**特色系统：** 多阶段门流程 · 门检测可靠性 · 体力限制 · 自定义枪械 · 硬币经济 · 等级称号 · GUI 商店 · 事件总线进度计数 · 特殊门行为（电梯/地铁/机场） · 直升机撤离
 
 ## 安装
 

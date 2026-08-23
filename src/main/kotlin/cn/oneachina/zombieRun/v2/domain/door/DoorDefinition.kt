@@ -16,6 +16,7 @@ data class DoorDefinition(
     /** 方块快照文件名；为空则使用 [fallbackMaterial] 整体恢复 */
     val snapshotId: String?,
     val fallbackMaterial: String,
+    val behavior: DoorBehavior? = null,
 ) {
     init {
         require(openSeconds > 0) { "door $id: openSeconds must be positive" }

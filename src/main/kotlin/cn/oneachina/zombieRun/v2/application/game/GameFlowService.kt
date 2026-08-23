@@ -46,8 +46,14 @@ class GameFlowService(
         @Volatile var task: TaskHandle? = null,
     )
 
+    private class EscapeCountdown(
+        @Volatile var remainingSeconds: Int,
+        @Volatile var task: TaskHandle? = null,
+    )
+
     private val games = ConcurrentHashMap<String, GameInstance>()
     private val countdowns = ConcurrentHashMap<String, Countdown>()
+    private val escapeCountdowns = ConcurrentHashMap<String, EscapeCountdown>()
     private val maxDurationTasks = ConcurrentHashMap<String, TaskHandle>()
     private val zombieKills = ConcurrentHashMap<UUID, Int>()
     private var autoTickTask: TaskHandle? = null
@@ -69,6 +75,7 @@ class GameFlowService(
         stopAutoTick()
         countdowns.values.forEach { it.task?.cancel() }
         countdowns.clear()
+        cancelEscapeCountdowns()
         maxDurationTasks.values.forEach { it.cancel() }
         maxDurationTasks.clear()
         games.clear()
@@ -120,6 +127,58 @@ class GameFlowService(
         val game = games.computeIfAbsent(worldName) { GameInstance(worldName, rules()) }
         if (game.phaseSnapshot() == GamePhase.WAITING) beginCountdown(worldName, game)
         return true
+    }
+
+    /** 直升机撤离：按钮触发 30 秒倒计时，结束后人类获胜。 */
+    fun triggerEscape(worldName: String, operator: String? = null): Boolean {
+        if (worldName !in gameWorlds()) return false
+        val game = games[worldName] ?: return false
+        if (game.phaseSnapshot() != GamePhase.RUNNING) return false
+        if (game.humanIds().isEmpty()) return false
+
+        cancelEscape(worldName)
+        val timer = EscapeCountdown(ESCAPE_SECONDS)
+        escapeCountdowns[worldName] = timer
+        worldAccess.playersIn(worldName).forEach {
+            messages.chat(it.id, "${operator ?: "玩家"} 启动了直升机撤离！${ESCAPE_SECONDS} 秒后人类获胜")
+        }
+
+        val handle = scheduler.globalTimer(1L, 20L) { taskHandle ->
+            val current = escapeCountdowns[worldName]
+            if (current !== timer) {
+                taskHandle.cancel()
+                return@globalTimer
+            }
+            if (timer.remainingSeconds > 0) {
+                if (timer.remainingSeconds <= 10 || timer.remainingSeconds % 5 == 0) {
+                    worldAccess.playersIn(worldName).forEach { p ->
+                        messages.title(p.id, "${timer.remainingSeconds}", "直升机即将抵达")
+                    }
+                }
+                timer.remainingSeconds--
+            } else {
+                escapeCountdowns.remove(worldName, timer)
+                taskHandle.cancel()
+                endGame(worldName, game, GameTeam.HUMAN, "直升机撤离成功，人类获胜")
+            }
+        }
+        timer.task = handle
+        taskRegistry.register(handle)
+        logger.info("[$worldName] escape sequence started by ${operator ?: "?"}")
+        return true
+    }
+
+    private fun cancelEscape(worldName: String) {
+        escapeCountdowns.remove(worldName)?.task?.cancel()
+    }
+
+    private fun cancelEscapeCountdowns() {
+        escapeCountdowns.values.forEach { it.task?.cancel() }
+        escapeCountdowns.clear()
+    }
+
+    companion object {
+        const val ESCAPE_SECONDS = 30
     }
 
     private fun beginCountdown(worldName: String, game: GameInstance) {
@@ -361,6 +420,7 @@ class GameFlowService(
 
     private fun endGame(worldName: String, game: GameInstance, winner: GameTeam, message: String) {
         cancelCountdownSilently(worldName)
+        cancelEscape(worldName)
         maxDurationTasks.remove(worldName)?.cancel()
         game.end(winner)
         worldAccess.playersIn(worldName).forEach { messages.chat(it.id, message) }
@@ -371,6 +431,7 @@ class GameFlowService(
     fun reset(worldName: String): Boolean {
         val game = games[worldName] ?: return false
         cancelCountdownSilently(worldName)
+        cancelEscape(worldName)
         maxDurationTasks.remove(worldName)?.cancel()
         games.remove(worldName)
         val fresh = GameInstance(worldName, rules())

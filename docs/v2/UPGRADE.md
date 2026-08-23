@@ -22,10 +22,10 @@
      ```
      /zr2 v1 migrate
      ```
-   - 命令会把门/按钮/重生点写入 v2 arena：`migrated_v1`。
+   - 命令会把门/按钮/重生点写入 v2 arena：`migrated_v1`；特殊门行为（elevator/subway/airport）也会迁移到 `behavior`。
 4. **人工检查**
    - 确认 `world` 名称是否正确（Multiverse 可自动按别名解析）。
-   - 特殊门行为（elevator/subway/airport）与方块快照暂不自动迁移，需用 v2 命令重建。
+   - 方块快照暂不自动迁移，需用 v2 命令重建或等待后续工具。
    - 检查迁移报告中的 skipped 项。
 5. **验证**
    - `/zr2 arena list` 能看到 `migrated_v1`。
@@ -37,5 +37,7 @@
 
 ## 数据迁移
 
+- 特殊门行为（电梯/地铁/机场）已迁移为 v2 `behavior` 配置。
+- 直升机撤离按钮已支持：使用 v1 `buttons` 中 `mode: escape` 的按钮触发。
 - v1 经济/任务数据迁移将在后续版本提供独立命令。
 - 当前 v2 的硬币/XP/称号从零开始，事件计数（过门/击杀）实时写入 `player_data_v2`。

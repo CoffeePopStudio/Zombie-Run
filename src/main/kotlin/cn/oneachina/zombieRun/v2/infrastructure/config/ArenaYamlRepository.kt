@@ -6,6 +6,8 @@ import cn.oneachina.zombierun.v2.domain.arena.ButtonMode
 import cn.oneachina.zombierun.v2.domain.arena.RespawnDefinition
 import cn.oneachina.zombierun.v2.domain.arena.RespawnType
 import cn.oneachina.zombierun.v2.domain.door.BlockRegion
+import cn.oneachina.zombierun.v2.domain.door.DoorBehavior
+import cn.oneachina.zombierun.v2.domain.door.DoorBehaviorType
 import cn.oneachina.zombierun.v2.domain.door.DoorDefinition
 import cn.oneachina.zombierun.v2.domain.door.DoorMode
 import cn.oneachina.zombierun.v2.domain.door.Portal
@@ -127,6 +129,7 @@ class ArenaYamlRepository(
         val schedule = section.getConfigurationSection("schedule")
         val openSeconds = schedule?.getInt("open", 15) ?: 15
         val closeSeconds = schedule?.getInt("close", 15) ?: 15
+        val behavior = section.getConfigurationSection("behavior")?.let { parseBehavior(it) }
 
         return DoorDefinition(
             id = id,
@@ -140,6 +143,27 @@ class ArenaYamlRepository(
             region = BlockRegion(minX, minY, minZ, maxX, maxY, maxZ),
             snapshotId = section.getString("snapshot"),
             fallbackMaterial = section.getString("fallback-material", "STONE") ?: "STONE",
+            behavior = behavior,
+        )
+    }
+
+    private fun parseBehavior(section: ConfigurationSection): DoorBehavior {
+        val type = DoorBehaviorType.entries.firstOrNull {
+            it.name.equals(section.getString("type"), ignoreCase = true)
+        } ?: throw ArenaValidationException("door behavior: invalid type")
+        return DoorBehavior(
+            type = type,
+            humanTargetX = section.getDouble("human-target-x").takeUnless { it == 0.0 && !section.contains("human-target-x") },
+            humanTargetY = section.getDouble("human-target-y").takeUnless { it == 0.0 && !section.contains("human-target-y") },
+            humanTargetZ = section.getDouble("human-target-z").takeUnless { it == 0.0 && !section.contains("human-target-z") },
+            zombieTargetX = section.getDouble("zombie-target-x").takeUnless { it == 0.0 && !section.contains("zombie-target-x") },
+            zombieTargetY = section.getDouble("zombie-target-y").takeUnless { it == 0.0 && !section.contains("zombie-target-y") },
+            zombieTargetZ = section.getDouble("zombie-target-z").takeUnless { it == 0.0 && !section.contains("zombie-target-z") },
+            lineName = section.getString("line-name"),
+            countdown = section.getInt("countdown", 5),
+            delayTicks = section.getLong("delay-ticks", 0),
+            departureMessage = section.getString("departure-msg"),
+            arrivalMessage = section.getString("arrival-msg"),
         )
     }
 
@@ -249,6 +273,22 @@ class ArenaYamlRepository(
         "schedule" to linkedMapOf("open" to openSeconds, "close" to closeSeconds),
         "snapshot" to snapshotId,
         "fallback-material" to fallbackMaterial,
+        "behavior" to behavior?.toMap(),
+    ).filterValues { it != null }.mapValues { it.value!! }
+
+    private fun DoorBehavior.toMap(): Map<String, Any> = linkedMapOf<String, Any?>(
+        "type" to type.name.lowercase(),
+        "human-target-x" to humanTargetX,
+        "human-target-y" to humanTargetY,
+        "human-target-z" to humanTargetZ,
+        "zombie-target-x" to zombieTargetX,
+        "zombie-target-y" to zombieTargetY,
+        "zombie-target-z" to zombieTargetZ,
+        "line-name" to lineName,
+        "countdown" to countdown,
+        "delay-ticks" to delayTicks,
+        "departure-msg" to departureMessage,
+        "arrival-msg" to arrivalMessage,
     ).filterValues { it != null }.mapValues { it.value!! }
 
     private fun ButtonDefinition.toMap(): Map<String, Any> = linkedMapOf(

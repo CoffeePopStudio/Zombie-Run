@@ -1,6 +1,7 @@
 package cn.oneachina.zombierun.v2.infrastructure.bukkit.listener
 
 import cn.oneachina.zombierun.v2.application.door.DoorApplicationService
+import cn.oneachina.zombierun.v2.application.game.GameFlowService
 import cn.oneachina.zombierun.v2.domain.arena.ButtonMode
 import cn.oneachina.zombierun.v2.domain.door.Vec3
 import cn.oneachina.zombierun.v2.infrastructure.config.ArenaYamlRepository
@@ -21,6 +22,7 @@ import org.bukkit.event.player.PlayerTeleportEvent
 class V2DoorListener(
     private val doorService: DoorApplicationService,
     private val arenaRepository: ArenaYamlRepository,
+    private val gameFlow: GameFlowService,
 ) : Listener {
 
     @EventHandler(ignoreCancelled = true)
@@ -68,7 +70,13 @@ class V2DoorListener(
                 player.sendMessage(Component.text(result.message, if (result.success) NamedTextColor.GREEN else NamedTextColor.RED))
             }
             ButtonMode.ESCAPE -> {
-                player.sendMessage(Component.text("撤离按钮将在游戏流程里程碑中启用", NamedTextColor.YELLOW))
+                val ok = gameFlow.triggerEscape(player.world.name, player.name)
+                player.sendMessage(
+                    Component.text(
+                        if (ok) "直升机撤离已启动" else "撤离失败：对局未进行或没有人类",
+                        if (ok) NamedTextColor.GREEN else NamedTextColor.RED,
+                    ),
+                )
             }
         }
     }

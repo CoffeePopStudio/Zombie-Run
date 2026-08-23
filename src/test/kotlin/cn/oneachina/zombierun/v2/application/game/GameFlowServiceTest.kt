@@ -262,6 +262,24 @@ class GameFlowServiceTest {
     }
 
     @Test
+    fun `escape countdown ends with human victory`() {
+        val f = Fixture()
+        f.repo.save(ArenaDefinition("a", "w"))
+        f.world.setPlayers("w", listOf(uuid(1), uuid(2)))
+        f.service.start()
+        f.service.forceStart("w")
+
+        val ended = mutableListOf<GameEndedEvent>()
+        f.eventBus.subscribe(GameEndedEvent::class.java) { ended.add(it) }
+
+        assertTrue(f.service.triggerEscape("w", "tester"))
+        repeat(GameFlowService.ESCAPE_SECONDS + 1) { f.scheduler.tickTimers() }
+
+        assertEquals(GamePhase.ENDED, f.service.phaseOf("w"))
+        assertEquals(GameTeam.HUMAN.name, ended.single().winner)
+    }
+
+    @Test
     fun `one hundred repeated matches keep task registry bounded`() {
         val f = Fixture()
         f.repo.save(ArenaDefinition("a", "w"))

@@ -147,7 +147,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
             logger.info("PlaceholderAPI expansion registered: %zombierun_*%")
         }
 
-        plugin.server.pluginManager.registerEvents(V2DoorListener(doorService, arenaRepository), plugin)
+        plugin.server.pluginManager.registerEvents(V2DoorListener(doorService, arenaRepository, gameFlow), plugin)
         plugin.server.pluginManager.registerEvents(V2GameListener(gameFlow), plugin)
         plugin.server.pluginManager.registerEvents(V2PlayerDataListener(playerDataService), plugin)
         plugin.server.pluginManager.registerEvents(combatListener, plugin)
