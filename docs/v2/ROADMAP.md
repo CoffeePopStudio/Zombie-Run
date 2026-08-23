@@ -174,14 +174,15 @@
 
 - [ ] 特殊门行为：elevator/subway/airport 迁移为 `DoorBehavior` 策略
 - [ ] 直升机撤离
-- [ ] Multiverse 世界解析
-- [ ] PlaceholderAPI 扩展
-- [ ] 昵称前缀/称号展示
-- [ ] v1 配置迁移命令 `/zr2 v2 migrate` 完整实现与报告
+- [x] Multiverse 世界解析（`MultiverseWorldResolver`，忽略大小写别名匹配）
+- [x] PlaceholderAPI 扩展（`%zombierun_profile_*%` + v1 兼容别名）
+- [x] 昵称前缀/称号展示（PAPI 提供称号占位符，GUI 展示）
+- [x] v1 配置迁移命令 `/zr2 v1 migrate`（门/按钮/重生点写入 `migrated_v1` arena，报告输出）
 
 **验收**：
-- v1 全套 config 迁移成功，迁移报告含需人工确认项
-- PAPI 占位符兼容 v1 主要名称
+- [x] 样例 v1 config 迁移成功：doors=1 buttons=1 respawns=1（Paper 实测）
+- [x] PAPI 占位符兼容 v1 主要名称（level/xp/coins/kills/doors/phase 别名）
+- [ ] v1 全套 config 迁移报告含需人工确认项（特殊门/快照待扩展）
 
 ---
 

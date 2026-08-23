@@ -13,6 +13,7 @@ import cn.oneachina.zombierun.v2.infrastructure.bukkit.BukkitTeleporterPort
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.BukkitWorldAccessPort
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.command.Zr2Command
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.gui.GuiService
+import cn.oneachina.zombierun.v2.infrastructure.bukkit.hook.ZombieRunV2Expansion
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2CombatListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2DoorListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2GameListener
@@ -22,6 +23,7 @@ import cn.oneachina.zombierun.v2.infrastructure.bukkit.weapon.QaWeaponIntegratio
 import cn.oneachina.zombierun.v2.infrastructure.config.ArenaYamlRepository
 import cn.oneachina.zombierun.v2.infrastructure.config.BlockSnapshotStore
 import cn.oneachina.zombierun.v2.infrastructure.config.V2SettingsLoader
+import cn.oneachina.zombierun.v2.infrastructure.config.V1MigrationService
 import cn.oneachina.zombierun.v2.infrastructure.config.WeaponYamlRepository
 import cn.oneachina.zombierun.v2.infrastructure.storage.SqlitePlayerDataRepository
 import cn.oneachina.zombierun.v2.ports.BlockOpsPort
@@ -53,6 +55,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
     val arenaRepository = ArenaYamlRepository(plugin.dataFolder, logger)
     val snapshotStore = BlockSnapshotStore(plugin.dataFolder)
     val weaponRepository = WeaponYamlRepository(plugin.dataFolder, logger)
+    val v1MigrationService = V1MigrationService(plugin.dataFolder, arenaRepository, logger)
     val weaponIntegration: WeaponIntegrationPort = QaWeaponIntegrationPort(logger)
     val weaponService = WeaponService(weaponRepository, weaponIntegration, messages, logger)
     val playerDataRepository: PlayerDataPort = SqlitePlayerDataRepository(plugin.dataFolder, logger)
@@ -98,6 +101,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         services.register(TaskRegistry::class, taskRegistry)
         services.register(ArenaYamlRepository::class, arenaRepository)
         services.register(BlockSnapshotStore::class, snapshotStore)
+        services.register(V1MigrationService::class, v1MigrationService)
         services.register(WeaponYamlRepository::class, weaponRepository)
         services.register(WeaponIntegrationPort::class, weaponIntegration)
         services.register(WeaponService::class, weaponService)
@@ -137,6 +141,11 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         )
         services.register(GameFlowService::class, gameFlow)
         services.register(DoorApplicationService::class, doorService)
+
+        if (plugin.server.pluginManager.getPlugin("PlaceholderAPI") != null) {
+            ZombieRunV2Expansion(playerDataService, gameFlow).register()
+            logger.info("PlaceholderAPI expansion registered: %zombierun_*%")
+        }
 
         plugin.server.pluginManager.registerEvents(V2DoorListener(doorService, arenaRepository), plugin)
         plugin.server.pluginManager.registerEvents(V2GameListener(gameFlow), plugin)

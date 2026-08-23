@@ -9,6 +9,7 @@ import cn.oneachina.zombierun.v2.ports.TeleporterPort
 import cn.oneachina.zombierun.v2.ports.WorldAccessPort
 import cn.oneachina.zombierun.v2.domain.door.BlockRegion
 import cn.oneachina.zombierun.v2.domain.door.Vec3
+import cn.oneachina.zombierun.v2.infrastructure.bukkit.hook.MultiverseWorldResolver
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.title.Title
@@ -24,13 +25,13 @@ import java.util.UUID
 class BukkitWorldAccessPort : WorldAccessPort {
     override fun playersIn(worldName: String): List<PlayerRef> =
         Bukkit.getOnlinePlayers()
-            .filter { it.world.name == worldName }
+            .filter { it.world.name == MultiverseWorldResolver.resolve(worldName) }
             .map { it.toRef() }
 
     override fun player(id: UUID): PlayerRef? = Bukkit.getPlayer(id)?.toRef()
 
     override fun worldLoaded(worldName: String): Boolean =
-        Bukkit.getWorld(worldName) != null
+        Bukkit.getWorld(MultiverseWorldResolver.resolve(worldName)) != null
 }
 
 class BukkitBlockOpsPort(
@@ -85,7 +86,7 @@ class BukkitBlockOpsPort(
     }
 
     override fun scanRegion(worldName: String, region: BlockRegion): Map<String, String> {
-        val world = Bukkit.getWorld(worldName) ?: return emptyMap()
+        val world = Bukkit.getWorld(MultiverseWorldResolver.resolve(worldName)) ?: return emptyMap()
         val result = LinkedHashMap<String, String>()
         for (x in region.minX..region.maxX) {
             for (y in region.minY..region.maxY) {
@@ -106,7 +107,7 @@ class BukkitBlockOpsPort(
                 z = region.centerZ,
             )
         ) {
-            val world = Bukkit.getWorld(worldName) ?: return@regionExecute
+            val world = Bukkit.getWorld(MultiverseWorldResolver.resolve(worldName)) ?: return@regionExecute
             action(world)
         }
     }
@@ -133,7 +134,7 @@ class BukkitPlayerMessagePort : PlayerMessagePort {
     }
 
     override fun soundBell(worldName: String) {
-        val world = Bukkit.getWorld(worldName) ?: return
+        val world = Bukkit.getWorld(MultiverseWorldResolver.resolve(worldName)) ?: return
         val loc = world.players.firstOrNull()?.location ?: world.spawnLocation
         world.playSound(loc, Sound.BLOCK_BELL_USE, 0.7f, 1.0f)
     }
@@ -150,7 +151,7 @@ class BukkitTeleporterPort : TeleporterPort {
         pitch: Float,
     ) {
         val player = Bukkit.getPlayer(playerId) ?: return
-        val world = Bukkit.getWorld(worldName) ?: return
+        val world = Bukkit.getWorld(MultiverseWorldResolver.resolve(worldName)) ?: return
         player.teleportAsync(Location(world, x, y, z, yaw, pitch))
     }
 }

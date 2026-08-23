@@ -48,6 +48,7 @@ class Zr2Command(
             "xp" -> handleXp(sender, args.drop(1))
             "title" -> handleTitle(sender, args.drop(1))
             "menu" -> handleMenu(sender, args.drop(1))
+            "v1" -> handleV1(sender, args.drop(1))
             else -> {
                 sender.sendMessage(Component.text("未知子命令：${args[0]}，输入 /zr2 help 查看帮助", NamedTextColor.RED))
             }
@@ -83,6 +84,7 @@ class Zr2Command(
         sender.sendMessage(Component.text("/zr2 weapon list | info <id> | add <id> <type> <category> <price> [name] | remove <id> | give <id> | random [category]", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 profile [玩家] | coins add|give|spend | xp add | title set|clear", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 menu profile|shop", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 v1 migrate", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 reload", NamedTextColor.YELLOW))
     }
 
@@ -674,11 +676,31 @@ class Zr2Command(
         }
     }
 
+    // ---------- v1 migration ----------
+
+    private fun handleV1(sender: CommandSender, args: List<String>) {
+        if (args.getOrNull(0)?.lowercase() != "migrate") {
+            sender.sendMessage(Component.text("用法: /zr2 v1 migrate", NamedTextColor.RED))
+            return
+        }
+        if (!sender.hasPermission("zombie.run.v2.admin")) {
+            noPermission(sender)
+            return
+        }
+        val report = root.v1MigrationService.migrate()
+        sender.sendMessage(Component.text("===== v1 迁移报告 =====", NamedTextColor.GREEN))
+        val worldName = report.world ?: "-"
+        sender.sendMessage(Component.text("world=$worldName doors=${report.doorsMigrated} buttons=${report.buttonsMigrated} respawns=${report.respawnsMigrated}", NamedTextColor.GREEN))
+        report.skipped.forEach { message ->
+            sender.sendMessage(Component.text("跳过: $message", NamedTextColor.YELLOW))
+        }
+    }
+
     // ---------- tab ----------
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): List<String> {
         if (args.size == 1) {
-            return listOf("help", "version", "reload", "arena", "door", "button", "respawn", "game", "weapon", "profile", "coins", "xp", "title", "menu")
+            return listOf("help", "version", "reload", "arena", "door", "button", "respawn", "game", "weapon", "profile", "coins", "xp", "title", "menu", "v1")
                 .filter { it.startsWith(args[0].lowercase()) }
         }
         return when (args[0].lowercase()) {
@@ -727,6 +749,7 @@ class Zr2Command(
             }
             "xp" -> if (args.size == 2) listOf("add").filter { it.startsWith(args[1].lowercase()) } else emptyList()
             "menu" -> if (args.size == 2) listOf("profile", "shop").filter { it.startsWith(args[1].lowercase()) } else emptyList()
+            "v1" -> if (args.size == 2) listOf("migrate").filter { it.startsWith(args[1].lowercase()) } else emptyList()
             "profile" -> emptyList()
             else -> emptyList()
         }

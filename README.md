@@ -2,7 +2,7 @@
 
 > ⚠️ 当前为 `v2` 重构分支：v1 稳定版在 `main` 分支。
 > 架构设计见 [docs/v2/ARCHITECTURE.md](docs/v2/ARCHITECTURE.md)，路线图见 [docs/v2/ROADMAP.md](docs/v2/ROADMAP.md)。
-> 当前进度：**M0 骨架 + M1 门系统 + M2 游戏状态机 + M3 体力/战斗 + M4 武器 + M5 经济/等级/称号 + M6 GUI**。
+> 当前进度：**M0 骨架 + M1 门系统 + M2 游戏状态机 + M3 体力/战斗 + M4 武器 + M5 经济/等级/称号 + M6 GUI + M7 兼容/PAPI/Multiverse/v1 迁移**。
 
 非对称 PvP 小游戏插件 —— 人类通过层层大门逃生，僵尸全力感染。
 
@@ -21,8 +21,14 @@
 /zr2 weapon list | info <id> | add <id> <type> <category> <price> [name] | remove <id> | give <id> | random [category]
 /zr2 profile [玩家] | coins add|give|spend | xp add | title set|clear
 /zr2 menu profile|shop
+/zr2 v1 migrate
 /zr2 reload
 ```
+
+### PlaceholderAPI
+
+`%zombierun_profile_level%`, `%zombierun_profile_xp%`, `%zombierun_profile_coins%`, `%zombierun_profile_title%`, `%zombierun_profile_kills%`, `%zombierun_profile_doors%`, `%zombierun_game_phase%`
+兼容别名：`%zombierun_level%`, `%zombierun_money%`, `%zombierun_kills%` 等。
 
 其余 v1 功能将在后续里程碑迁移，v1 稳定版仍可切回 `main` 分支使用。
 
