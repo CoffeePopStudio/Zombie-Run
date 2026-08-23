@@ -51,4 +51,10 @@ interface GameContextPort {
     fun teamOf(worldName: String, playerId: UUID): GameTeam?
 
     fun setRoom(worldName: String, playerId: UUID, room: Int)
+
+    /** 若地图流程存在，返回当前阶段允许触发的门号；null 表示未启用门流程（全部门可触发）。 */
+    fun currentStageDoorNumbers(worldName: String): List<Int>? = null
+
+    /** 地图流程中该门当前是否已解锁；未启用流程时恒为 true。 */
+    fun isDoorUnlocked(worldName: String, doorNumber: Int): Boolean = true
 }

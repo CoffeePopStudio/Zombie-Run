@@ -204,6 +204,28 @@
 
 ---
 
+## M11：完整游戏流程框架（MapFlow）
+
+- [x] `MapFlowDefinition` / `MapFlowStage` / `MapFlowFinish` / `MapFlowStateMachine` 领域模型（纯 Kotlin）
+- [x] 阶段状态机：WAITING → STARTING → RUNNING → HUMAN_WIN / ZOMBIE_WIN
+- [x] 门推进：过当前阶段门解锁下一阶段，到达终点门触发人类胜利
+- [x] `ArenaYamlRepository` 支持 `map-flow` 配置读写（round trip 测试）
+- [x] `GameFlowService` 接入 MapFlow：自动开局、当前阶段门号查询、门解锁检查
+- [x] 门按钮按 MapFlow 阶段锁定：未解锁门返回“该门尚未解锁”
+- [x] 感染殆尽 → ZOMBIE_WIN；时间耗尽/撤离 → HUMAN_WIN；结算后自动复位
+- [x] `/zr2 game status` 显示 map-flow 阶段/当前门
+- [x] 示例 arena：`docs/v2/examples/mapflow-demo.yml`
+- [x] Paper 烟测：flow_demo 加载成功，服务器启停干净
+
+**验收**：
+- [x] MapFlow 完整一局单测（过门推进→终点→HUMAN_WIN）
+- [x] 非当前阶段门不推进单测
+- [x] 感染/时间/撤离结束单测
+- [x] GameFlowService 接入回归 + 100 局任务泄漏测试
+- [x] Paper 烟测 2 个 arena 正常加载
+
+---
+
 ## 建议的第一个执行批次（批准后）
 
 1. 创建 `v2` 分支

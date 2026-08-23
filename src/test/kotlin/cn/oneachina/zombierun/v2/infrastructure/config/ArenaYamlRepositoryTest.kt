@@ -13,6 +13,10 @@ import cn.oneachina.zombierun.v2.domain.door.DoorMode
 import cn.oneachina.zombierun.v2.domain.door.Portal
 import cn.oneachina.zombierun.v2.domain.door.PortalAxis
 import cn.oneachina.zombierun.v2.domain.door.PortalFront
+import cn.oneachina.zombierun.v2.domain.game.FinishType
+import cn.oneachina.zombierun.v2.domain.game.MapFlowDefinition
+import cn.oneachina.zombierun.v2.domain.game.MapFlowFinish
+import cn.oneachina.zombierun.v2.domain.game.MapFlowStage
 import cn.oneachina.zombierun.v2.support.V2Logger
 import java.util.logging.Logger
 import kotlin.io.path.createTempDirectory
@@ -22,6 +26,37 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class ArenaYamlRepositoryTest {
+
+    @Test
+    fun `map flow round trip`() {
+        val dir = createTempDirectory("zr2-arena-test").toFile()
+        val repo = ArenaYamlRepository(dir, V2Logger(Logger.getLogger("test")))
+        val arena = ArenaDefinition(
+            name = "flow",
+            world = "w",
+            mapFlow = MapFlowDefinition(
+                arenaName = "flow",
+                world = "w",
+                minPlayers = 2,
+                startDelaySeconds = 10,
+                maxDurationSeconds = 300,
+                stages = listOf(
+                    MapFlowStage("s1", "大门", listOf(1, 2), "s2"),
+                    MapFlowStage("s2", "终点", listOf(3)),
+                ),
+                finish = MapFlowFinish(FinishType.DOOR, 3),
+            ),
+        )
+
+        repo.save(arena)
+        val loaded = repo.all().single().mapFlow
+        val flow = assertNotNull(loaded)
+        assertEquals(2, flow.stages.size)
+        assertEquals(listOf(1, 2), flow.stages[0].doorNumbers)
+        assertEquals("s2", flow.stages[0].nextStageId)
+        assertEquals(FinishType.DOOR, flow.finish.type)
+        assertEquals(3, flow.finish.doorNumber)
+    }
 
     @Test
     fun `behavior and escape button round trip`() {

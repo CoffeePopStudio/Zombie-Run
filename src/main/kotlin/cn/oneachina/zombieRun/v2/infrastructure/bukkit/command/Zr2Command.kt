@@ -423,6 +423,10 @@ class Zr2Command(
                 }
                 sender.sendMessage(Component.text("===== game $world =====", NamedTextColor.GREEN))
                 sender.sendMessage(Component.text("phase=${instance.phaseSnapshot().name} alpha=${instance.alphaId()} humans=${instance.humanIds().size} zombies=${instance.zombieIds().size}", NamedTextColor.GREEN))
+                val flowStage = root.gameFlow.currentStageDoorNumbers(world)?.let { root.gameFlow.currentStageLabel(world) }
+                if (flowStage != null) {
+                    sender.sendMessage(Component.text("map-flow=${root.gameFlow.mapFlowPhase(world)?.name} stage=${flowStage} doors=${root.gameFlow.currentStageDoorNumbers(world)?.joinToString("/")}", NamedTextColor.GREEN))
+                }
                 instance.humanIds().forEach { id ->
                     val name = root.worldAccess.player(id)?.name ?: id.toString()
                     sender.sendMessage(Component.text("- HUMAN $name room=${instance.roomOf(id)} kills=${root.gameFlow.killCount(id)}", NamedTextColor.AQUA))

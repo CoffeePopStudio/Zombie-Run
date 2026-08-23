@@ -13,6 +13,10 @@ import cn.oneachina.zombierun.v2.domain.door.DoorMode
 import cn.oneachina.zombierun.v2.domain.door.Portal
 import cn.oneachina.zombierun.v2.domain.door.PortalAxis
 import cn.oneachina.zombierun.v2.domain.door.PortalFront
+import cn.oneachina.zombierun.v2.domain.game.FinishType
+import cn.oneachina.zombierun.v2.domain.game.MapFlowDefinition
+import cn.oneachina.zombierun.v2.domain.game.MapFlowFinish
+import cn.oneachina.zombierun.v2.domain.game.MapFlowStage
 import cn.oneachina.zombierun.v2.support.V2Logger
 import org.bukkit.configuration.ConfigurationSection
 import org.bukkit.configuration.file.YamlConfiguration
@@ -78,7 +82,49 @@ class ArenaYamlRepository(
             ?.map { id -> parseRespawn(root.getConfigurationSection("respawns.$id")!!, id, world) }
             ?: emptyList()
 
-        return ArenaDefinition(name, world, doors, buttons, respawns)
+        val mapFlow = root.getConfigurationSection("map-flow")?.let { parseMapFlow(it, name, world) }
+
+        return ArenaDefinition(name, world, doors, buttons, respawns, mapFlow)
+    }
+
+    private fun parseMapFlow(section: ConfigurationSection, arenaName: String, world: String): MapFlowDefinition {
+        val finishSection = section.getConfigurationSection("finish")
+            ?: throw ArenaValidationException("arena $arenaName: map-flow.finish missing")
+        val finishType = FinishType.entries.firstOrNull {
+            it.name.equals(finishSection.getString("type"), ignoreCase = true)
+        } ?: throw ArenaValidationException("arena $arenaName: map-flow.finish.type invalid")
+        val finishDoor = if (finishType == FinishType.DOOR) {
+            val n = finishSection.getInt("door-number", -1)
+            if (n <= 0) throw ArenaValidationException("arena $arenaName: DOOR finish requires door-number")
+            n
+        } else null
+        val finish = MapFlowFinish(finishType, finishDoor)
+
+        val stagesSection = section.getConfigurationSection("stages")
+            ?: throw ArenaValidationException("arena $arenaName: map-flow.stages missing")
+        val stages = stagesSection.getKeys(false).sorted().mapNotNull { rawId ->
+            val id: String = rawId ?: return@mapNotNull null
+            val s = stagesSection.getConfigurationSection(id) ?: return@mapNotNull null
+            val doorNumbers = s.getIntegerList("door-numbers")
+            if (doorNumbers.isEmpty()) throw ArenaValidationException("arena $arenaName: stage $id requires door-numbers")
+            MapFlowStage(
+                id = id,
+                label = s.getString("label") ?: id,
+                doorNumbers = doorNumbers,
+                nextStageId = s.getString("next-stage-id"),
+            )
+        }
+        if (stages.isEmpty()) throw ArenaValidationException("arena $arenaName: map-flow.stages empty")
+
+        return MapFlowDefinition(
+            arenaName = arenaName,
+            world = world,
+            minPlayers = section.getInt("min-players", 2),
+            startDelaySeconds = section.getInt("start-delay-seconds", 10),
+            maxDurationSeconds = section.getInt("max-duration-seconds", 600),
+            stages = stages,
+            finish = finish,
+        )
     }
 
     private fun parseDoor(section: ConfigurationSection, id: String, world: String): DoorDefinition {
@@ -246,6 +292,8 @@ class ArenaYamlRepository(
         }
         yaml.set("respawns", respawns)
 
+        arena.mapFlow?.let { yaml.set("map-flow", it.toMap()) }
+
         yaml.save(File(arenaDir, "${sanitize(arena.name)}.yml"))
         cache[arena.name] = arena
     }
@@ -303,6 +351,23 @@ class ArenaYamlRepository(
         "yaw" to yaw,
         "pitch" to pitch,
         "door-number" to doorNumber,
+    ).filterValues { it != null }.mapValues { it.value!! }
+
+    private fun MapFlowDefinition.toMap(): Map<String, Any> = linkedMapOf<String, Any?>(
+        "min-players" to minPlayers,
+        "start-delay-seconds" to startDelaySeconds,
+        "max-duration-seconds" to maxDurationSeconds,
+        "stages" to stages.associate { stage ->
+            stage.id to linkedMapOf<String, Any?>(
+                "label" to stage.label,
+                "door-numbers" to stage.doorNumbers,
+                "next-stage-id" to stage.nextStageId,
+            ).filterValues { it != null }.mapValues { it.value!! }
+        },
+        "finish" to linkedMapOf<String, Any?>(
+            "type" to finish.type.name.lowercase(),
+            "door-number" to finish.doorNumber,
+        ).filterValues { it != null }.mapValues { it.value!! },
     ).filterValues { it != null }.mapValues { it.value!! }
 }
 

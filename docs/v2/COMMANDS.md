@@ -31,7 +31,7 @@
 
 | 命令 | 说明 |
 | --- | --- |
-| `/zr2 game status [世界]` | 查看对局状态 |
+| `/zr2 game status [世界]` | 查看对局状态（含 MapFlow 阶段/当前门） |
 | `/zr2 game start [世界]` | 强制开始 |
 | `/zr2 game end [世界]` | 强制结束 |
 | `/zr2 game reset [世界]` | 重置对局 |

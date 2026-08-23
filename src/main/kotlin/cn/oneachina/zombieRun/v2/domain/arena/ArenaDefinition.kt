@@ -2,6 +2,7 @@ package cn.oneachina.zombierun.v2.domain.arena
 
 import cn.oneachina.zombierun.v2.domain.door.BlockRegion
 import cn.oneachina.zombierun.v2.domain.door.DoorDefinition
+import cn.oneachina.zombierun.v2.domain.game.MapFlowDefinition
 
 data class ArenaDefinition(
     val name: String,
@@ -9,6 +10,7 @@ data class ArenaDefinition(
     val doors: List<DoorDefinition> = emptyList(),
     val buttons: List<ButtonDefinition> = emptyList(),
     val respawns: List<RespawnDefinition> = emptyList(),
+    val mapFlow: MapFlowDefinition? = null,
 ) {
     fun doorByNumber(number: Int): DoorDefinition? =
         doors.firstOrNull { it.number == number }

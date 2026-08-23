@@ -11,6 +11,10 @@ import cn.oneachina.zombierun.v2.domain.game.GameInstance
 import cn.oneachina.zombierun.v2.domain.game.GamePhase
 import cn.oneachina.zombierun.v2.domain.game.GameRules
 import cn.oneachina.zombierun.v2.domain.game.GameTeam
+import cn.oneachina.zombierun.v2.domain.game.MapFlowAdvanceResult
+import cn.oneachina.zombierun.v2.domain.game.MapFlowDefinition
+import cn.oneachina.zombierun.v2.domain.game.MapFlowPhase
+import cn.oneachina.zombierun.v2.domain.game.MapFlowStateMachine
 import cn.oneachina.zombierun.v2.infrastructure.config.ArenaYamlRepository
 import cn.oneachina.zombierun.v2.infrastructure.config.V2Settings
 import cn.oneachina.zombierun.v2.ports.GameContextPort
@@ -52,9 +56,11 @@ class GameFlowService(
     )
 
     private val games = ConcurrentHashMap<String, GameInstance>()
+    private val mapFlows = ConcurrentHashMap<String, MapFlowStateMachine>()
     private val countdowns = ConcurrentHashMap<String, Countdown>()
     private val escapeCountdowns = ConcurrentHashMap<String, EscapeCountdown>()
     private val maxDurationTasks = ConcurrentHashMap<String, TaskHandle>()
+    private val autoResetTasks = ConcurrentHashMap<String, TaskHandle>()
     private val zombieKills = ConcurrentHashMap<UUID, Int>()
     private var autoTickTask: TaskHandle? = null
 
@@ -78,7 +84,10 @@ class GameFlowService(
         cancelEscapeCountdowns()
         maxDurationTasks.values.forEach { it.cancel() }
         maxDurationTasks.clear()
+        autoResetTasks.values.forEach { it.cancel() }
+        autoResetTasks.clear()
         games.clear()
+        mapFlows.clear()
     }
 
     fun gameWorlds(): Set<String> = arenaRepository.all().map { it.world }.toSet()
@@ -87,22 +96,28 @@ class GameFlowService(
 
     fun phaseOf(worldName: String): GamePhase? = games[worldName]?.phaseSnapshot()
 
-    private fun rules(): GameRules = GameRules(
-        minPlayers = settings.minPlayers,
-        startDelaySeconds = settings.startDelaySeconds,
-        maxDurationSeconds = settings.maxDurationSeconds,
-    )
+    private fun mapFlowDef(worldName: String): MapFlowDefinition? =
+        arenaRepository.byWorld(worldName).firstNotNullOfOrNull { it.mapFlow }
+
+    private fun rules(worldName: String): GameRules {
+        val flow = mapFlowDef(worldName)
+        return GameRules(
+            minPlayers = flow?.minPlayers ?: settings.minPlayers,
+            startDelaySeconds = flow?.startDelaySeconds ?: settings.startDelaySeconds,
+            maxDurationSeconds = flow?.maxDurationSeconds ?: settings.maxDurationSeconds,
+        )
+    }
 
     private fun autoTick() {
         gameWorlds().forEach { worldName ->
-            val game = games.computeIfAbsent(worldName) { GameInstance(worldName, rules()) }
+            val game = games.computeIfAbsent(worldName) { GameInstance(worldName, rules(worldName)) }
             val playerCount = worldAccess.playersIn(worldName).size
             when (game.phaseSnapshot()) {
                 GamePhase.WAITING -> {
-                    if (playerCount >= settings.minPlayers) beginCountdown(worldName, game)
+                    if (playerCount >= rules(worldName).minPlayers) beginCountdown(worldName, game)
                 }
                 GamePhase.STARTING -> {
-                    if (playerCount < settings.minPlayers) {
+                    if (playerCount < rules(worldName).minPlayers) {
                         cancelCountdown(worldName, game, "人数不足，取消开局")
                     }
                 }
@@ -116,7 +131,7 @@ class GameFlowService(
         if (worldName !in gameWorlds()) return false
         val players = worldAccess.playersIn(worldName).map { it.id }
         if (players.isEmpty()) return false
-        val game = games.computeIfAbsent(worldName) { GameInstance(worldName, rules()) }
+        val game = games.computeIfAbsent(worldName) { GameInstance(worldName, rules(worldName)) }
         cancelCountdownSilently(worldName)
         startGame(worldName, game, players)
         return true
@@ -124,7 +139,7 @@ class GameFlowService(
 
     fun requestCountdown(worldName: String): Boolean {
         if (worldName !in gameWorlds()) return false
-        val game = games.computeIfAbsent(worldName) { GameInstance(worldName, rules()) }
+        val game = games.computeIfAbsent(worldName) { GameInstance(worldName, rules(worldName)) }
         if (game.phaseSnapshot() == GamePhase.WAITING) beginCountdown(worldName, game)
         return true
     }
@@ -183,10 +198,14 @@ class GameFlowService(
 
     private fun beginCountdown(worldName: String, game: GameInstance) {
         game.beginCountdown()
-        val countdown = Countdown(settings.startDelaySeconds)
+        mapFlowDef(worldName)?.let { flow ->
+            mapFlows.computeIfAbsent(worldName) { MapFlowStateMachine(flow) }.beginCountdown()
+        }
+        val delay = rules(worldName).startDelaySeconds
+        val countdown = Countdown(delay)
         countdowns[worldName] = countdown
         worldAccess.playersIn(worldName).forEach {
-            messages.chat(it.id, "人数已满足，${settings.startDelaySeconds} 秒后开始")
+            messages.chat(it.id, "人数已满足，$delay 秒后开始")
         }
 
         val handle = scheduler.globalTimer(20L, 20L) { taskHandle ->
@@ -229,6 +248,12 @@ class GameFlowService(
         cancelCountdownSilently(worldName)
         maxDurationTasks.remove(worldName)?.cancel()
 
+        mapFlowDef(worldName)?.let { flow ->
+            val machine = mapFlows.computeIfAbsent(worldName) { MapFlowStateMachine(flow) }
+            if (machine.phaseSnapshot() == MapFlowPhase.WAITING) machine.beginCountdown()
+            machine.start()
+        }
+
         val assignments = game.start(playerIds, alphaIndex = Random.nextInt(playerIds.size))
         val alphaId = game.alphaId()
 
@@ -258,7 +283,7 @@ class GameFlowService(
             ),
         )
 
-        val durationTicks = settings.maxDurationSeconds * 20L
+        val durationTicks = rules(worldName).maxDurationSeconds * 20L
         val handle = scheduler.globalLater(durationTicks) {
             if (game.phaseSnapshot() == GamePhase.RUNNING) {
                 endGame(worldName, game, GameTeam.HUMAN, "时间耗尽，人类获胜")
@@ -285,16 +310,48 @@ class GameFlowService(
         games[worldName]?.setRoom(playerId, room)
     }
 
+    override fun currentStageDoorNumbers(worldName: String): List<Int>? =
+        mapFlows[worldName]?.currentDoorNumbers()
+
+    fun mapFlowPhase(worldName: String): MapFlowPhase? =
+        mapFlows[worldName]?.phaseSnapshot()
+
+    fun currentStageLabel(worldName: String): String? =
+        mapFlows[worldName]?.currentStage()?.label
+
+    override fun isDoorUnlocked(worldName: String, doorNumber: Int): Boolean {
+        val machine = mapFlows[worldName] ?: return true
+        if (machine.phaseSnapshot() != MapFlowPhase.RUNNING) return false
+        return doorNumber in machine.currentDoorNumbers()
+    }
+
     private fun onDoorPassed(event: PlayerPassedDoorEvent) {
         val player = worldAccess.player(event.playerId) ?: return
         messages.chat(event.playerId, "进度更新：你已抵达 ${event.doorNumbers.maxOrNull()} 号门")
         logger.info("[${event.worldName}] ${player.name} reached door ${event.doorNumbers.joinToString("/")}")
+
+        val machine = mapFlows[event.worldName] ?: return
+        when (machine.onDoorPassed(event.doorNumbers)) {
+            MapFlowAdvanceResult.STAGE_ADVANCED -> {
+                val stage = machine.currentStage()
+                worldAccess.playersIn(event.worldName).forEach {
+                    messages.chat(it.id, "已通过当前阶段，下一目标：${stage.label}（门号 ${stage.doorNumbers.joinToString("/")}）")
+                }
+            }
+            MapFlowAdvanceResult.FINISHED -> {
+                val game = games[event.worldName] ?: return
+                if (game.phaseSnapshot() == GamePhase.RUNNING) {
+                    endGame(event.worldName, game, GameTeam.HUMAN, "到达终点，人类获胜")
+                }
+            }
+            MapFlowAdvanceResult.WRONG_DOOR -> Unit
+        }
     }
 
     /** 玩家进入配置了 arena 的世界。 */
     fun onPlayerJoin(worldName: String, playerId: UUID) {
         if (worldName !in gameWorlds()) return
-        val game = games.computeIfAbsent(worldName) { GameInstance(worldName, rules()) }
+        val game = games.computeIfAbsent(worldName) { GameInstance(worldName, rules(worldName)) }
         val team = game.addPlayer(playerId)
         when (game.phaseSnapshot()) {
             GamePhase.RUNNING -> {
@@ -357,6 +414,7 @@ class GameFlowService(
         }
 
         if (result.gameEnded) {
+            mapFlows[worldName]?.onAllHumansInfected()
             endGame(worldName, game, GameTeam.ZOMBIE_MAIN, "人类被感染殆尽，僵尸获胜")
         }
         return true
@@ -426,6 +484,15 @@ class GameFlowService(
         worldAccess.playersIn(worldName).forEach { messages.chat(it.id, message) }
         logger.info("[$worldName] game ended: winner=$winner - $message")
         eventBus.publish(GameEndedEvent(worldName, winner.name))
+
+        // 完整流程：5 秒后自动回到等待阶段，准备下一局
+        val resetHandle = scheduler.globalLater(100L) {
+            if (games[worldName]?.phaseSnapshot() == GamePhase.ENDED) {
+                reset(worldName)
+            }
+        }
+        autoResetTasks[worldName] = resetHandle
+        taskRegistry.register(resetHandle)
     }
 
     fun reset(worldName: String): Boolean {
@@ -433,8 +500,10 @@ class GameFlowService(
         cancelCountdownSilently(worldName)
         cancelEscape(worldName)
         maxDurationTasks.remove(worldName)?.cancel()
+        autoResetTasks.remove(worldName)?.cancel()
         games.remove(worldName)
-        val fresh = GameInstance(worldName, rules())
+        mapFlows.remove(worldName)
+        val fresh = GameInstance(worldName, rules(worldName))
         games[worldName] = fresh
         logger.info("[$worldName] game reset to WAITING")
         return true

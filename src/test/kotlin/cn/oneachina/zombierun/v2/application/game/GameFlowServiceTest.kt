@@ -9,6 +9,11 @@ import cn.oneachina.zombierun.v2.domain.arena.RespawnType
 import cn.oneachina.zombierun.v2.domain.door.Vec3
 import cn.oneachina.zombierun.v2.domain.game.GamePhase
 import cn.oneachina.zombierun.v2.domain.game.GameTeam
+import cn.oneachina.zombierun.v2.domain.game.FinishType
+import cn.oneachina.zombierun.v2.domain.game.MapFlowDefinition
+import cn.oneachina.zombierun.v2.domain.game.MapFlowFinish
+import cn.oneachina.zombierun.v2.domain.game.MapFlowStage
+import cn.oneachina.zombierun.v2.application.event.PlayerPassedDoorEvent
 import cn.oneachina.zombierun.v2.infrastructure.config.ArenaYamlRepository
 import cn.oneachina.zombierun.v2.infrastructure.config.V2Settings
 import cn.oneachina.zombierun.v2.ports.PlayerMessagePort
@@ -25,6 +30,7 @@ import java.util.logging.Logger
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -277,6 +283,39 @@ class GameFlowServiceTest {
 
         assertEquals(GamePhase.ENDED, f.service.phaseOf("w"))
         assertEquals(GameTeam.HUMAN.name, ended.single().winner)
+    }
+
+    @Test
+    fun `map flow advances through door events and ends human win`() {
+        val f = Fixture()
+        val flow = MapFlowDefinition(
+            arenaName = "a",
+            world = "w",
+            minPlayers = 2,
+            startDelaySeconds = 5,
+            maxDurationSeconds = 60,
+            stages = listOf(
+                MapFlowStage("s1", "大门", listOf(1, 2), "s2"),
+                MapFlowStage("s2", "终点线", listOf(3)),
+            ),
+            finish = MapFlowFinish(FinishType.DOOR, 3),
+        )
+        f.repo.save(ArenaDefinition("a", "w", mapFlow = flow))
+        f.world.setPlayers("w", listOf(uuid(1), uuid(2)))
+        f.service.start()
+        f.service.forceStart("w")
+
+        assertEquals(GamePhase.RUNNING, f.service.phaseOf("w"))
+        assertTrue(f.service.isDoorUnlocked("w", 1))
+        assertTrue(f.service.isDoorUnlocked("w", 2))
+        assertFalse(f.service.isDoorUnlocked("w", 3))
+
+        f.eventBus.publish(PlayerPassedDoorEvent("w", uuid(1), listOf(2)))
+        assertTrue(f.service.isDoorUnlocked("w", 3))
+        assertFalse(f.service.isDoorUnlocked("w", 1))
+
+        f.eventBus.publish(PlayerPassedDoorEvent("w", uuid(1), listOf(3)))
+        assertEquals(GamePhase.ENDED, f.service.phaseOf("w"))
     }
 
     @Test

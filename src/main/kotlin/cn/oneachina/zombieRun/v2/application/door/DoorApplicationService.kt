@@ -76,6 +76,10 @@ class DoorApplicationService(
         val door = doorByNumber(worldName, doorNumber)
             ?: return TriggerResult(false, "世界 $worldName 不存在 $doorNumber 号门")
 
+        if (gameContext?.isDoorUnlocked(worldName, doorNumber) == false) {
+            return TriggerResult(false, "该门尚未解锁")
+        }
+
         val doors = if (door.group.isNullOrBlank()) {
             listOf(door)
         } else {
