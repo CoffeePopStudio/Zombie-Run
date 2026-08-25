@@ -1,3 +1,5 @@
+import java.time.LocalDate
+
 plugins {
     kotlin("jvm") version "2.3.20-Beta2"
     id("com.gradleup.shadow") version "8.3.0"
@@ -11,8 +13,9 @@ version = run {
         ProcessBuilder(cmd).directory(rootProject.projectDir)
             .start().inputStream.bufferedReader().readText().trim()
     } catch (_: Exception) { "" }
-    val year = exec(listOf("powershell", "-c", "(Get-Date).Year.toString().substring(2)"))
-    val month = exec(listOf("powershell", "-c", "(Get-Date).Month"))
+    val today = LocalDate.now()
+    val year = today.year.toString().substring(2)
+    val month = today.monthValue.toString()
     val count = exec(listOf("git", "rev-list", "--count", "HEAD")).ifEmpty { "0" }
     val hash = exec(listOf("git", "rev-parse", "--short=7", "HEAD")).ifEmpty { "unknown" }
     "$year.$month.$count-$hash"

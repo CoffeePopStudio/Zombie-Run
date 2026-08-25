@@ -1,6 +1,7 @@
 package cn.oneachina.zombierun.v2.infrastructure.bukkit.gui
 
 import cn.oneachina.zombierun.v2.application.player.PlayerDataService
+import cn.oneachina.zombierun.v2.application.task.TaskService
 import cn.oneachina.zombierun.v2.application.weapon.WeaponService
 import cn.oneachina.zombierun.v2.support.V2Logger
 import net.kyori.adventure.text.Component
@@ -26,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap
 class GuiService(
     private val playerData: PlayerDataService,
     private val weapons: WeaponService,
+    private val tasks: TaskService,
     private val logger: V2Logger,
 ) : Listener {
 
@@ -116,6 +118,107 @@ class GuiService(
         }
         register(player, inv, "shop", actions)
     }
+
+    fun openTasks(player: Player) {
+        val entries = tasks.progressOf(player.uniqueId)
+        if (entries.isEmpty()) {
+            player.sendMessage(Component.text("当前没有可用任务，请管理员在 tasks.yml 配置", NamedTextColor.YELLOW))
+            return
+        }
+        val holder = Holder("tasks")
+        val rows = ((entries.size + 8) / 9).coerceAtMost(6)
+        val inv = Bukkit.createInventory(holder, rows * 9, Component.text("任务"))
+        holder.backingInventory = inv
+        val actions = mutableMapOf<Int, (Player, InventoryClickEvent) -> Unit>()
+
+        entries.forEachIndexed { index, (task, progress) ->
+            val slot = index
+            if (slot >= rows * 9) return@forEachIndexed
+            val status = when {
+                progress.claimed -> "§7已领取"
+                progress.progress >= task.target -> "§a可领取"
+                else -> "${progress.progress}/${task.target}"
+            }
+            val iconType = when {
+                progress.claimed -> Material.LIME_DYE
+                progress.progress >= task.target -> Material.GOLD_INGOT
+                else -> Material.PAPER
+            }
+            inv.setItem(
+                slot,
+                icon(
+                    iconType,
+                    "${task.description} [${task.period.name.lowercase()}]",
+                    listOf(
+                        "进度: $status",
+                        "奖励: ${task.rewardCoins} 硬币 / ${task.rewardXp} 经验",
+                        if (progress.claimed) "§7奖励已领取" else "§a点击领取",
+                    ),
+                ),
+            )
+            actions[slot] = { p, _ ->
+                if (progress.claimed) {
+                    p.sendMessage(Component.text("该任务奖励已领取", NamedTextColor.RED))
+                } else if (progress.progress >= task.target) {
+                    val result = tasks.claim(p.uniqueId, task.id)
+                    p.sendMessage(Component.text(result, NamedTextColor.GREEN))
+                    p.closeInventory()
+                } else {
+                    p.sendMessage(Component.text("任务尚未完成", NamedTextColor.RED))
+                }
+            }
+        }
+        register(player, inv, "tasks", actions)
+    }
+
+    fun openTitles(player: Player) {
+        val list = titleCatalog()
+        val holder = Holder("titles")
+        val rows = ((list.size + 8) / 9).coerceAtMost(6).coerceAtLeast(1)
+        val inv = Bukkit.createInventory(holder, rows * 9, Component.text("选择称号"))
+        holder.backingInventory = inv
+        val actions = mutableMapOf<Int, (Player, InventoryClickEvent) -> Unit>()
+
+        list.forEachIndexed { index, title ->
+            val slot = index
+            if (slot >= rows * 9) return@forEachIndexed
+            val current = playerData.profileOf(player.uniqueId).title
+            val selected = current == title
+            inv.setItem(
+                slot,
+                icon(
+                    if (selected) Material.NAME_TAG else Material.PAPER,
+                    title,
+                    listOf(if (selected) "§a当前称号" else "§e点击使用"),
+                ),
+            )
+            actions[slot] = { p, _ ->
+                playerData.setTitle(p.uniqueId, title)
+                p.sendMessage(Component.text("已设置称号：$title", NamedTextColor.GREEN))
+                p.closeInventory()
+            }
+        }
+
+        // 最后一格放清除
+        val clearSlot = rows * 9 - 1
+        inv.setItem(clearSlot, icon(Material.BARRIER, "清除称号", listOf("§7点击取消当前称号")))
+        actions[clearSlot] = { p, _ ->
+            playerData.setTitle(p.uniqueId, null)
+            p.sendMessage(Component.text("已清除称号", NamedTextColor.GREEN))
+            p.closeInventory()
+        }
+        register(player, inv, "titles", actions)
+    }
+
+    /** 可配置称号目录；后续可改为读取 config/titles.yml。 */
+    private fun titleCatalog(): List<String> = listOf(
+        "新人",
+        "跑酷者",
+        "门之守护者",
+        "僵尸杀手",
+        "逃生专家",
+        "金色传说",
+    )
 
     private fun register(player: Player, inv: Inventory, menuId: String, actions: Map<Int, (Player, InventoryClickEvent) -> Unit>) {
         slots[player.uniqueId] = actions

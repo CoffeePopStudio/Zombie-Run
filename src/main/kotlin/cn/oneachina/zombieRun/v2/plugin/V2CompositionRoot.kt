@@ -70,7 +70,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
     val taskStorage: PlayerTaskPort = SqlitePlayerTaskRepository(plugin.dataFolder, logger)
     val taskService = TaskService(taskStorage, taskRepository, playerDataService, messages, logger, eventBus)
     val taskListener = V2TaskListener(taskService)
-    val guiService = GuiService(playerDataService, weaponService, logger)
+    val guiService = GuiService(playerDataService, weaponService, taskService, logger)
     val staminaService = StaminaService(logger)
     val combatListener = V2CombatListener(staminaService, scheduler, taskRegistry)
 

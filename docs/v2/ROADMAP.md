@@ -226,6 +226,32 @@
 
 ---
 
+## M13：地图可视化编辑命令
+
+- [x] `/zr2 mapflow list|info|init|set|stage|finish|remove`
+- [x] 在线配置 MapFlow：人数/倒计时/时长/奖励/初始武器
+- [x] 阶段增删改、门号设置、下一阶段链接、终点（门式/撤离）
+- [x] `init` 按现有门号自动生成阶段链
+- [x] Tab 补全支持
+
+## M14：任务 GUI
+
+- [x] `/zr2 menu tasks`：查看每日/每周任务进度，点击领取奖励
+- [x] 未完成 / 可领取 / 已领取状态展示
+
+## M15：称号 GUI
+
+- [x] `/zr2 menu titles`：选择称号 / 清除称号
+- [x] 名称标签显示当前称号
+
+## M16：GitHub Actions 自动构建
+
+- [x] `.github/workflows/build.yml`：push/PR → test+build shadowJar → 上传 artifact
+- [x] 打 tag `v*` 自动创建 Release 并附带 jar
+- [x] 构建脚本跨平台（移除 PowerShell 依赖版本计算）
+
+---
+
 ## 建议的第一个执行批次（批准后）
 
 1. 创建 `v2` 分支

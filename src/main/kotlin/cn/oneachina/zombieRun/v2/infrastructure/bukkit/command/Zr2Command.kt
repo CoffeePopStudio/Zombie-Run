@@ -13,6 +13,10 @@ import cn.oneachina.zombierun.v2.domain.door.PortalAxis
 import cn.oneachina.zombierun.v2.domain.door.PortalFront
 import cn.oneachina.zombierun.v2.domain.weapon.WeaponCategory
 import cn.oneachina.zombierun.v2.domain.weapon.WeaponDefinition
+import cn.oneachina.zombierun.v2.domain.game.FinishType
+import cn.oneachina.zombierun.v2.domain.game.MapFlowDefinition
+import cn.oneachina.zombierun.v2.domain.game.MapFlowFinish
+import cn.oneachina.zombierun.v2.domain.game.MapFlowStage
 import cn.oneachina.zombierun.v2.plugin.V2CompositionRoot
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -59,6 +63,7 @@ class Zr2Command(
             "title" -> handleTitle(sender, args.drop(1))
             "menu" -> handleMenu(sender, args.drop(1))
             "task" -> handleTask(sender, args.drop(1))
+            "mapflow" -> handleMapFlow(sender, args.drop(1))
             "v1" -> handleV1(sender, args.drop(1))
             else -> {
                 sender.sendMessage(Component.text("未知子命令：${args[0]}，输入 /zr2 help 查看帮助", NamedTextColor.RED))
@@ -94,8 +99,9 @@ class Zr2Command(
         sender.sendMessage(Component.text("/zr2 game list | status <世界> | start <世界> | end <世界> <human|zombie> | reset <世界>", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 weapon list | info <id> | add <id> <type> <category> <price> [name] | remove <id> | give <id> | random [category]", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 profile [玩家] | coins add|give|spend | xp add | title set|clear", NamedTextColor.YELLOW))
-        sender.sendMessage(Component.text("/zr2 menu profile|shop", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 menu profile|shop|tasks|titles", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 task list|claim <任务id>", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 mapflow list|info|init|set|stage|finish|remove", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 v1 migrate", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 reload", NamedTextColor.YELLOW))
     }
@@ -688,7 +694,9 @@ class Zr2Command(
         when (args.getOrNull(0)?.lowercase()) {
             "profile" -> root.guiService.openProfile(player)
             "shop" -> root.guiService.openShop(player)
-            else -> sender.sendMessage(Component.text("用法: /zr2 menu profile|shop", NamedTextColor.RED))
+            "tasks" -> root.guiService.openTasks(player)
+            "titles" -> root.guiService.openTitles(player)
+            else -> sender.sendMessage(Component.text("用法: /zr2 menu profile|shop|tasks|titles", NamedTextColor.RED))
         }
     }
 
@@ -722,6 +730,228 @@ class Zr2Command(
         }
     }
 
+    // ---------- map-flow 编辑 ----------
+
+    private fun handleMapFlow(sender: CommandSender, args: List<String>) {
+        if (!sender.hasPermission("zombie.run.v2.admin")) {
+            noPermission(sender)
+            return
+        }
+        when (args.getOrNull(0)?.lowercase()) {
+            "list" -> {
+                val flows = root.arenaRepository.all().filter { it.mapFlow != null }
+                if (flows.isEmpty()) {
+                    sender.sendMessage(Component.text("没有配置 map-flow 的 arena", NamedTextColor.YELLOW))
+                } else {
+                    flows.forEach { a ->
+                        val f = a.mapFlow!!
+                        sender.sendMessage(Component.text("- ${a.name}  stages=${f.stages.size} finish=${f.finish.type.name}", NamedTextColor.GREEN))
+                    }
+                }
+            }
+            "info" -> {
+                val arena = root.arenaRepository.byName(args.getOrNull(1) ?: "") ?: run {
+                    sender.sendMessage(Component.text("arena 不存在", NamedTextColor.RED)); return
+                }
+                val f = arena.mapFlow ?: run {
+                    sender.sendMessage(Component.text("${arena.name} 未配置 map-flow", NamedTextColor.YELLOW)); return
+                }
+                sender.sendMessage(Component.text("===== map-flow ${arena.name} =====", NamedTextColor.GREEN))
+                sender.sendMessage(Component.text("min-players=${f.minPlayers} start=${f.startDelaySeconds}s max=${f.maxDurationSeconds}s", NamedTextColor.GREEN))
+                sender.sendMessage(Component.text("reward: human ${f.rewardCoinsHuman}/${f.rewardXpHuman} zombie ${f.rewardCoinsZombie}/${f.rewardXpZombie} starter=${f.starterWeaponId ?: "-"}", NamedTextColor.GREEN))
+                sender.sendMessage(Component.text("finish: ${f.finish.type.name} door=${f.finish.doorNumber ?: "-"}", NamedTextColor.GREEN))
+                f.stages.forEachIndexed { index, s ->
+                    val next = s.nextStageId ?: "终点"
+                    sender.sendMessage(Component.text("  ${index + 1}. ${s.id} [${s.label}] doors=${s.doorNumbers.joinToString("/")} -> $next", NamedTextColor.AQUA))
+                }
+            }
+            "init" -> {
+                val arena = root.arenaRepository.byName(args.getOrNull(1) ?: "") ?: run {
+                    sender.sendMessage(Component.text("arena 不存在", NamedTextColor.RED)); return
+                }
+                val numbered = arena.doors.mapNotNull { it.number }.sorted()
+                val stages = if (numbered.isEmpty()) {
+                    listOf(MapFlowStage("s1", "阶段1", listOf(1)))
+                } else {
+                    numbered.mapIndexed { index, n ->
+                        MapFlowStage("s${index + 1}", "阶段${index + 1}", listOf(n), if (index == numbered.lastIndex) null else "s${index + 2}")
+                    }
+                }
+                val flow = MapFlowDefinition(
+                    arenaName = arena.name,
+                    world = arena.world,
+                    minPlayers = 1,
+                    startDelaySeconds = 10,
+                    maxDurationSeconds = 600,
+                    stages = stages,
+                    finish = MapFlowFinish(FinishType.DOOR, numbered.lastOrNull() ?: 1),
+                )
+                root.arenaRepository.save(arena.copy(mapFlow = flow))
+                sender.sendMessage(Component.text("已为 ${arena.name} 初始化 map-flow（${stages.size} 个阶段）", NamedTextColor.GREEN))
+            }
+            "set" -> handleMapFlowSet(sender, args.drop(1))
+            "stage" -> handleMapFlowStage(sender, args.drop(1))
+            "finish" -> handleMapFlowFinish(sender, args.drop(1))
+            "remove" -> {
+                val arena = root.arenaRepository.byName(args.getOrNull(1) ?: "") ?: run {
+                    sender.sendMessage(Component.text("arena 不存在", NamedTextColor.RED)); return
+                }
+                if (arena.mapFlow == null) {
+                    sender.sendMessage(Component.text("${arena.name} 未配置 map-flow", NamedTextColor.YELLOW))
+                    return
+                }
+                root.arenaRepository.save(arena.copy(mapFlow = null))
+                sender.sendMessage(Component.text("已移除 ${arena.name} 的 map-flow", NamedTextColor.GREEN))
+            }
+            else -> sender.sendMessage(
+                Component.text("用法: /zr2 mapflow list|info|init|set|stage|finish|remove", NamedTextColor.RED),
+            )
+        }
+    }
+
+    private fun handleMapFlowSet(sender: CommandSender, args: List<String>) {
+        if (args.size < 3) {
+            sender.sendMessage(Component.text("用法: /zr2 mapflow set <arena> <key> <value>", NamedTextColor.RED))
+            return
+        }
+        val arena = root.arenaRepository.byName(args[0]) ?: run {
+            sender.sendMessage(Component.text("arena 不存在", NamedTextColor.RED)); return
+        }
+        val flow = arena.mapFlow ?: run {
+            sender.sendMessage(Component.text("${arena.name} 未配置 map-flow，先用 /zr2 mapflow init", NamedTextColor.YELLOW)); return
+        }
+        val key = args[1].lowercase()
+        val value = args[2]
+        val updated: MapFlowDefinition = when (key) {
+            "min-players" -> flow.copy(minPlayers = value.toIntOrNull() ?: run { badNumber(sender); return })
+            "start-delay-seconds" -> flow.copy(startDelaySeconds = value.toIntOrNull() ?: run { badNumber(sender); return })
+            "max-duration-seconds" -> flow.copy(maxDurationSeconds = value.toIntOrNull() ?: run { badNumber(sender); return })
+            "reward-coins-human" -> flow.copy(rewardCoinsHuman = value.toIntOrNull() ?: run { badNumber(sender); return })
+            "reward-xp-human" -> flow.copy(rewardXpHuman = value.toIntOrNull() ?: run { badNumber(sender); return })
+            "reward-coins-zombie" -> flow.copy(rewardCoinsZombie = value.toIntOrNull() ?: run { badNumber(sender); return })
+            "reward-xp-zombie" -> flow.copy(rewardXpZombie = value.toIntOrNull() ?: run { badNumber(sender); return })
+            "starter-weapon" -> flow.copy(starterWeaponId = value.ifBlank { null })
+            else -> {
+                sender.sendMessage(Component.text("未知 key: $key", NamedTextColor.RED))
+                return
+            }
+        }
+        root.arenaRepository.save(arena.copy(mapFlow = updated))
+        sender.sendMessage(Component.text("已更新 ${arena.name} map-flow $key = $value", NamedTextColor.GREEN))
+    }
+
+    private fun handleMapFlowStage(sender: CommandSender, args: List<String>) {
+        if (args.size < 2) {
+            sender.sendMessage(Component.text("用法: /zr2 mapflow stage add|set|next|remove <arena> <id> [doorNumbers] [nextId]", NamedTextColor.RED))
+            return
+        }
+        val arena = root.arenaRepository.byName(args[1]) ?: run {
+            sender.sendMessage(Component.text("arena 不存在", NamedTextColor.RED)); return
+        }
+        val flow = arena.mapFlow ?: run {
+            sender.sendMessage(Component.text("${arena.name} 未配置 map-flow，先用 /zr2 mapflow init", NamedTextColor.YELLOW)); return
+        }
+        when (args[0].lowercase()) {
+            "add" -> {
+                if (args.size < 4) {
+                    sender.sendMessage(Component.text("用法: /zr2 mapflow stage add <arena> <id> <doorNumbers...> [label]", NamedTextColor.RED))
+                    return
+                }
+                val id = args[2]
+                val doors = args.drop(3).takeWhile { it.toIntOrNull() != null }.map { it.toInt() }
+                val label = args.drop(3 + doors.size).joinToString(" ").ifBlank { id }
+                if (doors.isEmpty()) { badNumber(sender); return }
+                if (flow.stages.any { it.id == id }) {
+                    sender.sendMessage(Component.text("阶段 $id 已存在", NamedTextColor.RED))
+                    return
+                }
+                val updated = flow.copy(stages = flow.stages + MapFlowStage(id, label, doors))
+                root.arenaRepository.save(arena.copy(mapFlow = updated))
+                sender.sendMessage(Component.text("已添加阶段 $id（${doors.joinToString("/")}）", NamedTextColor.GREEN))
+            }
+            "set" -> {
+                if (args.size < 4) {
+                    sender.sendMessage(Component.text("用法: /zr2 mapflow stage set <arena> <id> <doorNumbers...>", NamedTextColor.RED))
+                    return
+                }
+                val id = args[2]
+                val existing = flow.stages.firstOrNull { it.id == id } ?: run {
+                    sender.sendMessage(Component.text("阶段 $id 不存在", NamedTextColor.RED)); return
+                }
+                val doors = args.drop(3).takeWhile { it.toIntOrNull() != null }.map { it.toInt() }
+                if (doors.isEmpty()) { badNumber(sender); return }
+                val updated = flow.copy(
+                    stages = flow.stages.map { if (it.id == id) existing.copy(doorNumbers = doors) else it },
+                )
+                root.arenaRepository.save(arena.copy(mapFlow = updated))
+                sender.sendMessage(Component.text("已更新阶段 $id 门号=${doors.joinToString("/")}", NamedTextColor.GREEN))
+            }
+            "next" -> {
+                if (args.size < 3) {
+                    sender.sendMessage(Component.text("用法: /zr2 mapflow stage next <arena> <id> <nextId|none>", NamedTextColor.RED))
+                    return
+                }
+                val id = args[2]
+                val existing = flow.stages.firstOrNull { it.id == id } ?: run {
+                    sender.sendMessage(Component.text("阶段 $id 不存在", NamedTextColor.RED)); return
+                }
+                val next = args.getOrNull(3)?.takeIf { it.lowercase() != "none" }
+                if (next != null && flow.stages.none { it.id == next }) {
+                    sender.sendMessage(Component.text("下一阶段 $next 不存在", NamedTextColor.RED))
+                    return
+                }
+                val updated = flow.copy(
+                    stages = flow.stages.map { if (it.id == id) existing.copy(nextStageId = next) else it },
+                )
+                root.arenaRepository.save(arena.copy(mapFlow = updated))
+                sender.sendMessage(Component.text("已设置阶段 $id 的下一阶段=${next ?: "终点"}", NamedTextColor.GREEN))
+            }
+            "remove" -> {
+                val id = args.getOrNull(2) ?: run {
+                    sender.sendMessage(Component.text("用法: /zr2 mapflow stage remove <arena> <id>", NamedTextColor.RED)); return
+                }
+                if (flow.stages.size <= 1) {
+                    sender.sendMessage(Component.text("至少保留一个阶段", NamedTextColor.RED))
+                    return
+                }
+                val updated = flow.copy(stages = flow.stages.filterNot { it.id == id })
+                if (updated.stages.size == flow.stages.size) {
+                    sender.sendMessage(Component.text("阶段 $id 不存在", NamedTextColor.RED))
+                    return
+                }
+                root.arenaRepository.save(arena.copy(mapFlow = updated))
+                sender.sendMessage(Component.text("已移除阶段 $id", NamedTextColor.GREEN))
+            }
+            else -> sender.sendMessage(Component.text("未知 stage 子命令", NamedTextColor.RED))
+        }
+    }
+
+    private fun handleMapFlowFinish(sender: CommandSender, args: List<String>) {
+        if (args.size < 2) {
+            sender.sendMessage(Component.text("用法: /zr2 mapflow finish <arena> door <门号> | /zr2 mapflow finish <arena> extraction", NamedTextColor.RED))
+            return
+        }
+        val arena = root.arenaRepository.byName(args[0]) ?: run {
+            sender.sendMessage(Component.text("arena 不存在", NamedTextColor.RED)); return
+        }
+        val flow = arena.mapFlow ?: run {
+            sender.sendMessage(Component.text("${arena.name} 未配置 map-flow，先用 /zr2 mapflow init", NamedTextColor.YELLOW)); return
+        }
+        val finish = when (args.getOrNull(1)?.lowercase()) {
+            "door" -> {
+                val n = args.getOrNull(2)?.toIntOrNull() ?: run { badNumber(sender); return }
+                MapFlowFinish(FinishType.DOOR, n)
+            }
+            "extraction" -> MapFlowFinish(FinishType.EXTRACTION, null)
+            else -> {
+                sender.sendMessage(Component.text("finish 类型必须是 door 或 extraction", NamedTextColor.RED))
+                return
+            }
+        }
+        root.arenaRepository.save(arena.copy(mapFlow = flow.copy(finish = finish)))
+        sender.sendMessage(Component.text("已设置 ${arena.name} 终点=${finish.type.name} door=${finish.doorNumber ?: "-"}", NamedTextColor.GREEN))
+    }
+
     // ---------- v1 migration ----------
 
     private fun handleV1(sender: CommandSender, args: List<String>) {
@@ -746,7 +976,7 @@ class Zr2Command(
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): List<String> {
         if (args.size == 1) {
-            return listOf("help", "version", "reload", "arena", "door", "button", "respawn", "game", "weapon", "profile", "coins", "xp", "title", "menu", "task", "v1")
+            return listOf("help", "version", "reload", "arena", "door", "button", "respawn", "game", "weapon", "profile", "coins", "xp", "title", "menu", "task", "mapflow", "v1")
                 .filter { it.startsWith(args[0].lowercase()) }
         }
         return when (args[0].lowercase()) {
@@ -794,8 +1024,15 @@ class Zr2Command(
                 else -> emptyList()
             }
             "xp" -> if (args.size == 2) listOf("add").filter { it.startsWith(args[1].lowercase()) } else emptyList()
-            "menu" -> if (args.size == 2) listOf("profile", "shop").filter { it.startsWith(args[1].lowercase()) } else emptyList()
+            "menu" -> if (args.size == 2) listOf("profile", "shop", "tasks", "titles").filter { it.startsWith(args[1].lowercase()) } else emptyList()
             "task" -> if (args.size == 2) listOf("list", "claim").filter { it.startsWith(args[1].lowercase()) } else if (args.size == 3 && args[1].equals("claim", true)) root.taskService.allTasks().map { it.id }.filter { it.startsWith(args[2], true) } else emptyList()
+            "mapflow" -> when (args.size) {
+                2 -> listOf("list", "info", "init", "set", "stage", "finish", "remove").filter { it.startsWith(args[1].lowercase()) }
+                3 -> if (args[1] in listOf("info", "init", "set", "stage", "finish", "remove")) arenaNames(args[2]) else emptyList()
+                4 -> if (args[1].equals("set", true)) listOf("min-players", "start-delay-seconds", "max-duration-seconds", "reward-coins-human", "reward-xp-human", "reward-coins-zombie", "reward-xp-zombie", "starter-weapon").filter { it.startsWith(args[3].lowercase()) } else if (args[1].equals("finish", true)) listOf("door", "extraction").filter { it.startsWith(args[3].lowercase()) } else emptyList()
+                5 -> if (args[1].equals("stage", true)) listOf("add", "set", "next", "remove").filter { it.startsWith(args[3].lowercase()) } else emptyList()
+                else -> emptyList()
+            }
             "v1" -> if (args.size == 2) listOf("migrate").filter { it.startsWith(args[1].lowercase()) } else emptyList()
             "profile" -> emptyList()
             else -> emptyList()

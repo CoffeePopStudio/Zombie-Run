@@ -3,7 +3,7 @@
 > ⚠️ 当前为 `v2` 重构分支：v1 稳定版在 `main` 分支。
 > 架构设计见 [docs/v2/ARCHITECTURE.md](docs/v2/ARCHITECTURE.md)，路线图见 [docs/v2/ROADMAP.md](docs/v2/ROADMAP.md)。
 > 命令参考见 [docs/v2/COMMANDS.md](docs/v2/COMMANDS.md)，升级指南见 [docs/v2/UPGRADE.md](docs/v2/UPGRADE.md)，发布说明见 [docs/v2/RELEASE.md](docs/v2/RELEASE.md)。
-> 当前进度：**M0–M11：门系统/游戏流程/体力/武器/经济/等级/GUI/PAPI/迁移/特殊门/任务系统/完整 MapFlow 流程框架**。
+> 当前进度：**M0–M16：门系统/游戏流程/体力/武器/经济/等级/GUI/PAPI/迁移/特殊门/任务系统/MapFlow 流程框架/地图编辑命令/任务&称号 GUI/GitHub Actions**。
 
 非对称 PvP 小游戏插件 —— 人类通过层层大门逃生，僵尸全力感染。
 
@@ -21,8 +21,9 @@
 /zr2 game list | status <世界> | start <世界> | end <世界> <human|zombie> | reset <世界>
 /zr2 weapon list | info <id> | add <id> <type> <category> <price> [name] | remove <id> | give <id> | random [category]
 /zr2 profile [玩家] | coins add|give|spend | xp add | title set|clear
-/zr2 menu profile|shop
+/zr2 menu profile|shop|tasks|titles
 /zr2 task list|claim <任务id>
+/zr2 mapflow list|info|init|set|stage|finish|remove
 /zr2 v1 migrate
 /zr2 reload
 ```
