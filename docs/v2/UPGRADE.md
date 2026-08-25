@@ -39,5 +39,10 @@
 
 - 特殊门行为（电梯/地铁/机场）已迁移为 v2 `behavior` 配置。
 - 直升机撤离按钮已支持：使用 v1 `buttons` 中 `mode: escape` 的按钮触发。
-- v1 经济/任务数据迁移将在后续版本提供独立命令。
-- 当前 v2 的硬币/XP/称号从零开始，事件计数（过门/击杀）实时写入 `player_data_v2`。
+- 玩家数据迁移命令：
+  ```
+  /zr2 v1 migrate-data            # 导入硬币/等级/经验/称号/击杀，已存在玩家跳过
+  /zr2 v1 migrate-data --overwrite  # 覆盖已存在玩家
+  ```
+  数据来源：v1 `plugins/zombie-run/data/zr_economy.db`（`zr_economy` + `player_progression` 表）。
+- 关于门方块快照：本轮 v1 `scandata` 快照暂未自动转换，仍需用 v2 命令重建或等待后续工具。

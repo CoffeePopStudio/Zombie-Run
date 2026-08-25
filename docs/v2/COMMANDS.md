@@ -12,6 +12,7 @@
 | `/zr2 version` | 查看 v2 版本 |
 | `/zr2 reload` | 管理员，重新加载配置/武器/竞技场 |
 | `/zr2 v1 migrate` | 管理员，从 v1 `config/config.yml` 迁移到 v2 arena |
+| `/zr2 v1 migrate-data [--overwrite]` | 管理员，从 v1 `data/zr_economy.db` 导入玩家硬币/等级/经验/称号/击杀到 v2 |
 
 ## 竞技场/门/按钮/重生点
 

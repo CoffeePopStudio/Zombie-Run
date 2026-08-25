@@ -955,20 +955,35 @@ class Zr2Command(
     // ---------- v1 migration ----------
 
     private fun handleV1(sender: CommandSender, args: List<String>) {
-        if (args.getOrNull(0)?.lowercase() != "migrate") {
-            sender.sendMessage(Component.text("用法: /zr2 v1 migrate", NamedTextColor.RED))
-            return
-        }
         if (!sender.hasPermission("zombie.run.v2.admin")) {
             noPermission(sender)
             return
         }
-        val report = root.v1MigrationService.migrate()
-        sender.sendMessage(Component.text("===== v1 迁移报告 =====", NamedTextColor.GREEN))
-        val worldName = report.world ?: "-"
-        sender.sendMessage(Component.text("world=$worldName doors=${report.doorsMigrated} buttons=${report.buttonsMigrated} respawns=${report.respawnsMigrated}", NamedTextColor.GREEN))
-        report.skipped.forEach { message ->
-            sender.sendMessage(Component.text("跳过: $message", NamedTextColor.YELLOW))
+        when (args.getOrNull(0)?.lowercase()) {
+            "migrate" -> {
+                val report = root.v1MigrationService.migrate()
+                sender.sendMessage(Component.text("===== v1 配置迁移报告 =====", NamedTextColor.GREEN))
+                val worldName = report.world ?: "-"
+                sender.sendMessage(Component.text("world=$worldName doors=${report.doorsMigrated} buttons=${report.buttonsMigrated} respawns=${report.respawnsMigrated}", NamedTextColor.GREEN))
+                report.skipped.forEach { message ->
+                    sender.sendMessage(Component.text("跳过: $message", NamedTextColor.YELLOW))
+                }
+            }
+            "migrate-data" -> {
+                val overwrite = args.any { it.equals("--overwrite", true) }
+                val report = root.v1MigrationService.migrateData(overwrite)
+                sender.sendMessage(Component.text("===== v1 数据迁移报告 =====", NamedTextColor.GREEN))
+                sender.sendMessage(
+                    Component.text(
+                        "players=${report.playersMigrated} skipped=${report.playersSkipped} coins=${report.totalCoins} titles=${report.titlesImported}",
+                        NamedTextColor.GREEN,
+                    ),
+                )
+                report.skipped.forEach { message ->
+                    sender.sendMessage(Component.text("跳过: $message", NamedTextColor.YELLOW))
+                }
+            }
+            else -> sender.sendMessage(Component.text("用法: /zr2 v1 migrate | /zr2 v1 migrate-data [--overwrite]", NamedTextColor.RED))
         }
     }
 
@@ -1033,7 +1048,7 @@ class Zr2Command(
                 5 -> if (args[1].equals("stage", true)) listOf("add", "set", "next", "remove").filter { it.startsWith(args[3].lowercase()) } else emptyList()
                 else -> emptyList()
             }
-            "v1" -> if (args.size == 2) listOf("migrate").filter { it.startsWith(args[1].lowercase()) } else emptyList()
+            "v1" -> if (args.size == 2 || (args.size == 3 && args[2].equals("--overwrite", true))) listOf("migrate", "migrate-data").filter { it.startsWith(args[1].lowercase()) } else emptyList()
             "profile" -> emptyList()
             else -> emptyList()
         }

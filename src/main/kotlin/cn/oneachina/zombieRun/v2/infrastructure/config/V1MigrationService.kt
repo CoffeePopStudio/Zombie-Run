@@ -13,18 +13,24 @@ import cn.oneachina.zombierun.v2.domain.door.DoorMode
 import cn.oneachina.zombierun.v2.domain.door.Portal
 import cn.oneachina.zombierun.v2.domain.door.PortalAxis
 import cn.oneachina.zombierun.v2.domain.door.PortalFront
+import cn.oneachina.zombierun.v2.domain.player.PlayerProfile
+import cn.oneachina.zombierun.v2.ports.PlayerDataPort
 import cn.oneachina.zombierun.v2.support.V2Logger
 import org.bukkit.configuration.ConfigurationSection
 import org.bukkit.configuration.file.YamlConfiguration
 import java.io.File
+import java.sql.DriverManager
+import java.util.UUID
 
 /**
  * v1 `config/config.yml` → v2 `config/arenas` 目录一次性迁移。
  * 门/按钮/重生点可迁移；v1 方块快照、特殊门行为暂需人工复查。
+ * 另支持 v1 `data/zr_economy.db` 玩家数据迁移到 v2 SQLite。
  */
 class V1MigrationService(
     private val dataFolder: File,
     private val arenaRepository: ArenaYamlRepository,
+    private val playerDataPort: PlayerDataPort,
     private val logger: V2Logger,
 ) {
     data class MigrationReport(
@@ -34,6 +40,81 @@ class V1MigrationService(
         val respawnsMigrated: Int,
         val skipped: List<String>,
     )
+
+    data class DataMigrationReport(
+        val playersMigrated: Int,
+        val playersSkipped: Int,
+        val totalCoins: Long,
+        val titlesImported: Int,
+        val skipped: List<String>,
+    )
+
+    /** 从 v1 `data/zr_economy.db` 导入玩家硬币/等级/经验/称号/击杀到 v2。 */
+    fun migrateData(overwriteExisting: Boolean = false): DataMigrationReport {
+        val v1Db = File(File(dataFolder.parentFile, "zombie-run"), "data/zr_economy.db")
+        if (!v1Db.exists()) {
+            logger.warn("v1 data db not found: $v1Db")
+            return DataMigrationReport(0, 0, 0, 0, listOf("v1 data db not found: $v1Db"))
+        }
+
+        val skipped = mutableListOf<String>()
+        var playersMigrated = 0
+        var playersSkipped = 0
+        var totalCoins = 0L
+        var titlesImported = 0
+
+        try {
+            DriverManager.getConnection("jdbc:sqlite:${v1Db.absolutePath.replace('\\', '/')}").use { conn ->
+                val economy = HashMap<String, Int>()
+                conn.createStatement().executeQuery("SELECT uuid, coins FROM zr_economy").use { rs ->
+                    while (rs.next()) {
+                        val uuid = rs.getString("uuid")
+                        if (uuid != null) economy[uuid] = rs.getInt("coins")
+                    }
+                }
+
+                val progression = HashMap<String, PlayerProfile>()
+                conn.createStatement().executeQuery(
+                    "SELECT uuid, level, xp, total_kills, equipped_title FROM player_progression",
+                ).use { rs ->
+                    while (rs.next()) {
+                        val uuid = rs.getString("uuid") ?: continue
+                        val id = runCatching { UUID.fromString(uuid) }.getOrNull() ?: continue
+                        val coins = economy[uuid] ?: 0
+                        val profile = PlayerProfile(
+                            playerId = id,
+                            coins = coins,
+                            xp = rs.getInt("xp"),
+                            level = rs.getInt("level").coerceAtLeast(1),
+                            title = rs.getString("equipped_title")?.takeIf { it.isNotBlank() },
+                            zombieKills = rs.getInt("total_kills"),
+                        )
+                        progression[uuid] = profile
+                    }
+                }
+
+                progression.forEach { (uuid, profile) ->
+                    val existing = playerDataPort.load(profile.playerId)
+                    if (existing != null && !overwriteExisting) {
+                        playersSkipped++
+                        skipped += "player $uuid already exists; skip (use /zr2 v1 migrate-data --overwrite to replace)"
+                        return@forEach
+                    }
+                    playerDataPort.save(profile)
+                    if (profile.title != null) titlesImported++
+                    playersMigrated++
+                    totalCoins += profile.coins
+                    logger.info("v1 data migrated player ${profile.playerId} (${profile.coins} coins, title=${profile.title ?: "-"})")
+                }
+            }
+        } catch (e: Exception) {
+            logger.severe("v1 data migration failed: ${e.message}")
+            skipped += "migration error: ${e.message}"
+        }
+
+        logger.info("v1 data migration done: players=$playersMigrated skipped=$playersSkipped")
+        return DataMigrationReport(playersMigrated, playersSkipped, totalCoins, titlesImported, skipped)
+    }
 
     fun migrate(): MigrationReport {
         val v1Folder = File(dataFolder.parentFile, "zombie-run")
