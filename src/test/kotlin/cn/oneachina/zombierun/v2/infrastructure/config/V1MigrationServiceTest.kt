@@ -60,7 +60,7 @@ class V1MigrationServiceTest {
         v1Db(dir)
         val v2Folder = File(dir, "plugins/zombie-run-v2")
         val fake = FakePlayerData()
-        val service = V1MigrationService(v2Folder, ArenaYamlRepository(v2Folder, V2Logger(Logger.getLogger("test"))), fake, V2Logger(Logger.getLogger("test")))
+        val service = V1MigrationService(v2Folder, ArenaYamlRepository(v2Folder, V2Logger(Logger.getLogger("test"))), fake, BlockSnapshotStore(v2Folder), V2Logger(Logger.getLogger("test")))
 
         val report = service.migrateData()
 
@@ -83,12 +83,67 @@ class V1MigrationServiceTest {
         val fake = FakePlayerData()
         val existing = PlayerProfile(UUID.fromString("6e81503a-8a52-3805-bff6-548680ebf5d2"), coins = 999)
         fake.store[existing.playerId] = existing
-        val service = V1MigrationService(v2Folder, ArenaYamlRepository(v2Folder, V2Logger(Logger.getLogger("test"))), fake, V2Logger(Logger.getLogger("test")))
+        val service = V1MigrationService(v2Folder, ArenaYamlRepository(v2Folder, V2Logger(Logger.getLogger("test"))), fake, BlockSnapshotStore(v2Folder), V2Logger(Logger.getLogger("test")))
 
         val report = service.migrateData()
 
         assertEquals(1, report.playersMigrated)
         assertEquals(1, report.playersSkipped)
         assertEquals(999, fake.store[existing.playerId]!!.coins)
+    }
+
+    @Test
+    fun `migrate attaches v1 door snapshot matching the door region`() {
+        val dir = createTempDirectory("zr2-migrate-snap").toFile()
+        // v1 config with one door at region x=10, y=64..66, z=10..20
+        val v1Config = File(dir, "plugins/zombie-run/config/config.yml")
+        v1Config.parentFile.mkdirs()
+        v1Config.writeText(
+            """
+            game:
+              world: test_world
+            doors:
+              door_1:
+                x1: 10
+                y1: 64
+                z1: 10
+                x2: 10
+                y2: 66
+                z2: 20
+                open-time: 15
+                close-time: 15
+                door-number: 1
+                mode: normal
+            """.trimIndent(),
+        )
+        // v1 scandata: absolute coords inside the door region
+        val scandata = File(dir, "plugins/zombie-run/config/doors/door_999.scandata.yml")
+        scandata.parentFile.mkdirs()
+        scandata.writeText(
+            """
+            10,64,10: AIR
+            10,65,10: STONE
+            10,66,10: AIR
+            999,999,999: AIR
+            """.trimIndent(),
+        )
+
+        val v2Folder = File(dir, "plugins/zombie-run-v2")
+        val fake = FakePlayerData()
+        val service = V1MigrationService(v2Folder, ArenaYamlRepository(v2Folder, V2Logger(Logger.getLogger("test"))), fake, BlockSnapshotStore(v2Folder), V2Logger(Logger.getLogger("test")))
+
+        val report = service.migrate()
+
+        assertEquals(1, report.doorsMigrated)
+        assertEquals(1, report.snapshotsImported)
+        assertEquals(1, report.snapshotsAttached)
+        val saved = ArenaYamlRepository(v2Folder, V2Logger(Logger.getLogger("test"))).loadAll().single()
+        val door = saved.doors.single()
+        assertEquals("door_999", door.snapshotId)
+        // v2 snapshot store contains the copied snapshot (full v1 scandata preserved)
+        val stored = BlockSnapshotStore(v2Folder).load("door_999")
+        assertEquals("STONE", stored["10,65,10"])
+        assertEquals("AIR", stored["10,64,10"])
+        assertEquals("AIR", stored["999,999,999"])
     }
 }

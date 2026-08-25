@@ -964,7 +964,7 @@ class Zr2Command(
                 val report = root.v1MigrationService.migrate()
                 sender.sendMessage(Component.text("===== v1 配置迁移报告 =====", NamedTextColor.GREEN))
                 val worldName = report.world ?: "-"
-                sender.sendMessage(Component.text("world=$worldName doors=${report.doorsMigrated} buttons=${report.buttonsMigrated} respawns=${report.respawnsMigrated}", NamedTextColor.GREEN))
+                sender.sendMessage(Component.text("world=$worldName doors=${report.doorsMigrated} buttons=${report.buttonsMigrated} respawns=${report.respawnsMigrated} | snapshots imported=${report.snapshotsImported} attached=${report.snapshotsAttached}", NamedTextColor.GREEN))
                 report.skipped.forEach { message ->
                     sender.sendMessage(Component.text("跳过: $message", NamedTextColor.YELLOW))
                 }

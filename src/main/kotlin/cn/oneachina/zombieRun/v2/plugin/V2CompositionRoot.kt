@@ -63,7 +63,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
     val weaponIntegration: WeaponIntegrationPort = QaWeaponIntegrationPort(logger)
     val weaponService = WeaponService(weaponRepository, weaponIntegration, messages, logger)
     val playerDataRepository: PlayerDataPort = SqlitePlayerDataRepository(plugin.dataFolder, logger)
-    val v1MigrationService = V1MigrationService(plugin.dataFolder, arenaRepository, playerDataRepository, logger)
+    val v1MigrationService = V1MigrationService(plugin.dataFolder, arenaRepository, playerDataRepository, snapshotStore, logger)
     val playerDataService = PlayerDataService(playerDataRepository, messages, logger, eventBus)
     val playerDataListener = V2PlayerDataListener(playerDataService)
     val taskRepository = TaskYamlRepository(plugin.dataFolder, logger)

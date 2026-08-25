@@ -31,6 +31,7 @@ class V1MigrationService(
     private val dataFolder: File,
     private val arenaRepository: ArenaYamlRepository,
     private val playerDataPort: PlayerDataPort,
+    private val snapshotStore: BlockSnapshotStore,
     private val logger: V2Logger,
 ) {
     data class MigrationReport(
@@ -38,6 +39,8 @@ class V1MigrationService(
         val doorsMigrated: Int,
         val buttonsMigrated: Int,
         val respawnsMigrated: Int,
+        val snapshotsImported: Int,
+        val snapshotsAttached: Int,
         val skipped: List<String>,
     )
 
@@ -121,7 +124,7 @@ class V1MigrationService(
         val v1Config = File(v1Folder, "config/config.yml")
         if (!v1Config.exists()) {
             logger.warn("v1 config not found: $v1Config")
-            return MigrationReport(null, 0, 0, 0, listOf("v1 config not found: $v1Config"))
+            return MigrationReport(null, 0, 0, 0, 0, 0, listOf("v1 config not found: $v1Config"))
         }
 
         val yaml = YamlConfiguration.loadConfiguration(v1Config)
@@ -130,10 +133,15 @@ class V1MigrationService(
         val buttons = migrateButtons(yaml.getConfigurationSection("buttons"), world)
         val respawns = migrateRespawns(yaml.getConfigurationSection("respawns"), world)
 
+        // 导入所有 v1 门快照到 v2 存储（数据不丢），再按区域匹配关联
+        val v1Snapshots = loadV1Snapshots(File(v1Folder, "config/doors"))
+        v1Snapshots.forEach { (id, blocks) -> snapshotStore.save(id, blocks) }
+        val (doorsWithSnapshots, snapshotsAttached) = attachSnapshots(doors, v1Snapshots)
+
         val arenaName = "migrated_v1"
-        arenaRepository.save(ArenaDefinition(arenaName, world, doors, buttons, respawns))
-        logger.info("v1 migration saved arena '$arenaName': doors=${doors.size}, buttons=${buttons.size}, respawns=${respawns.size}")
-        return MigrationReport(world, doors.size, buttons.size, respawns.size, emptyList())
+        arenaRepository.save(ArenaDefinition(arenaName, world, doorsWithSnapshots, buttons, respawns))
+        logger.info("v1 migration saved arena '$arenaName': doors=${doorsWithSnapshots.size}, buttons=${buttons.size}, respawns=${respawns.size}, snapshots imported=${v1Snapshots.size} attached=$snapshotsAttached")
+        return MigrationReport(world, doorsWithSnapshots.size, buttons.size, respawns.size, v1Snapshots.size, snapshotsAttached, emptyList())
     }
 
     private fun migrateDoors(section: ConfigurationSection?, world: String): List<DoorDefinition> {
@@ -241,5 +249,76 @@ class V1MigrationService(
             departureMessage = s("departure-msg"),
             arrivalMessage = s("arrival-msg"),
         )
+    }
+
+    // ---------- 门方块快照迁移 ----------
+
+    // 读取 v1 config/doors/*.scandata.yml，key 为 "x,y,z"，value 为材质名。
+    private fun loadV1Snapshots(dir: File): Map<String, Map<String, String>> {
+        if (!dir.exists()) return emptyMap()
+        val result = LinkedHashMap<String, Map<String, String>>()
+        dir.listFiles { f -> f.isFile && f.name.endsWith(".scandata.yml") }
+            ?.sortedBy { it.name }
+            ?.forEach { file ->
+                val blocks = LinkedHashMap<String, String>()
+                file.readLines().forEach { line ->
+                    val trimmed = line.trim()
+                    if (trimmed.isEmpty()) return@forEach
+                    val idx = trimmed.indexOf(':')
+                    if (idx <= 0) return@forEach
+                    blocks[trimmed.substring(0, idx).trim()] = trimmed.substring(idx + 1).trim()
+                }
+                if (blocks.isNotEmpty()) {
+                    result[file.name.removeSuffix(".scandata.yml")] = blocks
+                }
+            }
+        logger.info("loaded ${result.size} v1 door snapshot(s) from ${dir.absolutePath}")
+        return result
+    }
+
+    // 将已导入 v2 存储的 v1 快照按“方块坐标落在门区域内”的最佳匹配关联到门。
+    // 返回 (带 snapshotId 的门列表, 关联成功的快照数)。
+    private fun attachSnapshots(
+        doors: List<DoorDefinition>,
+        v1Snapshots: Map<String, Map<String, String>>,
+    ): Pair<List<DoorDefinition>, Int> {
+        if (v1Snapshots.isEmpty() || doors.isEmpty()) return doors to 0
+
+        var attached = 0
+        val snapshotIds = LinkedHashSet<String>()
+        val result = doors.map { door ->
+            val region = door.region
+            val best = v1Snapshots.entries.maxByOrNull { (_, blocks) ->
+                blocks.keys.count { key ->
+                    coordOf(key)?.let { (x, y, z) ->
+                        x in region.minX..region.maxX && y in region.minY..region.maxY && z in region.minZ..region.maxZ
+                    } == true
+                }
+            }
+            val bestId = best?.key ?: return@map door
+            val overlap = best.value.keys.count { key ->
+                coordOf(key)?.let { (x, y, z) ->
+                    x in region.minX..region.maxX && y in region.minY..region.maxY && z in region.minZ..region.maxZ
+                } == true
+            }
+            if (overlap == 0) return@map door
+
+            snapshotIds += bestId
+            attached++
+            door.copy(snapshotId = bestId)
+        }
+        if (attached > 0) {
+            logger.info("attached $attached v1 door snapshot(s): ${snapshotIds.joinToString(", ")}")
+        }
+        return result to attached
+    }
+
+    private fun coordOf(key: String): Triple<Int, Int, Int>? {
+        val parts = key.split(',')
+        if (parts.size != 3) return null
+        val x = parts[0].trim().toIntOrNull() ?: return null
+        val y = parts[1].trim().toIntOrNull() ?: return null
+        val z = parts[2].trim().toIntOrNull() ?: return null
+        return Triple(x, y, z)
     }
 }

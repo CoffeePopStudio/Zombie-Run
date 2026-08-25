@@ -45,4 +45,4 @@
   /zr2 v1 migrate-data --overwrite  # 覆盖已存在玩家
   ```
   数据来源：v1 `plugins/zombie-run/data/zr_economy.db`（`zr_economy` + `player_progression` 表）。
-- 关于门方块快照：本轮 v1 `scandata` 快照暂未自动转换，仍需用 v2 命令重建或等待后续工具。
+- 门方块快照：`/zr2 v1 migrate` 会把 v1 `plugins/zombie-run/config/doors/*.scandata.yml` 全量导入 v2 `config/doors/`（数据不丢），并按“方块坐标落在门区域内”自动关联到具体门（报告会分别显示 imported / attached 数量）。若历史快照与当前门位置不重叠，则仅导入不关联，可在 v2 用 `/zr2 door add` 重建后手动补链。
