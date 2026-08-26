@@ -138,6 +138,25 @@ class DoorSessionStateMachineTest {
         assertTrue(move.newlyCrossed)
     }
 
+    @Test
+    fun `crossing any door of a group marks player passed`() {
+        val doorB = door(id = "door_2", plane = 200.0).copy(number = 2, region = BlockRegion(200, 64, 10, 200, 66, 20))
+        val machine = DoorSessionStateMachine(
+            sessionId = "s1",
+            doors = listOf(door(), doorB),
+            initialPositions = mapOf(alice to Vec3(95.0, 65.0, 15.0)),
+        )
+        machine.startClosing()
+
+        // 只穿过第二扇门：组会话同样记录为通过
+        val move = machine.onMove(alice, Vec3(199.0, 65.0, 15.0), Vec3(203.0, 65.0, 15.0))
+        assertTrue(move.newlyCrossed)
+        assertEquals("door_2", move.crossedDoorId)
+
+        val outcomes = machine.close(mapOf(alice to Vec3(203.0, 65.0, 15.0)))
+        assertEquals(DoorPassDecision.PASSED, outcomes.single().decision)
+    }
+
     // ---------- Y 轴水平门 ----------
 
     private fun yDoor(

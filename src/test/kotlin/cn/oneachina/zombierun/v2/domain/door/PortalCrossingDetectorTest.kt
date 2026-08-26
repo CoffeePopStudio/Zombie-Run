@@ -221,6 +221,47 @@ class PortalCrossingDetectorTest {
         PortalCrossingDetector.isInFrontProjection(Vec3(15.0, 63.0, 35.0), p).let { assertFalse(it) }
     }
 
+    // ---------- Z 轴竖直门 ----------
+
+    @Test
+    fun `z axis crossing is detected`() {
+        // Z 轴门：z=plane，横向范围 = x ∈ [10,20]，高度 = y ∈ [64,66]
+        val zPortal = Portal(
+            axis = PortalAxis.Z,
+            front = PortalFront.POSITIVE,
+            planeCoordinate = 100.0,
+            transverseMin = 10.0,
+            transverseMax = 20.0,
+            yMin = 64.0,
+            yMax = 66.0,
+        )
+        val crossing = PortalCrossingDetector.crossing(
+            from = Vec3(15.0, 65.0, 99.0),
+            to = Vec3(15.0, 65.0, 101.0),
+            portal = zPortal,
+        )
+        assertNotNull(crossing)
+        assertEquals(100.0, crossing.point.z, 1e-9)
+        assertEquals(15.0, crossing.point.x, 1e-9)
+
+        // 横向（x）超出门洞：拒绝
+        assertNull(
+            PortalCrossingDetector.crossing(
+                from = Vec3(25.0, 65.0, 99.0),
+                to = Vec3(25.0, 65.0, 101.0),
+                portal = zPortal,
+            )
+        )
+        // 反向穿越：拒绝
+        assertNull(
+            PortalCrossingDetector.crossing(
+                from = Vec3(15.0, 65.0, 101.0),
+                to = Vec3(15.0, 65.0, 99.0),
+                portal = zPortal,
+            )
+        )
+    }
+
     // ---------- 极端情况 ----------
 
     @Test
