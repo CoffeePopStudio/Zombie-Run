@@ -37,37 +37,52 @@ class PlayerDataService(
 
     fun profileOf(playerId: UUID): PlayerProfile = get(playerId)
 
-    fun addCoins(playerId: UUID, amount: Int): PlayerProfile {
-        val updated = get(playerId).addCoins(amount)
-        cache[playerId] = updated
-        storage.save(updated)
+    /** 单玩家原子读-改-写：避免 Folia 多线程下并发扣款/加款丢更新。 */
+    private fun mutate(playerId: UUID, action: (PlayerProfile) -> PlayerProfile): PlayerProfile {
+        val updated = cache.compute(playerId) { _, existing ->
+            val profile = existing ?: storage.load(playerId) ?: PlayerProfile(playerId)
+            val updated = action(profile)
+            storage.save(updated)
+            updated
+        }!!
         return updated
     }
 
+    fun addCoins(playerId: UUID, amount: Int): PlayerProfile =
+        mutate(playerId) { it.addCoins(amount) }
+
     fun spendCoins(playerId: UUID, amount: Int): PlayerProfile? {
-        val profile = get(playerId).spendCoins(amount) ?: return null
-        cache[playerId] = profile
-        storage.save(profile)
-        return profile
+        var result: PlayerProfile? = null
+        cache.compute(playerId) { _, existing ->
+            val profile = existing ?: storage.load(playerId) ?: PlayerProfile(playerId)
+            val updated = profile.spendCoins(amount)
+            if (updated == null) {
+                result = null
+                profile
+            } else {
+                storage.save(updated)
+                result = updated
+                updated
+            }
+        }
+        return result
     }
 
     fun addXp(playerId: UUID, amount: Int): PlayerProfile {
-        val before = get(playerId)
-        val after = before.addXp(amount)
-        cache[playerId] = after
-        storage.save(after)
-        if (after.level > before.level) {
-            messages.chat(playerId, "恭喜升级！当前等级 ${after.level}")
+        var leveled = false
+        val updated = mutate(playerId) {
+            val after = it.addXp(amount)
+            if (after.level > it.level) leveled = true
+            after
         }
-        return after
-    }
-
-    fun setTitle(playerId: UUID, title: String?): PlayerProfile {
-        val updated = get(playerId).setTitle(title)
-        cache[playerId] = updated
-        storage.save(updated)
+        if (leveled) {
+            messages.chat(playerId, "恭喜升级！当前等级 ${updated.level}")
+        }
         return updated
     }
+
+    fun setTitle(playerId: UUID, title: String?): PlayerProfile =
+        mutate(playerId) { it.setTitle(title) }
 
     fun onJoin(playerId: UUID) {
         get(playerId)
@@ -79,15 +94,11 @@ class PlayerDataService(
     }
 
     fun onDoorPassed(playerId: UUID) {
-        val updated = get(playerId).addDoorPass()
-        cache[playerId] = updated
-        storage.save(updated)
+        mutate(playerId) { it.addDoorPass() }
     }
 
     fun onZombieKilled(killerId: UUID) {
-        val updated = get(killerId).addKill()
-        cache[killerId] = updated
-        storage.save(updated)
+        mutate(killerId) { it.addKill() }
     }
 
     fun close() {
