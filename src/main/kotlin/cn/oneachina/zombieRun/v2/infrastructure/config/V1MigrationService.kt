@@ -152,9 +152,14 @@ class V1MigrationService(
             val d = section.getConfigurationSection(id) ?: return@forEach
             val x1 = d.getInt("x1"); val y1 = d.getInt("y1"); val z1 = d.getInt("z1")
             val x2 = d.getInt("x2"); val y2 = d.getInt("y2"); val z2 = d.getInt("z2")
-            val axis = if (x1 == x2) PortalAxis.X else if (z1 == z2) PortalAxis.Z else null
+            val axis = when {
+                x1 == x2 -> PortalAxis.X
+                z1 == z2 -> PortalAxis.Z
+                y1 == y2 -> PortalAxis.Y
+                else -> null
+            }
             if (axis == null) {
-                skipped += "door $id: not an X/Z plane, skipped"
+                skipped += "door $id: not an X/Z/Y plane, skipped"
                 return@forEach
             }
             val mode = DoorMode.entries.firstOrNull {
@@ -165,11 +170,15 @@ class V1MigrationService(
                 minX = minOf(x1, x2), minY = minOf(y1, y2), minZ = minOf(z1, z2),
                 maxX = maxOf(x1, x2), maxY = maxOf(y1, y2), maxZ = maxOf(z1, z2),
             )
-            val plane = if (axis == PortalAxis.X) x1.toDouble() else z1.toDouble()
-            val portal = if (axis == PortalAxis.X) {
-                Portal(axis, PortalFront.POSITIVE, plane, minOf(z1, z2).toDouble(), maxOf(z1, z2).toDouble(), minOf(y1, y2).toDouble(), maxOf(y1, y2).toDouble())
-            } else {
-                Portal(axis, PortalFront.POSITIVE, plane, minOf(x1, x2).toDouble(), maxOf(x1, x2).toDouble(), minOf(y1, y2).toDouble(), maxOf(y1, y2).toDouble())
+            val plane = when (axis) {
+                PortalAxis.X -> x1.toDouble()
+                PortalAxis.Z -> z1.toDouble()
+                PortalAxis.Y -> y1.toDouble()
+            }
+            val portal = when (axis) {
+                PortalAxis.X -> Portal(axis, PortalFront.POSITIVE, plane, minOf(z1, z2).toDouble(), maxOf(z1, z2).toDouble(), minOf(y1, y2).toDouble(), maxOf(y1, y2).toDouble())
+                PortalAxis.Z -> Portal(axis, PortalFront.POSITIVE, plane, minOf(x1, x2).toDouble(), maxOf(x1, x2).toDouble(), minOf(y1, y2).toDouble(), maxOf(y1, y2).toDouble())
+                PortalAxis.Y -> Portal(axis, PortalFront.POSITIVE, plane, minOf(x1, x2).toDouble(), maxOf(x1, x2).toDouble(), minOf(z1, z2).toDouble(), maxOf(z1, z2).toDouble())
             }
             doors += DoorDefinition(
                 id = "v1_$id",

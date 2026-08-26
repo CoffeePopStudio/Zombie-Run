@@ -21,7 +21,7 @@
 | `/zr2 arena list` | 列出竞技场 |
 | `/zr2 arena create <id> <world>` | 创建竞技场 |
 | `/zr2 arena setspawn <type> [door-number]` | 设置脚下当前位置为重生点 |
-| `/zr2 door add <doorId> <mode> [group]` | 添加门（读取所在位置和朝向区域） |
+| `/zr2 door add --arena <名称> <x1> <y1> <z1> <x2> <y2> <z2> <axis> <front> [--number N]` | 添加门；axis 支持 `x`/`y`/`z`（`y`=水平地板/天花板门），front 支持 positive/negative |
 | `/zr2 door list` | 列出门 |
 | `/zr2 door remove <id>` | 删除门 |
 | `/zr2 button add normal <doorNumber>` | 设置脚下为开门按钮 |

@@ -52,7 +52,8 @@ object PortalCrossingDetector {
             return null
         }
 
-        if (point.y < portal.yMin - verticalTolerance || point.y > portal.yMax + verticalTolerance) {
+        val vertical = portal.verticalValue(point)
+        if (vertical < portal.yMin - verticalTolerance || vertical > portal.yMax + verticalTolerance) {
             return null
         }
 
@@ -73,7 +74,8 @@ object PortalCrossingDetector {
         if (transverse < portal.transverseMin - tolerance || transverse > portal.transverseMax + tolerance) {
             return false
         }
-        return position.y >= portal.yMin - tolerance && position.y <= portal.yMax + tolerance
+        val vertical = portal.verticalValue(position)
+        return vertical >= portal.yMin - tolerance && vertical <= portal.yMax + tolerance
     }
 
     const val DEFAULT_TRANSVERSE_TOLERANCE = 0.6

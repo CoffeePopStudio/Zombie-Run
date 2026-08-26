@@ -137,4 +137,61 @@ class DoorSessionStateMachineTest {
         val move = machine.onMove(alice, Vec3(101.0, 65.0, 15.0), Vec3(99.0, 65.0, 15.0))
         assertTrue(move.newlyCrossed)
     }
+
+    // ---------- Y 轴水平门 ----------
+
+    private fun yDoor(
+        id: String = "door_y",
+        front: PortalFront = PortalFront.POSITIVE,
+        plane: Double = 64.0,
+    ) = DoorDefinition(
+        id = id,
+        world = "test",
+        number = 2,
+        mode = DoorMode.NORMAL,
+        group = null,
+        openSeconds = 5,
+        closeSeconds = 10,
+        portal = Portal(
+            axis = PortalAxis.Y,
+            front = front,
+            planeCoordinate = plane,
+            transverseMin = 10.0,
+            transverseMax = 20.0,
+            yMin = 30.0,
+            yMax = 40.0,
+        ),
+        region = BlockRegion(10, 64, 30, 20, 64, 40),
+        snapshotId = null,
+        fallbackMaterial = "STONE",
+    )
+
+    @Test
+    fun `y axis upward crossing is recorded by session`() {
+        val machine = DoorSessionStateMachine(
+            sessionId = "s1",
+            doors = listOf(yDoor()),
+            initialPositions = mapOf(alice to Vec3(15.0, 60.0, 35.0)),
+        )
+        machine.startClosing()
+
+        val move = machine.onMove(alice, Vec3(15.0, 63.0, 35.0), Vec3(15.0, 65.0, 35.0))
+        assertTrue(move.newlyCrossed)
+
+        val outcomes = machine.close(mapOf(alice to Vec3(15.0, 65.0, 35.0)))
+        assertEquals(DoorPassDecision.PASSED, outcomes.single().decision)
+    }
+
+    @Test
+    fun `y axis fallback rescues missed upward crossing`() {
+        val machine = DoorSessionStateMachine(
+            sessionId = "s1",
+            doors = listOf(yDoor()),
+            initialPositions = mapOf(alice to Vec3(15.0, 60.0, 35.0)),
+        )
+        machine.startClosing()
+
+        val outcomes = machine.close(mapOf(alice to Vec3(15.0, 65.0, 35.0)))
+        assertEquals(DoorPassDecision.PASSED_FALLBACK, outcomes.single().decision)
+    }
 }

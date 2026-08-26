@@ -165,18 +165,33 @@ class ArenaYamlRepository(
 
         val plane = portalSection.getDouble(
             "plane",
-            if (axis == PortalAxis.X) (minX + maxX) / 2.0 else (minZ + maxZ) / 2.0
+            when (axis) {
+                PortalAxis.X -> (minX + maxX) / 2.0
+                PortalAxis.Z -> (minZ + maxZ) / 2.0
+                PortalAxis.Y -> (minY + maxY) / 2.0
+            },
         )
 
-        val yRange = portalSection.doubleList("y", 2)
-        val yMin = yRange?.get(0) ?: minY.toDouble()
-        val yMax = yRange?.get(1) ?: maxY.toDouble()
+        // Y 轴水平门使用 x/z 表示门洞两个水平范围；X/Z 门沿用 transverse/y
+        val transverseRange = if (axis == PortalAxis.Y) portalSection.doubleList("x", 2)
+        else portalSection.doubleList("transverse", 2)
+        val verticalRange = if (axis == PortalAxis.Y) portalSection.doubleList("z", 2)
+        else portalSection.doubleList("y", 2)
 
-        val transverseRange = portalSection.doubleList("transverse", 2)
-        val transverseDefault = if (axis == PortalAxis.X) minZ.toDouble() to maxZ.toDouble()
-        else minX.toDouble() to maxX.toDouble()
+        val transverseDefault = when (axis) {
+            PortalAxis.X -> minZ.toDouble() to maxZ.toDouble()
+            PortalAxis.Z -> minX.toDouble() to maxX.toDouble()
+            PortalAxis.Y -> minX.toDouble() to maxX.toDouble()
+        }
+        val verticalDefault = when (axis) {
+            PortalAxis.X, PortalAxis.Z -> minY.toDouble() to maxY.toDouble()
+            PortalAxis.Y -> minZ.toDouble() to maxZ.toDouble()
+        }
+
         val transverseMin = transverseRange?.get(0) ?: transverseDefault.first
         val transverseMax = transverseRange?.get(1) ?: transverseDefault.second
+        val verticalMin = verticalRange?.get(0) ?: verticalDefault.first
+        val verticalMax = verticalRange?.get(1) ?: verticalDefault.second
 
         val schedule = section.getConfigurationSection("schedule")
         val openSeconds = schedule?.getInt("open", 15) ?: 15
@@ -191,7 +206,7 @@ class ArenaYamlRepository(
             group = section.getString("group"),
             openSeconds = openSeconds,
             closeSeconds = closeSeconds,
-            portal = Portal(axis, front, plane, transverseMin, transverseMax, yMin, yMax),
+            portal = Portal(axis, front, plane, transverseMin, transverseMax, verticalMin, verticalMax),
             region = BlockRegion(minX, minY, minZ, maxX, maxY, maxZ),
             snapshotId = section.getString("snapshot"),
             fallbackMaterial = section.getString("fallback-material", "STONE") ?: "STONE",
@@ -321,8 +336,10 @@ class ArenaYamlRepository(
             "axis" to portal.axis.name.lowercase(),
             "front" to portal.front.name.lowercase(),
             "plane" to portal.planeCoordinate,
-            "y" to listOf(portal.yMin, portal.yMax),
-            "transverse" to listOf(portal.transverseMin, portal.transverseMax),
+            if (portal.axis == PortalAxis.Y) "x" to listOf(portal.transverseMin, portal.transverseMax)
+            else "transverse" to listOf(portal.transverseMin, portal.transverseMax),
+            if (portal.axis == PortalAxis.Y) "z" to listOf(portal.yMin, portal.yMax)
+            else "y" to listOf(portal.yMin, portal.yMax),
         ),
         "schedule" to linkedMapOf("open" to openSeconds, "close" to closeSeconds),
         "snapshot" to snapshotId,

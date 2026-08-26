@@ -258,7 +258,7 @@ class Zr2Command(
         val axis = PortalAxis.entries.firstOrNull { it.name.equals(positional[6], ignoreCase = true) }
         val front = PortalFront.entries.firstOrNull { it.name.equals(positional[7], ignoreCase = true) }
         if (axis == null || front == null) {
-            sender.sendMessage(Component.text("axis 必须是 x|z，front 必须是 positive|negative", NamedTextColor.RED))
+            sender.sendMessage(Component.text("axis 必须是 x|y|z，front 必须是 positive|negative", NamedTextColor.RED))
             return
         }
 
@@ -278,9 +278,29 @@ class Zr2Command(
         }
         val id = "door_${System.currentTimeMillis()}"
         val snapshotId = "${arena.name}_$id"
-        val plane = if (axis == PortalAxis.X) (minX + maxX) / 2.0 else (minZ + maxZ) / 2.0
-        val transverseMin = if (axis == PortalAxis.X) minZ.toDouble() else minX.toDouble()
-        val transverseMax = if (axis == PortalAxis.X) maxZ.toDouble() else maxX.toDouble()
+        val plane = when (axis) {
+            PortalAxis.X -> (minX + maxX) / 2.0
+            PortalAxis.Z -> (minZ + maxZ) / 2.0
+            PortalAxis.Y -> (minY + maxY) / 2.0
+        }
+        val transverseMin = when (axis) {
+            PortalAxis.X -> minZ.toDouble()
+            PortalAxis.Z -> minX.toDouble()
+            PortalAxis.Y -> minX.toDouble()
+        }
+        val transverseMax = when (axis) {
+            PortalAxis.X -> maxZ.toDouble()
+            PortalAxis.Z -> maxX.toDouble()
+            PortalAxis.Y -> maxX.toDouble()
+        }
+        val verticalMin = when (axis) {
+            PortalAxis.X, PortalAxis.Z -> minY.toDouble()
+            PortalAxis.Y -> minZ.toDouble()
+        }
+        val verticalMax = when (axis) {
+            PortalAxis.X, PortalAxis.Z -> maxY.toDouble()
+            PortalAxis.Y -> maxZ.toDouble()
+        }
 
         val door = DoorDefinition(
             id = id,
@@ -296,8 +316,8 @@ class Zr2Command(
                 planeCoordinate = plane,
                 transverseMin = transverseMin,
                 transverseMax = transverseMax,
-                yMin = minY.toDouble(),
-                yMax = maxY.toDouble(),
+                yMin = verticalMin,
+                yMax = verticalMax,
             ),
             region = region,
             snapshotId = snapshotId,

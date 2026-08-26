@@ -3,7 +3,7 @@
 > ⚠️ 当前为 `v2` 重构分支：v1 稳定版在 `main` 分支。
 > 架构设计见 [docs/v2/ARCHITECTURE.md](docs/v2/ARCHITECTURE.md)，路线图见 [docs/v2/ROADMAP.md](docs/v2/ROADMAP.md)。
 > 命令参考见 [docs/v2/COMMANDS.md](docs/v2/COMMANDS.md)，升级指南见 [docs/v2/UPGRADE.md](docs/v2/UPGRADE.md)，发布说明见 [docs/v2/RELEASE.md](docs/v2/RELEASE.md)。
-> 当前进度：**M0–M18：门系统/游戏流程/体力/武器/经济/等级/GUI/PAPI/迁移/特殊门/任务系统/MapFlow 流程框架/地图编辑命令/任务&称号 GUI/GitHub Actions/v1 玩家数据+门快照迁移/出生点与母体机制定稿**。
+> 当前进度：**M0–M19：门系统/游戏流程/体力/武器/经济/等级/GUI/PAPI/迁移/特殊门/任务系统/MapFlow 流程框架/地图编辑命令/任务&称号 GUI/GitHub Actions/v1 玩家数据+门快照迁移/出生点与母体机制定稿/Y 轴门与极端测试**。
 
 非对称 PvP 小游戏插件 —— 人类通过层层大门逃生，僵尸全力感染。
 

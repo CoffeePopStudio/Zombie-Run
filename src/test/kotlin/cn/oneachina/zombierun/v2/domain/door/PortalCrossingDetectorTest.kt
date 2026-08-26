@@ -138,4 +138,148 @@ class PortalCrossingDetectorTest {
         // 门前侧 2 格高：不通过
         PortalCrossingDetector.isInFrontProjection(Vec3(101.0, 69.0, 15.0), p).let { assertFalse(it) }
     }
+
+    // ---------- Y 轴水平门（向上/向下穿过地板/天花板） ----------
+
+    private fun yPortal(front: PortalFront = PortalFront.POSITIVE) = Portal(
+        axis = PortalAxis.Y,
+        front = front,
+        planeCoordinate = 64.0,
+        transverseMin = 10.0,
+        transverseMax = 20.0,
+        yMin = 30.0,
+        yMax = 40.0,
+    )
+
+    @Test
+    fun `y axis upward crossing is detected`() {
+        // front=positive：Y 增大方向为前（向上）；从 y=63 到 y=65 穿过 y=64 平面
+        val crossing = PortalCrossingDetector.crossing(
+            from = Vec3(15.0, 63.0, 35.0),
+            to = Vec3(15.0, 65.0, 35.0),
+            portal = yPortal(),
+        )
+        assertNotNull(crossing)
+        assertEquals(64.0, crossing.point.y, 1e-9)
+        assertEquals(15.0, crossing.point.x, 1e-9)
+        assertEquals(35.0, crossing.point.z, 1e-9)
+    }
+
+    @Test
+    fun `y axis large vertical step is detected`() {
+        val crossing = PortalCrossingDetector.crossing(
+            from = Vec3(15.0, 50.0, 35.0),
+            to = Vec3(15.0, 80.0, 35.0),
+            portal = yPortal(),
+        )
+        assertNotNull(crossing)
+    }
+
+    @Test
+    fun `y axis negative front means downward crossing`() {
+        val down = yPortal(front = PortalFront.NEGATIVE)
+        val crossing = PortalCrossingDetector.crossing(
+            from = Vec3(15.0, 65.0, 35.0),
+            to = Vec3(15.0, 63.0, 35.0),
+            portal = down,
+        )
+        assertNotNull(crossing)
+        assertNull(
+            PortalCrossingDetector.crossing(
+                from = Vec3(15.0, 63.0, 35.0),
+                to = Vec3(15.0, 65.0, 35.0),
+                portal = down,
+            )
+        )
+    }
+
+    @Test
+    fun `y axis crossing outside horizontal hole is rejected`() {
+        // x 超出 transverse（10..20），z 在 vertical（30..40）
+        assertNull(
+            PortalCrossingDetector.crossing(
+                from = Vec3(5.0, 63.0, 35.0),
+                to = Vec3(5.0, 65.0, 35.0),
+                portal = yPortal(),
+            )
+        )
+        // z 超出 vertical（30..40）
+        assertNull(
+            PortalCrossingDetector.crossing(
+                from = Vec3(15.0, 63.0, 25.0),
+                to = Vec3(15.0, 65.0, 25.0),
+                portal = yPortal(),
+            )
+        )
+    }
+
+    @Test
+    fun `y axis fallback projection accepts only inside horizontal hole`() {
+        val p = yPortal()
+        PortalCrossingDetector.isInFrontProjection(Vec3(15.0, 65.0, 35.0), p).let { assertTrue(it) }
+        PortalCrossingDetector.isInFrontProjection(Vec3(15.0, 65.0, 45.0), p).let { assertFalse(it) }
+        PortalCrossingDetector.isInFrontProjection(Vec3(15.0, 63.0, 35.0), p).let { assertFalse(it) }
+    }
+
+    // ---------- 极端情况 ----------
+
+    @Test
+    fun `crossing exactly on plane boundary is detected`() {
+        val crossing = PortalCrossingDetector.crossing(
+            from = Vec3(99.9, 65.0, 15.0),
+            to = Vec3(100.0, 65.0, 15.0),
+            portal = portal(),
+        )
+        assertNotNull(crossing)
+    }
+
+    @Test
+    fun `crossing at tolerance boundary accepts inside and rejects outside`() {
+        // transverse 上限 20 + 默认容差 0.6 = 20.6 仍算穿过
+        assertNotNull(
+            PortalCrossingDetector.crossing(
+                from = Vec3(99.0, 65.0, 20.6),
+                to = Vec3(101.0, 65.0, 20.6),
+                portal = portal(),
+            )
+        )
+        // 20.7 超出容差
+        assertNull(
+            PortalCrossingDetector.crossing(
+                from = Vec3(99.0, 65.0, 20.7),
+                to = Vec3(101.0, 65.0, 20.7),
+                portal = portal(),
+            )
+        )
+        // 垂直上限 66 + 0.5 = 66.5 仍算穿过
+        assertNotNull(
+            PortalCrossingDetector.crossing(
+                from = Vec3(99.0, 66.5, 15.0),
+                to = Vec3(101.0, 66.5, 15.0),
+                portal = portal(),
+            )
+        )
+    }
+
+    @Test
+    fun `extreme teleport-like movement across door is still detected`() {
+        val crossing = PortalCrossingDetector.crossing(
+            from = Vec3(-10000.0, 65.0, 15.0),
+            to = Vec3(10000.0, 65.0, 15.0),
+            portal = portal(),
+        )
+        assertNotNull(crossing)
+    }
+
+    @Test
+    fun `zero axis delta movement is rejected even if sides differ by exact boundary`() {
+        // from/to 都在 plane 上（side=FRONT），没有轴位移，不应算穿越
+        assertNull(
+            PortalCrossingDetector.crossing(
+                from = Vec3(100.0, 65.0, 15.0),
+                to = Vec3(100.0, 65.0, 15.0),
+                portal = portal(),
+            )
+        )
+    }
 }

@@ -270,6 +270,15 @@
 - [x] 出生点随机池：`PLAYER` / `ZOMBIE` / `DOOR_*` 支持多点随机，防蹲尸
 - [x] 单测：spectate 转换、map-flow round-trip 含母体释放延迟
 
+## M19：Y 轴门与极端测试
+
+- [x] `PortalAxis.Y`：支持水平地板/天花板门（向上/向下穿）
+- [x] `/zr2 door add` axis 支持 `y`；YAML 使用 `x`/`z` 描述门洞范围
+- [x] `PortalCrossingDetector` / 关门兜底检测适配 Y 轴
+- [x] v1 迁移识别 Y 平面门
+- [x] 极端测试：超大步长、瞬移级位移、容差边界、平面边界、Y 轴正/反方向、兜底投影
+- [x] round-trip 测试：Y 轴门配置保存/加载
+
 ---
 
 ## 建议的第一个执行批次（批准后）

@@ -61,6 +61,48 @@ class ArenaYamlRepositoryTest {
     }
 
     @Test
+    fun `y axis door round trip uses x z portal fields`() {
+        val dir = createTempDirectory("zr2-arena-test").toFile()
+        val repo = ArenaYamlRepository(dir, V2Logger(Logger.getLogger("test")))
+        val arena = ArenaDefinition(
+            name = "updoor",
+            world = "w",
+            doors = listOf(
+                DoorDefinition(
+                    id = "up1",
+                    world = "w",
+                    number = 1,
+                    mode = DoorMode.NORMAL,
+                    group = null,
+                    openSeconds = 5,
+                    closeSeconds = 10,
+                    portal = Portal(
+                        axis = PortalAxis.Y,
+                        front = PortalFront.POSITIVE,
+                        planeCoordinate = 64.0,
+                        transverseMin = 10.0,
+                        transverseMax = 20.0,
+                        yMin = 30.0,
+                        yMax = 40.0,
+                    ),
+                    region = BlockRegion(10, 64, 30, 20, 64, 40),
+                    snapshotId = null,
+                    fallbackMaterial = "STONE",
+                ),
+            ),
+        )
+
+        repo.save(arena)
+        val loaded = repo.loadAll().single().doors.single()
+        assertEquals(PortalAxis.Y, loaded.portal.axis)
+        assertEquals(64.0, loaded.portal.planeCoordinate)
+        assertEquals(10.0, loaded.portal.transverseMin)
+        assertEquals(20.0, loaded.portal.transverseMax)
+        assertEquals(30.0, loaded.portal.yMin)
+        assertEquals(40.0, loaded.portal.yMax)
+    }
+
+    @Test
     fun `behavior and escape button round trip`() {
         val dir = createTempDirectory("zr2-arena-test").toFile()
         val repo = ArenaYamlRepository(dir, V2Logger(Logger.getLogger("test")))
