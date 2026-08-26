@@ -31,7 +31,7 @@ class TaskService(
     private val eventBus: ApplicationEventBus,
 ) {
     private val definitions: List<TaskDefinition> = taskRepository.loadAll()
-    private val cache = ConcurrentHashMap<UUID, MutableMap<String, TaskProgress>>()
+    private val cache = ConcurrentHashMap<UUID, ConcurrentHashMap<String, TaskProgress>>()
 
     init {
         eventBus.subscribe(PlayerPassedDoorEvent::class.java) { event ->
@@ -44,21 +44,32 @@ class TaskService(
 
     fun allTasks(): List<TaskDefinition> = definitions
 
+    /**
+     * 返回所有任务的进度快照。过期任务（自然日/ISO 周已切换）在这里统一重置，
+     * 保证 GUI/命令展示与领取判定都基于当前周期。
+     */
     fun progressOf(playerId: UUID): List<Pair<TaskDefinition, TaskProgress>> {
-        val progress = cache.computeIfAbsent(playerId) {
-            ConcurrentHashMap(storage.load(it))
-        }
-        return definitions.map { task ->
-            task to progress.computeIfAbsent(task.id) {
-                TaskProgress(task.id).also { p -> p.lastReset = task.periodKey(LocalDate.now()) }
+        val progress = playerProgress(playerId)
+        val today = LocalDate.now()
+        var changed = false
+        val snapshot = synchronized(progress) {
+            definitions.map { task ->
+                val p = progress.computeIfAbsent(task.id) {
+                    TaskProgress(task.id).also { it.lastReset = task.periodKey(today) }
+                }
+                if (p.isExpired(task, today)) {
+                    p.reset(task, today)
+                    changed = true
+                }
+                task to p
             }
         }
+        if (changed) save(playerId)
+        return snapshot
     }
 
     fun onJoin(playerId: UUID) {
-        cache.computeIfAbsent(playerId) {
-            ConcurrentHashMap(storage.load(it))
-        }
+        playerProgress(playerId)
     }
 
     fun onQuit(playerId: UUID) {
@@ -68,17 +79,24 @@ class TaskService(
     fun claim(playerId: UUID, taskId: String): String {
         val task = definitions.firstOrNull { it.id == taskId }
             ?: return "任务不存在：$taskId"
-        val progress = progressOf(playerId).firstOrNull { it.first.id == taskId }!!.second
-        if (!progress.completed(task.target)) return "任务尚未完成"
-        if (progress.claimed) return "该任务奖励已领取"
+        val progress = playerProgress(playerId)
+        synchronized(progress) {
+            val today = LocalDate.now()
+            val p = progress.computeIfAbsent(taskId) {
+                TaskProgress(taskId).also { it.lastReset = task.periodKey(today) }
+            }
+            if (p.isExpired(task, today)) p.reset(task, today)
+            if (!p.completed(task.target)) return "任务尚未完成"
+            if (p.claimed) return "该任务奖励已领取"
 
-        progress.claimed = true
-        if (task.rewardCoins > 0) playerData.addCoins(playerId, task.rewardCoins)
-        if (task.rewardXp > 0) playerData.addXp(playerId, task.rewardXp)
-        save(playerId)
-        messages.chat(playerId, "任务完成：${task.description}，奖励 ${task.rewardCoins} 硬币 / ${task.rewardXp} 经验")
-        logger.info("player $playerId claimed task $taskId")
-        return "已领取任务奖励：${task.description}"
+            p.claimed = true
+            if (task.rewardCoins > 0) playerData.addCoins(playerId, task.rewardCoins)
+            if (task.rewardXp > 0) playerData.addXp(playerId, task.rewardXp)
+            save(playerId)
+            messages.chat(playerId, "任务完成：${task.description}，奖励 ${task.rewardCoins} 硬币 / ${task.rewardXp} 经验")
+            logger.info("player $playerId claimed task $taskId")
+            return "已领取任务奖励：${task.description}"
+        }
     }
 
     fun close() {
@@ -87,27 +105,32 @@ class TaskService(
         storage.close()
     }
 
-    private fun increment(playerId: UUID, type: TaskType, amount: Int) {
-        val progress = cache.computeIfAbsent(playerId) {
+    private fun playerProgress(playerId: UUID): ConcurrentHashMap<String, TaskProgress> =
+        cache.computeIfAbsent(playerId) {
             ConcurrentHashMap(storage.load(it))
         }
+
+    private fun increment(playerId: UUID, type: TaskType, amount: Int) {
+        val progress = playerProgress(playerId)
         val today = LocalDate.now()
         var changed = false
-        definitions.filter { it.type == type }.forEach { task ->
-            val p = progress.computeIfAbsent(task.id) {
-                TaskProgress(task.id).also { it.lastReset = task.periodKey(today) }
-            }
-            if (p.isExpired(task, today)) {
-                p.reset(task, today)
-                changed = true
-            }
-            if (p.claimed) return@forEach
-            val before = p.progress
-            p.progress = minOf(task.target, p.progress + amount)
-            if (p.progress != before) {
-                changed = true
-                if (p.completed(task.target)) {
-                    messages.chat(playerId, "任务完成：${task.description}（${task.rewardCoins} 硬币 / ${task.rewardXp} 经验）")
+        synchronized(progress) {
+            definitions.filter { it.type == type }.forEach { task ->
+                val p = progress.computeIfAbsent(task.id) {
+                    TaskProgress(task.id).also { it.lastReset = task.periodKey(today) }
+                }
+                if (p.isExpired(task, today)) {
+                    p.reset(task, today)
+                    changed = true
+                }
+                if (p.claimed) return@forEach
+                val before = p.progress
+                p.progress = minOf(task.target, p.progress + amount)
+                if (p.progress != before) {
+                    changed = true
+                    if (p.completed(task.target)) {
+                        messages.chat(playerId, "任务完成：${task.description}（${task.rewardCoins} 硬币 / ${task.rewardXp} 经验）")
+                    }
                 }
             }
         }

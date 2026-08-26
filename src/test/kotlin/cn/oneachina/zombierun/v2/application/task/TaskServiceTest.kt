@@ -128,4 +128,27 @@ class TaskServiceTest {
         assertEquals(10, profile.xp)
         assertTrue(f.service.progressOf(id).first { it.first.id == "daily_doors" }.second.claimed)
     }
+
+    @Test
+    fun `expired daily task resets on view and blocks stale claim`() {
+        val f = fixture(createTempDirectory("zr2-task-expire").toFile())
+        val id = UUID.randomUUID()
+        // 上一周期已完成且已领取的进度
+        f.storage.store[id] = mutableMapOf(
+            "daily_doors" to TaskProgress(
+                taskId = "daily_doors",
+                progress = 5,
+                claimed = true,
+                lastReset = "2000-01-01",
+            ),
+        )
+
+        // 查看进度时按当前自然日重置
+        val tasks = f.service.progressOf(id).associate { it.first.id to it.second }
+        assertEquals(0, tasks["daily_doors"]?.progress)
+        assertFalse(tasks["daily_doors"]!!.claimed)
+
+        // 领取走的是当前周期判定，不能凭旧周期的 claimed 直接领取
+        assertEquals("任务尚未完成", f.service.claim(id, "daily_doors"))
+    }
 }
