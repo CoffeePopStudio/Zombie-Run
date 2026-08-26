@@ -29,6 +29,19 @@ class GuiService(
     private val weapons: WeaponService,
     private val tasks: TaskService,
     private val logger: V2Logger,
+    private val inventoryFactory: (InventoryHolder, Int, Component) -> Inventory =
+        { holder, size, title -> Bukkit.createInventory(holder, size, title) },
+    private val iconFactory: (Material, String, List<String>) -> ItemStack =
+        { material, name, lore ->
+            val item = ItemStack(material)
+            val meta = item.itemMeta
+            if (meta != null) {
+                meta.displayName(Component.text(name))
+                meta.lore(lore.map { Component.text(it) })
+                item.itemMeta = meta
+            }
+            item
+        },
 ) : Listener {
 
     private val slots = ConcurrentHashMap<UUID, Map<Int, (Player, InventoryClickEvent) -> Unit>>()
@@ -59,7 +72,7 @@ class GuiService(
     fun openProfile(player: Player) {
         val profile = playerData.profileOf(player.uniqueId)
         val holder = Holder("profile")
-        val inv = Bukkit.createInventory(holder, 27, Component.text("我的资料"))
+        val inv = inventoryFactory(holder, 27, Component.text("我的资料"))
         holder.backingInventory = inv
         inv.setItem(
             11,
@@ -82,7 +95,7 @@ class GuiService(
     fun openShop(player: Player) {
         val items = weapons.all()
         val holder = Holder("shop")
-        val inv = Bukkit.createInventory(holder, minOf(54, (items.size / 9 + 1) * 9).coerceAtLeast(9), Component.text("武器商店"))
+        val inv = inventoryFactory(holder, minOf(54, (items.size / 9 + 1) * 9).coerceAtLeast(9), Component.text("武器商店"))
         holder.backingInventory = inv
         val actions = mutableMapOf<Int, (Player, InventoryClickEvent) -> Unit>()
         items.forEachIndexed { index, weapon ->
@@ -111,7 +124,13 @@ class GuiService(
                         p.sendMessage(Component.text("硬币不足", NamedTextColor.RED))
                     } else {
                         val ok = weapons.giveWeapon(p.uniqueId, weapon.id)
-                        if (ok) p.sendMessage(Component.text("购买成功：${weapon.displayName}", NamedTextColor.GREEN))
+                        if (ok) {
+                            p.sendMessage(Component.text("购买成功：${weapon.displayName}", NamedTextColor.GREEN))
+                        } else {
+                            // 发枪失败（外部武器系统不可用）回滚扣款
+                            playerData.addCoins(p.uniqueId, price)
+                            p.sendMessage(Component.text("武器发放失败，已退还 $price 硬币", NamedTextColor.RED))
+                        }
                     }
                 }
             }
@@ -127,7 +146,7 @@ class GuiService(
         }
         val holder = Holder("tasks")
         val rows = ((entries.size + 8) / 9).coerceAtMost(6)
-        val inv = Bukkit.createInventory(holder, rows * 9, Component.text("任务"))
+        val inv = inventoryFactory(holder, rows * 9, Component.text("任务"))
         holder.backingInventory = inv
         val actions = mutableMapOf<Int, (Player, InventoryClickEvent) -> Unit>()
 
@@ -175,7 +194,7 @@ class GuiService(
         val list = titleCatalog()
         val holder = Holder("titles")
         val rows = ((list.size + 8) / 9).coerceAtMost(6).coerceAtLeast(1)
-        val inv = Bukkit.createInventory(holder, rows * 9, Component.text("选择称号"))
+        val inv = inventoryFactory(holder, rows * 9, Component.text("选择称号"))
         holder.backingInventory = inv
         val actions = mutableMapOf<Int, (Player, InventoryClickEvent) -> Unit>()
 
@@ -226,12 +245,6 @@ class GuiService(
         logger.debug("gui", "opened $menuId for ${player.name}")
     }
 
-    private fun icon(material: Material, name: String, lore: List<String>): ItemStack {
-        val item = ItemStack(material)
-        val meta = item.itemMeta ?: return item
-        meta.displayName(Component.text(name))
-        meta.lore(lore.map { Component.text(it) })
-        item.itemMeta = meta
-        return item
-    }
+    private fun icon(material: Material, name: String, lore: List<String>): ItemStack =
+        iconFactory(material, name, lore)
 }
