@@ -99,6 +99,12 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         override fun setRoom(worldName: String, playerId: java.util.UUID, room: Int) {
             if (::gameFlow.isInitialized) gameFlow.setRoom(worldName, playerId, room)
         }
+
+        override fun currentStageDoorNumbers(worldName: String): List<Int>? =
+            if (::gameFlow.isInitialized) gameFlow.currentStageDoorNumbers(worldName) else null
+
+        override fun isDoorUnlocked(worldName: String, doorNumber: Int): Boolean =
+            if (::gameFlow.isInitialized) gameFlow.isDoorUnlocked(worldName, doorNumber) else true
     }
 
     fun enable() {

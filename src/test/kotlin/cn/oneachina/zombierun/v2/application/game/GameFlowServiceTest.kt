@@ -32,6 +32,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private class FakeHandle(
@@ -114,7 +115,7 @@ private class FakeTeleporter : TeleporterPort {
     }
 }
 
-private class Fixture {
+private class Fixture(globalMinPlayers: Int = 2) {
     val temp = createTempDirectory("zr2-test").toFile()
     val scheduler = FakeScheduler()
     val world = FakeWorld()
@@ -129,7 +130,7 @@ private class Fixture {
             debug = false,
             defaultWorld = "world",
             startDelaySeconds = 5,
-            minPlayers = 2,
+            minPlayers = globalMinPlayers,
             maxDurationSeconds = 60,
             staminaMax = 20.0,
             staminaSprintDrain = 0.25,
@@ -316,6 +317,97 @@ class GameFlowServiceTest {
 
         f.eventBus.publish(PlayerPassedDoorEvent("w", uuid(1), listOf(3)))
         assertEquals(GamePhase.ENDED, f.service.phaseOf("w"))
+    }
+
+    @Test
+    fun `map flow countdown uses arena min players not global setting`() {
+        // 全局 min-players=8，map-flow min-players=2：3 名玩家必须能正常开局。
+        // 回归：tickCountdown 曾错误使用 settings.minPlayers，导致倒计时反复开始/取消。
+        val f = Fixture(globalMinPlayers = 8)
+        val flow = MapFlowDefinition(
+            arenaName = "a",
+            world = "w",
+            minPlayers = 2,
+            startDelaySeconds = 5,
+            maxDurationSeconds = 60,
+            stages = listOf(
+                MapFlowStage("s1", "大门", listOf(1), "s2"),
+                MapFlowStage("s2", "终点", listOf(2)),
+            ),
+            finish = MapFlowFinish(FinishType.DOOR, 2),
+        )
+        f.repo.save(ArenaDefinition("a", "w", mapFlow = flow))
+        f.world.setPlayers("w", listOf(uuid(1), uuid(2), uuid(3)))
+        f.service.start()
+
+        // 第一次 tick 进入倒计时
+        f.scheduler.tickTimers()
+        assertEquals(GamePhase.STARTING, f.service.phaseOf("w"))
+
+        // 倒计时期间不会被“人数不足”取消，5 秒后正常开局
+        repeat(6) { f.scheduler.tickTimers() }
+        assertEquals(GamePhase.RUNNING, f.service.phaseOf("w"))
+    }
+
+    @Test
+    fun `alpha leaving world is replaced and last human leaving ends game`() {
+        val f = Fixture()
+        f.repo.save(ArenaDefinition("a", "w"))
+        f.world.setPlayers("w", listOf(uuid(1), uuid(2)))
+        f.service.start()
+        f.service.forceStart("w")
+
+        val instance = f.service.instance("w")!!
+        val alpha = instance.alphaId()!!
+        val human = f.world.playersIn("w").map { it.id }.first { it != alpha }
+
+        // 母体传送离开世界：补位唯一人类为新母体 → 人类清零 → 僵尸获胜
+        f.service.onPlayerLeaveWorld("w", alpha)
+        assertEquals(GamePhase.ENDED, f.service.phaseOf("w"))
+        assertNull(f.service.instance("w")?.teamOf(alpha))
+        assertTrue(f.service.isMotherReleased("w"))
+
+        // 另一条路径：人类离开世界同样触发结算
+        val f2 = Fixture()
+        f2.repo.save(ArenaDefinition("a", "w"))
+        f2.world.setPlayers("w", listOf(uuid(1), uuid(2)))
+        f2.service.start()
+        f2.service.forceStart("w")
+        val alpha2 = f2.service.instance("w")!!.alphaId()!!
+        val human2 = f2.world.playersIn("w").map { it.id }.first { it != alpha2 }
+        f2.service.onPlayerLeaveWorld("w", human2)
+        assertEquals(GamePhase.ENDED, f2.service.phaseOf("w"))
+    }
+
+    @Test
+    fun `map flow door events after restart reset finished flow`() {
+        // 上一局 HUMAN_WIN 后未等自动复位即强制开局：流程必须被复位而不是卡在结束态
+        val f = Fixture()
+        val flow = MapFlowDefinition(
+            arenaName = "a",
+            world = "w",
+            minPlayers = 2,
+            startDelaySeconds = 5,
+            maxDurationSeconds = 60,
+            stages = listOf(
+                MapFlowStage("s1", "大门", listOf(1), "s2"),
+                MapFlowStage("s2", "终点", listOf(2)),
+            ),
+            finish = MapFlowFinish(FinishType.DOOR, 2),
+        )
+        f.repo.save(ArenaDefinition("a", "w", mapFlow = flow))
+        f.world.setPlayers("w", listOf(uuid(1), uuid(2)))
+        f.service.start()
+        f.service.forceStart("w")
+
+        f.eventBus.publish(PlayerPassedDoorEvent("w", uuid(1), listOf(1)))
+        f.eventBus.publish(PlayerPassedDoorEvent("w", uuid(1), listOf(2)))
+        assertEquals(GamePhase.ENDED, f.service.phaseOf("w"))
+
+        // 不跑自动复位任务，直接再次强制开局
+        f.service.forceStart("w")
+        assertEquals(GamePhase.RUNNING, f.service.phaseOf("w"))
+        assertTrue(f.service.isDoorUnlocked("w", 1))
     }
 
     @Test

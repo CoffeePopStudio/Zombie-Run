@@ -45,8 +45,15 @@ class V2GameListener(
 
     @EventHandler
     fun onWorldChange(event: PlayerChangedWorldEvent) {
-        val world = worldOf(event.player)
-        gameFlow.onPlayerJoin(world, event.player.uniqueId)
+        val id = event.player.uniqueId
+        val newWorld = event.player.world.name
+        val oldWorld = playerWorlds[id]
+        // 先退出旧世界对局（母体离开需补位、最后一名人类离开需结算），再加入新世界
+        if (oldWorld != null && oldWorld != newWorld) {
+            gameFlow.onPlayerLeaveWorld(oldWorld, id)
+        }
+        playerWorlds[id] = newWorld
+        gameFlow.onPlayerJoin(newWorld, id)
     }
 
     @EventHandler

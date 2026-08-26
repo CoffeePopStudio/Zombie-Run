@@ -93,6 +93,11 @@ class GameFlowService(
         maxDurationTasks.clear()
         autoResetTasks.values.forEach { it.cancel() }
         autoResetTasks.clear()
+        motherReleaseTasks.values.forEach { it.cancel() }
+        motherReleaseTasks.clear()
+        motherReleasedWorlds.clear()
+        zombieKills.clear()
+        protectedUntil.clear()
         games.clear()
         mapFlows.clear()
     }
@@ -232,7 +237,9 @@ class GameFlowService(
             return
         }
         val players = worldAccess.playersIn(worldName)
-        if (players.size < settings.minPlayers) {
+        // 必须与 autoTick 使用同一规则源：map-flow 的 min-players 优先，否则
+        // map-flow 地图人数阈值低于全局 settings.min-players 时会反复开始/取消倒计时。
+        if (players.size < rules(worldName).minPlayers) {
             cancelCountdown(worldName, game, "人数不足，取消开局")
             taskHandle.cancel()
             return
@@ -257,7 +264,12 @@ class GameFlowService(
 
         mapFlowDef(worldName)?.let { flow ->
             val machine = mapFlows.computeIfAbsent(worldName) { MapFlowStateMachine(flow) }
-            if (machine.phaseSnapshot() == MapFlowPhase.WAITING) machine.beginCountdown()
+            // 上一局结算后 5 秒自动复位前被强制开局的场景：先复位流程再启动，
+            // 否则 machine.start() 会失败，新对局带着 HUMAN_WIN/ZOMBIE_WIN 状态运行。
+            if (machine.phaseSnapshot() != MapFlowPhase.STARTING) {
+                machine.reset()
+                machine.beginCountdown()
+            }
             machine.start()
         }
 
@@ -396,18 +408,18 @@ class GameFlowService(
 
     private fun onDoorPassed(event: PlayerPassedDoorEvent) {
         val player = worldAccess.player(event.playerId) ?: return
-        messages.chat(event.playerId, "进度更新：你已抵达 ${event.doorNumbers.maxOrNull()} 号门")
-        logger.info("[${event.worldName}] ${player.name} reached door ${event.doorNumbers.joinToString("/")}")
-
         val machine = mapFlows[event.worldName] ?: return
         when (machine.onDoorPassed(event.doorNumbers)) {
             MapFlowAdvanceResult.STAGE_ADVANCED -> {
                 val stage = machine.currentStage()
+                messages.chat(event.playerId, "进度更新：你已抵达 ${event.doorNumbers.maxOrNull()} 号门")
+                logger.info("[${event.worldName}] ${player.name} reached door ${event.doorNumbers.joinToString("/")}")
                 worldAccess.playersIn(event.worldName).forEach {
                     messages.chat(it.id, "已通过当前阶段，下一目标：${stage.label}（门号 ${stage.doorNumbers.joinToString("/")}）")
                 }
             }
             MapFlowAdvanceResult.FINISHED -> {
+                logger.info("[${event.worldName}] ${player.name} reached final door ${event.doorNumbers.joinToString("/")}")
                 val game = games[event.worldName] ?: return
                 if (game.phaseSnapshot() == GamePhase.RUNNING) {
                     endGame(event.worldName, game, GameTeam.HUMAN, "到达终点，人类获胜")
@@ -437,6 +449,15 @@ class GameFlowService(
     }
 
     fun onPlayerQuit(worldName: String, playerId: UUID) {
+        handlePlayerGone(worldName, playerId)
+    }
+
+    /** 玩家传送到其他世界：与退出等价——从旧世界对局名册移除，母体离开则补位。 */
+    fun onPlayerLeaveWorld(worldName: String, playerId: UUID) {
+        handlePlayerGone(worldName, playerId)
+    }
+
+    private fun handlePlayerGone(worldName: String, playerId: UUID) {
         val game = games[worldName] ?: return
         val removedTeam = game.removePlayer(playerId) ?: return
         if (game.phaseSnapshot() != GamePhase.RUNNING) return
@@ -453,7 +474,8 @@ class GameFlowService(
         val candidates = game.zombieIds().shuffled()
         val replacement = candidates.firstOrNull() ?: game.humanIds().firstOrNull()
         if (replacement != null && game.promoteZombieToAlpha(replacement)) {
-            // 新母体中途上任，不保留开局锁定，立即释放
+            // 取消原母体的未释放倒计时，新母体立即释放
+            cancelMotherRelease(worldName)
             motherReleasedWorlds[worldName] = true
             worldAccess.player(replacement)?.let {
                 messages.chat(it.id, "原母体已离开，你成为新的母体僵尸")
