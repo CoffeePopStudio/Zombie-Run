@@ -1,5 +1,6 @@
 package cn.oneachina.zombierun.v2.infrastructure.config
 
+import cn.oneachina.zombierun.v2.domain.door.PortalFront
 import cn.oneachina.zombierun.v2.domain.player.PlayerProfile
 import cn.oneachina.zombierun.v2.ports.PlayerDataPort
 import cn.oneachina.zombierun.v2.support.V2Logger
@@ -145,5 +146,38 @@ class V1MigrationServiceTest {
         assertEquals("STONE", stored["10,65,10"])
         assertEquals("AIR", stored["10,64,10"])
         assertEquals("AIR", stored["999,999,999"])
+    }
+
+    @Test
+    fun `migrate maps v1 reverse-direction to front negative`() {
+        val dir = createTempDirectory("zr2-migrate-reverse").toFile()
+        val v1Config = File(dir, "plugins/zombie-run/config/config.yml")
+        v1Config.parentFile.mkdirs()
+        v1Config.writeText(
+            """
+            game:
+              world: test_world
+            doors:
+              door_1:
+                x1: 10
+                y1: 64
+                z1: 10
+                x2: 10
+                y2: 66
+                z2: 20
+                door-number: 1
+                mode: normal
+                reverse-direction: true
+            """.trimIndent(),
+        )
+
+        val v2Folder = File(dir, "plugins/zombie-run-v2")
+        val fake = FakePlayerData()
+        val service = V1MigrationService(v2Folder, ArenaYamlRepository(v2Folder, V2Logger(Logger.getLogger("test"))), fake, BlockSnapshotStore(v2Folder), V2Logger(Logger.getLogger("test")))
+
+        service.migrate()
+
+        val saved = ArenaYamlRepository(v2Folder, V2Logger(Logger.getLogger("test"))).loadAll().single()
+        assertEquals(PortalFront.NEGATIVE, saved.doors.single().portal.front)
     }
 }

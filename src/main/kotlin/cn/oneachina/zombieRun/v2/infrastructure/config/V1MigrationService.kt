@@ -175,10 +175,13 @@ class V1MigrationService(
                 PortalAxis.Z -> z1.toDouble()
                 PortalAxis.Y -> y1.toDouble()
             }
+            // v1 的 reverse-direction 隐藏选项映射为 v2 的 front（ARCHITECTURE.md 5.4）
+            val reverse = d.getBoolean("reverse-direction", false) || d.getBoolean("reverse_direction", false)
+            val front = if (reverse) PortalFront.NEGATIVE else PortalFront.POSITIVE
             val portal = when (axis) {
-                PortalAxis.X -> Portal(axis, PortalFront.POSITIVE, plane, minOf(z1, z2).toDouble(), maxOf(z1, z2).toDouble(), minOf(y1, y2).toDouble(), maxOf(y1, y2).toDouble())
-                PortalAxis.Z -> Portal(axis, PortalFront.POSITIVE, plane, minOf(x1, x2).toDouble(), maxOf(x1, x2).toDouble(), minOf(y1, y2).toDouble(), maxOf(y1, y2).toDouble())
-                PortalAxis.Y -> Portal(axis, PortalFront.POSITIVE, plane, minOf(x1, x2).toDouble(), maxOf(x1, x2).toDouble(), minOf(z1, z2).toDouble(), maxOf(z1, z2).toDouble())
+                PortalAxis.X -> Portal(axis, front, plane, minOf(z1, z2).toDouble(), maxOf(z1, z2).toDouble(), minOf(y1, y2).toDouble(), maxOf(y1, y2).toDouble())
+                PortalAxis.Z -> Portal(axis, front, plane, minOf(x1, x2).toDouble(), maxOf(x1, x2).toDouble(), minOf(y1, y2).toDouble(), maxOf(y1, y2).toDouble())
+                PortalAxis.Y -> Portal(axis, front, plane, minOf(x1, x2).toDouble(), maxOf(x1, x2).toDouble(), minOf(z1, z2).toDouble(), maxOf(z1, z2).toDouble())
             }
             doors += DoorDefinition(
                 id = "v1_$id",
