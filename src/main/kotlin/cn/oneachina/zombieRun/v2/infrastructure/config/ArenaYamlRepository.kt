@@ -158,7 +158,7 @@ class ArenaYamlRepository(
             ?: throw ArenaValidationException("door $id: missing 'portal'")
         val axis = PortalAxis.entries.firstOrNull {
             it.name.equals(portalSection.getString("axis", "x"), ignoreCase = true)
-        } ?: throw ArenaValidationException("door $id: portal.axis must be x or z")
+        } ?: throw ArenaValidationException("door $id: portal.axis must be x, y or z")
         val front = PortalFront.entries.firstOrNull {
             it.name.equals(portalSection.getString("front", "positive"), ignoreCase = true)
         } ?: throw ArenaValidationException("door $id: portal.front must be positive or negative")

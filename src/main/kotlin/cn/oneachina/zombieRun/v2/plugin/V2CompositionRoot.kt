@@ -126,6 +126,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         services.register(TaskService::class, taskService)
 
         val settings = settingsLoader.load()
+        logger.debugEnabled = settings.debug
         staminaService.applyRules(
             StaminaRules(
                 max = settings.staminaMax,
