@@ -757,7 +757,7 @@ class Zr2Command(
                     sender.sendMessage(Component.text("${arena.name} 未配置 map-flow", NamedTextColor.YELLOW)); return
                 }
                 sender.sendMessage(Component.text("===== map-flow ${arena.name} =====", NamedTextColor.GREEN))
-                sender.sendMessage(Component.text("min-players=${f.minPlayers} start=${f.startDelaySeconds}s max=${f.maxDurationSeconds}s", NamedTextColor.GREEN))
+                sender.sendMessage(Component.text("min-players=${f.minPlayers} start=${f.startDelaySeconds}s max=${f.maxDurationSeconds}s mother-release=${f.motherReleaseDelaySeconds}s", NamedTextColor.GREEN))
                 sender.sendMessage(Component.text("reward: human ${f.rewardCoinsHuman}/${f.rewardXpHuman} zombie ${f.rewardCoinsZombie}/${f.rewardXpZombie} starter=${f.starterWeaponId ?: "-"}", NamedTextColor.GREEN))
                 sender.sendMessage(Component.text("finish: ${f.finish.type.name} door=${f.finish.doorNumber ?: "-"}", NamedTextColor.GREEN))
                 f.stages.forEachIndexed { index, s ->
@@ -826,6 +826,7 @@ class Zr2Command(
             "min-players" -> flow.copy(minPlayers = value.toIntOrNull() ?: run { badNumber(sender); return })
             "start-delay-seconds" -> flow.copy(startDelaySeconds = value.toIntOrNull() ?: run { badNumber(sender); return })
             "max-duration-seconds" -> flow.copy(maxDurationSeconds = value.toIntOrNull() ?: run { badNumber(sender); return })
+            "mother-release-delay-seconds" -> flow.copy(motherReleaseDelaySeconds = value.toIntOrNull() ?: run { badNumber(sender); return })
             "reward-coins-human" -> flow.copy(rewardCoinsHuman = value.toIntOrNull() ?: run { badNumber(sender); return })
             "reward-xp-human" -> flow.copy(rewardXpHuman = value.toIntOrNull() ?: run { badNumber(sender); return })
             "reward-coins-zombie" -> flow.copy(rewardCoinsZombie = value.toIntOrNull() ?: run { badNumber(sender); return })
@@ -1044,7 +1045,7 @@ class Zr2Command(
             "mapflow" -> when (args.size) {
                 2 -> listOf("list", "info", "init", "set", "stage", "finish", "remove").filter { it.startsWith(args[1].lowercase()) }
                 3 -> if (args[1] in listOf("info", "init", "set", "stage", "finish", "remove")) arenaNames(args[2]) else emptyList()
-                4 -> if (args[1].equals("set", true)) listOf("min-players", "start-delay-seconds", "max-duration-seconds", "reward-coins-human", "reward-xp-human", "reward-coins-zombie", "reward-xp-zombie", "starter-weapon").filter { it.startsWith(args[3].lowercase()) } else if (args[1].equals("finish", true)) listOf("door", "extraction").filter { it.startsWith(args[3].lowercase()) } else emptyList()
+                4 -> if (args[1].equals("set", true)) listOf("min-players", "start-delay-seconds", "max-duration-seconds", "mother-release-delay-seconds", "reward-coins-human", "reward-xp-human", "reward-coins-zombie", "reward-xp-zombie", "starter-weapon").filter { it.startsWith(args[3].lowercase()) } else if (args[1].equals("finish", true)) listOf("door", "extraction").filter { it.startsWith(args[3].lowercase()) } else emptyList()
                 5 -> if (args[1].equals("stage", true)) listOf("add", "set", "next", "remove").filter { it.startsWith(args[3].lowercase()) } else emptyList()
                 else -> emptyList()
             }

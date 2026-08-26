@@ -7,6 +7,7 @@ import org.bukkit.entity.Projectile
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.entity.EntityDamageByEntityEvent
+import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
@@ -53,6 +54,12 @@ class V2GameListener(
         val victim = event.entity as? Player ?: return
         val world = worldOf(victim)
 
+        // 复活保护/母体未释放保护：期间免疫伤害
+        if (gameFlow.isProtected(victim.uniqueId)) {
+            event.isCancelled = true
+            return
+        }
+
         val attacker = when (val damager = event.damager) {
             is Player -> damager
             is Projectile -> damager.shooter as? Player
@@ -64,6 +71,13 @@ class V2GameListener(
         // 人类击杀僵尸：记录统计，僵尸死亡后由重生逻辑送回僵尸出生点
         val victimTeam = gameFlow.teamOf(world, victim.uniqueId)
         val attackerTeam = gameFlow.teamOf(world, attacker.uniqueId)
+
+        // 母体未释放前无法攻击人类
+        if (attackerTeam == GameTeam.ZOMBIE_MAIN && !gameFlow.isMotherReleased(world)) {
+            event.isCancelled = true
+            return
+        }
+
         if (lethal && attackerTeam == GameTeam.HUMAN &&
             (victimTeam == GameTeam.ZOMBIE || victimTeam == GameTeam.ZOMBIE_MAIN)
         ) {
@@ -74,6 +88,15 @@ class V2GameListener(
         if (infected) {
             event.isCancelled = true
             victim.health = victim.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH)?.value ?: 20.0
+        }
+    }
+
+    @EventHandler
+    fun onDeath(event: PlayerDeathEvent) {
+        val victim = event.entity
+        val world = worldOf(victim)
+        if (gameFlow.teamOf(world, victim.uniqueId) == GameTeam.HUMAN) {
+            gameFlow.onHumanDied(world, victim.uniqueId)
         }
     }
 

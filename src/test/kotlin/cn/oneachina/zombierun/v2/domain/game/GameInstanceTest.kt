@@ -103,6 +103,17 @@ class GameInstanceTest {
     }
 
     @Test
+    fun `spectate converts human to spectator and removes from humans`() {
+        val game = GameInstance("world", rules())
+        val ids = listOf(uuid(1), uuid(2))
+        game.start(ids, alphaIndex = 0)
+
+        assertTrue(game.spectate(ids[1]))
+        assertEquals(GameTeam.SPECTATOR, game.teamOf(ids[1]))
+        assertFalse(game.humanIds().contains(ids[1]))
+    }
+
+    @Test
     fun `room never decreases`() {
         val game = GameInstance("world", rules())
         val ids = listOf(uuid(1), uuid(2))

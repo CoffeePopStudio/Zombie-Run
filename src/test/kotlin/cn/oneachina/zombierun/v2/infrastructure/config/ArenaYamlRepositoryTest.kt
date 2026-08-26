@@ -40,6 +40,7 @@ class ArenaYamlRepositoryTest {
                 minPlayers = 2,
                 startDelaySeconds = 10,
                 maxDurationSeconds = 300,
+                motherReleaseDelaySeconds = 20,
                 stages = listOf(
                     MapFlowStage("s1", "大门", listOf(1, 2), "s2"),
                     MapFlowStage("s2", "终点", listOf(3)),
@@ -56,6 +57,7 @@ class ArenaYamlRepositoryTest {
         assertEquals("s2", flow.stages[0].nextStageId)
         assertEquals(FinishType.DOOR, flow.finish.type)
         assertEquals(3, flow.finish.doorNumber)
+        assertEquals(20, flow.motherReleaseDelaySeconds)
     }
 
     @Test

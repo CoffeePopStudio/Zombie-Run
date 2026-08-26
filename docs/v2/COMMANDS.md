@@ -76,7 +76,7 @@
 | `/zr2 mapflow list` | 列出已配置 MapFlow 的 arena |
 | `/zr2 mapflow info <arena>` | 查看 arena 的 MapFlow 详情 |
 | `/zr2 mapflow init <arena>` | 按现有门号自动生成阶段链 |
-| `/zr2 mapflow set <arena> <key> <value>` | 设置人数/倒计时/时长/奖励/初始武器 |
+| `/zr2 mapflow set <arena> <key> <value>` | 设置人数/倒计时/时长/母体释放延迟/奖励/初始武器 |
 | `/zr2 mapflow stage add <arena> <id> <门号...> [label]` | 添加阶段 |
 | `/zr2 mapflow stage set <arena> <id> <门号...>` | 修改阶段门号 |
 | `/zr2 mapflow stage next <arena> <id> <nextId\|none>` | 设置阶段下一跳 |
@@ -85,7 +85,7 @@
 | `/zr2 mapflow finish <arena> extraction` | 终点=撤离 |
 | `/zr2 mapflow remove <arena>` | 移除整个 MapFlow |
 
-**`set` 可用 key**：`min-players` `start-delay-seconds` `max-duration-seconds` `reward-coins-human` `reward-xp-human` `reward-coins-zombie` `reward-xp-zombie` `starter-weapon`
+**`set` 可用 key**：`min-players` `start-delay-seconds` `max-duration-seconds` `mother-release-delay-seconds` `reward-coins-human` `reward-xp-human` `reward-coins-zombie` `reward-xp-zombie` `starter-weapon`
 
 ## 任务
 

@@ -94,6 +94,14 @@ class GameInstance(
         teams.remove(playerId)
     }
 
+    /** 人类非感染死亡：从对局参与者转为观战，不再以人类/僵尸身份回场。 */
+    fun spectate(playerId: UUID): Boolean = synchronized(lock) {
+        if (teams[playerId] == null) return false
+        teams[playerId] = GameTeam.SPECTATOR
+        rooms.remove(playerId)
+        true
+    }
+
     fun beginCountdown() {
         synchronized(lock) {
             if (phase == GamePhase.WAITING) phase = GamePhase.STARTING

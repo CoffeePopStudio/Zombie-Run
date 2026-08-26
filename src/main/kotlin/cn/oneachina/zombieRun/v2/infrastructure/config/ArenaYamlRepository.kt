@@ -129,6 +129,7 @@ class ArenaYamlRepository(
             rewardCoinsZombie = section.getInt("reward-coins-zombie", 0),
             rewardXpZombie = section.getInt("reward-xp-zombie", 0),
             starterWeaponId = section.getString("starter-weapon"),
+            motherReleaseDelaySeconds = section.getInt("mother-release-delay-seconds", 10),
         )
     }
 
@@ -362,6 +363,7 @@ class ArenaYamlRepository(
         "min-players" to minPlayers,
         "start-delay-seconds" to startDelaySeconds,
         "max-duration-seconds" to maxDurationSeconds,
+        "mother-release-delay-seconds" to motherReleaseDelaySeconds,
         "reward-coins-human" to rewardCoinsHuman,
         "reward-xp-human" to rewardXpHuman,
         "reward-coins-zombie" to rewardCoinsZombie,

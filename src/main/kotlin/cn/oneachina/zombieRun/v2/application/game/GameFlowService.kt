@@ -66,6 +66,9 @@ class GameFlowService(
     private val maxDurationTasks = ConcurrentHashMap<String, TaskHandle>()
     private val autoResetTasks = ConcurrentHashMap<String, TaskHandle>()
     private val zombieKills = ConcurrentHashMap<UUID, Int>()
+    private val protectedUntil = ConcurrentHashMap<UUID, Long>()
+    private val motherReleasedWorlds = ConcurrentHashMap<String, Boolean>()
+    private val motherReleaseTasks = ConcurrentHashMap<String, TaskHandle>()
     private var autoTickTask: TaskHandle? = null
 
     init {
@@ -262,7 +265,7 @@ class GameFlowService(
         val alphaId = game.alphaId()
 
         assignments.forEach { assignment ->
-            val spawn = spawnForTeam(worldName, assignment.team)
+            val spawn = spawnForTeam(worldName, assignment.team, initial = true)
             if (spawn != null) {
                 teleportTo(worldName, assignment.playerId, spawn)
             }
@@ -270,6 +273,10 @@ class GameFlowService(
                 mapFlowDef(worldName)?.starterWeaponId?.let { weaponId ->
                     weaponService?.giveWeapon(assignment.playerId, weaponId)
                 }
+            } else if (assignment.team == GameTeam.ZOMBIE_MAIN) {
+                val releaseDelay = mapFlowDef(worldName)?.motherReleaseDelaySeconds ?: 0
+                protect(assignment.playerId, releaseDelay)
+                scheduleMotherRelease(worldName, releaseDelay)
             }
         }
 
@@ -314,6 +321,59 @@ class GameFlowService(
 
     override fun teamOf(worldName: String, playerId: UUID): GameTeam? =
         games[worldName]?.teamOf(playerId)
+
+    /** 复活后短暂无敌/母体未释放期间不可被伤害。 */
+    fun isProtected(playerId: UUID): Boolean {
+        val deadline = protectedUntil[playerId] ?: return false
+        if (System.currentTimeMillis() < deadline) return true
+        protectedUntil.remove(playerId)
+        return false
+    }
+
+    fun isMotherReleased(worldName: String): Boolean =
+        motherReleasedWorlds[worldName] != false
+
+    private fun protect(playerId: UUID, seconds: Int) {
+        if (seconds <= 0) return
+        protectedUntil[playerId] = System.currentTimeMillis() + seconds * 1000L
+    }
+
+    private fun scheduleMotherRelease(worldName: String, delaySeconds: Int) {
+        motherReleaseTasks.remove(worldName)?.cancel()
+        motherReleasedWorlds[worldName] = false
+        val alphaId = games[worldName]?.alphaId() ?: return
+        if (delaySeconds <= 0) {
+            motherReleasedWorlds[worldName] = true
+            return
+        }
+        var remaining = delaySeconds
+        val handle = scheduler.globalTimer(1L, 20L) { taskHandle ->
+            if (games[worldName]?.phaseSnapshot() != GamePhase.RUNNING) {
+                motherReleasedWorlds.remove(worldName)
+                taskHandle.cancel()
+                return@globalTimer
+            }
+            if (remaining > 0) {
+                worldAccess.player(alphaId)?.let { messages.title(it.id, "$remaining", "母体即将释放") }
+                remaining--
+            } else {
+                motherReleasedWorlds[worldName] = true
+                worldAccess.player(alphaId)?.let { messages.chat(it.id, "母体已释放，狩猎开始！") }
+                worldAccess.playersIn(worldName).forEach { p ->
+                    messages.chat(p.id, "母体已释放！")
+                }
+                motherReleaseTasks.remove(worldName)
+                taskHandle.cancel()
+            }
+        }
+        motherReleaseTasks[worldName] = handle
+        taskRegistry.register(handle)
+    }
+
+    private fun cancelMotherRelease(worldName: String) {
+        motherReleaseTasks.remove(worldName)?.cancel()
+        motherReleasedWorlds.remove(worldName)
+    }
 
     override fun setRoom(worldName: String, playerId: UUID, room: Int) {
         games[worldName]?.setRoom(playerId, room)
@@ -393,6 +453,8 @@ class GameFlowService(
         val candidates = game.zombieIds().shuffled()
         val replacement = candidates.firstOrNull() ?: game.humanIds().firstOrNull()
         if (replacement != null && game.promoteZombieToAlpha(replacement)) {
+            // 新母体中途上任，不保留开局锁定，立即释放
+            motherReleasedWorlds[worldName] = true
             worldAccess.player(replacement)?.let {
                 messages.chat(it.id, "原母体已离开，你成为新的母体僵尸")
                 logger.info("[$worldName] ${it.name} promoted to alpha")
@@ -407,6 +469,8 @@ class GameFlowService(
         if (game.teamOf(victimId) != GameTeam.HUMAN) return false
         val attackerTeam = attackerId?.let { game.teamOf(it) } ?: return false
         if (attackerTeam != GameTeam.ZOMBIE && attackerTeam != GameTeam.ZOMBIE_MAIN) return false
+        // 母体未释放前不能感染/伤害人类
+        if (attackerTeam == GameTeam.ZOMBIE_MAIN && !isMotherReleased(worldName)) return false
         if (!lethal) return false
 
         val result = game.infect(victimId)
@@ -418,6 +482,7 @@ class GameFlowService(
 
         val spawn = spawnForTeam(worldName, GameTeam.ZOMBIE)
         if (spawn != null) {
+            protect(victimId, 3)
             val handle = scheduler.globalLater(20L) { teleportTo(worldName, victimId, spawn) }
             taskRegistry.register(handle)
         }
@@ -427,6 +492,21 @@ class GameFlowService(
             endGame(worldName, game, GameTeam.ZOMBIE_MAIN, "人类被感染殆尽，僵尸获胜")
         }
         return true
+    }
+
+    /** 人类非感染死亡（摔死/环境伤害等）：直接淘汰转观战，不再复活回人类。 */
+    fun onHumanDied(worldName: String, playerId: UUID) {
+        val game = games[worldName] ?: return
+        if (game.phaseSnapshot() != GamePhase.RUNNING) return
+        if (game.teamOf(playerId) != GameTeam.HUMAN) return
+        game.spectate(playerId)
+        worldAccess.playersIn(worldName).forEach {
+            messages.chat(it.id, "${worldAccess.player(playerId)?.name ?: playerId} 阵亡了，进入观战")
+        }
+        if (game.humanIds().isEmpty()) {
+            mapFlows[worldName]?.onAllHumansInfected()
+            endGame(worldName, game, GameTeam.ZOMBIE_MAIN, "人类全部阵亡，僵尸获胜")
+        }
     }
 
     fun killCount(playerId: UUID): Int = zombieKills[playerId] ?: 0
@@ -449,22 +529,44 @@ class GameFlowService(
     fun onPlayerRespawn(worldName: String, playerId: UUID) {
         val game = games[worldName] ?: return
         val team = game.teamOf(playerId) ?: return
+        if (team == GameTeam.SPECTATOR) return
         val spawn = spawnForTeam(worldName, team)
         if (spawn != null) {
+            protect(playerId, 3)
             val handle = scheduler.globalLater(2L) { teleportTo(worldName, playerId, spawn) }
             taskRegistry.register(handle)
         }
     }
 
-    private fun spawnForTeam(worldName: String, team: GameTeam): RespawnDefinition? {
+    private fun spawnForTeam(worldName: String, team: GameTeam, initial: Boolean = false): RespawnDefinition? {
         val respawns = arenaRepository.byWorld(worldName).flatMap { it.respawns }
-        val preferred = when (team) {
-            GameTeam.HUMAN -> listOf(RespawnType.PLAYER, RespawnType.WAIT)
-            GameTeam.ZOMBIE_MAIN -> listOf(RespawnType.ZOMBIE_MAIN, RespawnType.ZOMBIE, RespawnType.WAIT)
-            GameTeam.ZOMBIE -> listOf(RespawnType.ZOMBIE, RespawnType.WAIT)
-            GameTeam.SPECTATOR -> emptyList()
+        fun randomOf(type: RespawnType): RespawnDefinition? {
+            val matches = respawns.filter { it.type == type }
+            return if (matches.isEmpty()) null else matches.random()
         }
-        return preferred.firstNotNullOfOrNull { type -> respawns.firstOrNull { it.type == type } }
+        fun doorCheckpoint(type: RespawnType): RespawnDefinition? {
+            val currentDoorNumbers = mapFlows[worldName]?.currentDoorNumbers() ?: return null
+            val matches = respawns.filter { it.type == type && it.doorNumber in currentDoorNumbers }
+            return if (matches.isEmpty()) null else matches.random()
+        }
+
+        return when (team) {
+            GameTeam.HUMAN -> randomOf(RespawnType.PLAYER) ?: randomOf(RespawnType.WAIT)
+            GameTeam.ZOMBIE_MAIN ->
+                if (initial) {
+                    randomOf(RespawnType.ZOMBIE_MAIN) ?: randomOf(RespawnType.ZOMBIE) ?: randomOf(RespawnType.WAIT)
+                } else {
+                    doorCheckpoint(RespawnType.DOOR_ZOMBIE)
+                        ?: randomOf(RespawnType.ZOMBIE_MAIN)
+                        ?: randomOf(RespawnType.ZOMBIE)
+                        ?: randomOf(RespawnType.WAIT)
+                }
+            GameTeam.ZOMBIE ->
+                doorCheckpoint(RespawnType.DOOR_ZOMBIE)
+                    ?: randomOf(RespawnType.ZOMBIE)
+                    ?: randomOf(RespawnType.WAIT)
+            GameTeam.SPECTATOR -> null
+        }
     }
 
     private fun teleportTo(worldName: String, playerId: UUID, spawn: RespawnDefinition) {
@@ -488,6 +590,7 @@ class GameFlowService(
     private fun endGame(worldName: String, game: GameInstance, winner: GameTeam, message: String) {
         cancelCountdownSilently(worldName)
         cancelEscape(worldName)
+        cancelMotherRelease(worldName)
         maxDurationTasks.remove(worldName)?.cancel()
         game.end(winner)
         worldAccess.playersIn(worldName).forEach { messages.chat(it.id, message) }
@@ -509,8 +612,10 @@ class GameFlowService(
         val game = games[worldName] ?: return false
         cancelCountdownSilently(worldName)
         cancelEscape(worldName)
+        cancelMotherRelease(worldName)
         maxDurationTasks.remove(worldName)?.cancel()
         autoResetTasks.remove(worldName)?.cancel()
+        motherReleasedWorlds.remove(worldName)
         games.remove(worldName)
         mapFlows.remove(worldName)
         val fresh = GameInstance(worldName, rules(worldName))
