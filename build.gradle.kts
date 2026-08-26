@@ -45,6 +45,7 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("io.papermc.paper:paper-api:26.1.2.build.+")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
 }
 
 tasks.shadowJar {
@@ -84,6 +85,11 @@ kotlin {
 
 tasks.build {
     dependsOn("shadowJar")
+}
+
+tasks.test {
+    // Mockito/ByteBuddy 在 JDK 25 下需要显式开启实验性支持
+    jvmArgs("-Dnet.bytebuddy.experimental=true")
 }
 
 tasks.processResources {

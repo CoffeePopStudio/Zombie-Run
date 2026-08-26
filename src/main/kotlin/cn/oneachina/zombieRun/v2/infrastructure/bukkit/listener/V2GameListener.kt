@@ -20,6 +20,9 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class V2GameListener(
     private val gameFlow: GameFlowService,
+    private val maxHealthProvider: (Player) -> Double = { player ->
+        player.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH)?.value ?: 20.0
+    },
 ) : Listener {
 
     private val playerWorlds = ConcurrentHashMap<UUID, String>()
@@ -94,7 +97,7 @@ class V2GameListener(
         val infected = gameFlow.onCombat(victim.uniqueId, attacker.uniqueId, world, lethal)
         if (infected) {
             event.isCancelled = true
-            victim.health = victim.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH)?.value ?: 20.0
+            victim.health = maxHealthProvider(victim)
         }
     }
 
