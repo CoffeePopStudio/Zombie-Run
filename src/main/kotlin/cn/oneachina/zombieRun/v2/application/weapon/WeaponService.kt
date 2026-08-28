@@ -47,7 +47,7 @@ class WeaponService(
     fun giveRandom(playerId: UUID, category: WeaponCategory?): WeaponDefinition? {
         val candidates = repository.all().filter { it.enabled && (category == null || it.category == category) }
         val weapon = candidates.randomOrNull() ?: return null
-        val ok = integration.giveWeapon(playerId, weapon.type)
+        val ok = integration.giveWeapon(playerId, weapon.displayName)
         if (ok) {
             messages.chat(playerId, "随机武器：${weapon.displayName}")
         } else {
