@@ -69,6 +69,7 @@ class GameFlowService(
     private val zombieDoorTasks = ConcurrentHashMap<String, TaskHandle>()
     private val autoResetTasks = ConcurrentHashMap<String, TaskHandle>()
     private val zombieKills = ConcurrentHashMap<UUID, Int>()
+    private val infectCount = ConcurrentHashMap<UUID, Int>()
     private val protectedUntil = ConcurrentHashMap<UUID, Long>()
     private val motherReleasedWorlds = ConcurrentHashMap<String, Boolean>()
     private val motherReleaseTasks = ConcurrentHashMap<String, TaskHandle>()
@@ -102,6 +103,7 @@ class GameFlowService(
         motherReleaseTasks.clear()
         motherReleasedWorlds.clear()
         zombieKills.clear()
+        infectCount.clear()
         protectedUntil.clear()
         games.clear()
         mapFlows.clear()
@@ -432,6 +434,9 @@ class GameFlowService(
 
     private fun onDoorPassed(event: PlayerPassedDoorEvent) {
         val player = worldAccess.player(event.playerId) ?: return
+        // 过门即时 XP（economy.pass-door-xp，默认 5）
+        val xp = settings.economy.passDoorXp
+        if (xp > 0) playerData?.addXp(event.playerId, xp)
         val machine = mapFlows[event.worldName] ?: return
         when (machine.onDoorPassed(event.doorNumbers)) {
             MapFlowAdvanceResult.STAGE_ADVANCED -> {
@@ -549,6 +554,7 @@ class GameFlowService(
         if (attackerTeam != GameTeam.ZOMBIE && attackerTeam != GameTeam.ZOMBIE_MAIN) return false
 
         val result = game.infect(victimId)
+        infectCount.merge(attackerId, 1, Int::plus)
         val victimName = worldAccess.player(victimId)?.name ?: victimId.toString()
         val attackerName = worldAccess.player(attackerId)?.name ?: attackerId.toString()
         worldAccess.playersIn(worldName).forEach {
@@ -632,6 +638,20 @@ class GameFlowService(
     }
 
     fun killCount(playerId: UUID): Int = zombieKills[playerId] ?: 0
+
+    fun infectCount(playerId: UUID): Int = infectCount[playerId] ?: 0
+
+    /** 结算榜单：击杀 Top-N（UUID） */
+    fun topKillers(worldName: String, n: Int): List<Pair<UUID, Int>> =
+        games[worldName]?.playerIds()?.mapNotNull { id ->
+            killCount(id).takeIf { it > 0 }?.let { id to it }
+        }?.sortedByDescending { it.second }?.take(n) ?: emptyList()
+
+    /** 结算榜单：感染 Top-N（UUID） */
+    fun topInfectors(worldName: String, n: Int): List<Pair<UUID, Int>> =
+        games[worldName]?.playerIds()?.mapNotNull { id ->
+            infectCount(id).takeIf { it > 0 }?.let { id to it }
+        }?.sortedByDescending { it.second }?.take(n) ?: emptyList()
 
     /** 僵尸被击杀：记录击杀统计（僵尸死亡由监听器取消、按重生点传送）。 */
     fun onZombieKilled(worldName: String, killerId: UUID, victimId: UUID) {
@@ -717,6 +737,8 @@ class GameFlowService(
         zombieDoorTasks.remove(worldName)?.cancel()
         game.end(winner)
         worldAccess.playersIn(worldName).forEach { messages.chat(it.id, message) }
+        awardSurviveReward(worldName, game, winner)
+        awardRankRewards(worldName, game)
         awardMapFlowRewards(worldName, game, winner)
         logger.info("[$worldName] game ended: winner=$winner - $message")
         eventBus.publish(GameEndedEvent(worldName, winner.name))
@@ -742,10 +764,40 @@ class GameFlowService(
         motherReleasedWorlds.remove(worldName)
         games.remove(worldName)
         mapFlows.remove(worldName)
+        game.playerIds().forEach { zombieKills.remove(it); infectCount.remove(it) }
         val fresh = GameInstance(worldName, rules(worldName))
         games[worldName] = fresh
         logger.info("[$worldName] game reset to WAITING")
         return true
+    }
+
+    /** 直升机逃脱/撑到结束的人类存活奖励。 */
+    private fun awardSurviveReward(worldName: String, game: GameInstance, winner: GameTeam) {
+        if (winner != GameTeam.HUMAN) return
+        val coins = settings.economy.surviveHumanCoins
+        if (coins <= 0) return
+        val pd = playerData ?: return
+        game.humanIds().forEach { id ->
+            pd.addCoins(id, coins)
+            messages.chat(id, "作为人类活到最后！+$coins 硬币")
+        }
+    }
+
+    /** 结算榜单奖励：击杀/感染 Top3 发 rank-reward-coins。 */
+    private fun awardRankRewards(worldName: String, game: GameInstance) {
+        val pd = playerData ?: return
+        val rewards = settings.economy.rankRewardCoins
+        if (rewards.isEmpty()) return
+        listOf("击杀" to topKillers(worldName, rewards.size), "感染" to topInfectors(worldName, rewards.size))
+            .forEach { (label, top) ->
+                top.forEachIndexed { index, (id, count) ->
+                    val reward = rewards.getOrNull(index) ?: return@forEachIndexed
+                    if (reward > 0) {
+                        pd.addCoins(id, reward)
+                        messages.chat(id, "+ $reward 硬币! ($label 第 ${index + 1} 名，共 $count)")
+                    }
+                }
+            }
     }
 
     private fun awardMapFlowRewards(worldName: String, game: GameInstance, winner: GameTeam) {

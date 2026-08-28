@@ -90,7 +90,7 @@ class V2BattleListener(
                     victim.location.clone().add(0.0, victim.eyeHeight - 0.2, 0.0),
                     5, 0.2, 0.2, 0.2, 0.1,
                 )
-                playerData?.addXp(shooter.uniqueId, HEADSHOT_XP)
+                playerData?.addXp(shooter.uniqueId, economy.headshotXp)
             }
             if (dead) {
                 victim.health = 0.0
@@ -197,14 +197,11 @@ class V2BattleListener(
                 if (killer != null && killerTeam == GameTeam.HUMAN) {
                     val isMain = victimTeam == GameTeam.ZOMBIE_MAIN
                     gameFlow.onZombieKilled(world, killer.uniqueId, victim.uniqueId)
-                    playerData?.addCoins(killer.uniqueId, if (isMain) KILL_MAIN_COINS else KILL_ZOMBIE_COINS)
-                    playerData?.addXp(killer.uniqueId, if (isMain) KILL_MAIN_XP else KILL_ZOMBIE_XP)
-                    killer.sendMessage(
-                        Component.text(
-                            "+ ${if (isMain) KILL_MAIN_COINS else KILL_ZOMBIE_COINS} 硬币!",
-                            NamedTextColor.GOLD,
-                        ),
-                    )
+                    val coins = if (isMain) economy.killZombieMainCoins else economy.killZombieCoins
+                    val xp = if (isMain) economy.killZombieMainXp else economy.killZombieXp
+                    playerData?.addCoins(killer.uniqueId, coins)
+                    playerData?.addXp(killer.uniqueId, xp)
+                    killer.sendMessage(Component.text("+ $coins 硬币!", NamedTextColor.GOLD))
                 }
                 respawnZombie(victim, world)
             }
@@ -214,9 +211,9 @@ class V2BattleListener(
 
     private fun infectHuman(attacker: Player, victim: Player, world: String) {
         gameFlow.onCombatInfection(world, attacker.uniqueId, victim.uniqueId)
-        playerData?.addCoins(attacker.uniqueId, INFECT_COINS)
-        playerData?.addXp(attacker.uniqueId, INFECT_XP)
-        attacker.sendMessage(Component.text("+ $INFECT_COINS 硬币！感染了一名人类", NamedTextColor.GOLD))
+        playerData?.addCoins(attacker.uniqueId, economy.infectHumanCoins)
+        playerData?.addXp(attacker.uniqueId, economy.infectHumanXp)
+        attacker.sendMessage(Component.text("+ ${economy.infectHumanCoins} 硬币！感染了一名人类", NamedTextColor.GOLD))
     }
 
     private fun convertToZombie(victim: Player, world: String, message: String) {
@@ -243,13 +240,5 @@ class V2BattleListener(
         }
     }
 
-    companion object {
-        const val HEADSHOT_XP = 5
-        const val KILL_ZOMBIE_COINS = 50
-        const val KILL_ZOMBIE_XP = 30
-        const val KILL_MAIN_COINS = 150
-        const val KILL_MAIN_XP = 30
-        const val INFECT_COINS = 50
-        const val INFECT_XP = 20
-    }
+    private val economy get() = settings.economy
 }

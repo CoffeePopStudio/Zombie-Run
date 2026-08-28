@@ -136,6 +136,7 @@ private class Fixture(globalMinPlayers: Int = 2) {
             staminaSprintDrain = 0.25,
             staminaRegen = 0.08,
             staminaExhaustDelayTicks = 40,
+            economy = cn.oneachina.zombierun.v2.domain.combat.EconomyRules(),
         ),
         arenaRepository = repo,
         worldAccess = world,

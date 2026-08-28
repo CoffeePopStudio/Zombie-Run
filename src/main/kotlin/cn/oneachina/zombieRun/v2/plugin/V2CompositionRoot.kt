@@ -20,6 +20,7 @@ import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2CombatListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2DoorListener
 import cn.oneachina.zombierun.v2.domain.combat.CombatRules
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2BattleListener
+import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2HazardListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2PlayerStateListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2ProtectionListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.bindPlayerStateBridge
@@ -189,6 +190,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         plugin.server.pluginManager.registerEvents(battleListener, plugin)
         plugin.server.pluginManager.registerEvents(playerStateListener, plugin)
         plugin.server.pluginManager.registerEvents(protectionListener, plugin)
+        plugin.server.pluginManager.registerEvents(V2HazardListener(gameFlow, combatHealth), plugin)
         bindPlayerStateBridge(eventBus, playerStateListener)
         gameFlow.zombieBuffApplier = { id -> cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2PlayerStateListener.zombieBuffs(id) }
         gameFlow.motherReleaseStateSync = { id -> cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2PlayerStateListener.unfreezeAlpha(id) }
@@ -206,6 +208,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         val command = Zr2Command(this, settings.defaultWorld)
         plugin.getCommand("zr2")?.setExecutor(command)
         plugin.getCommand("zr2")?.tabCompleter = command
+        plugin.server.pluginManager.registerEvents(command, plugin)
     }
 
     private fun loadCombatRules(): CombatRules {

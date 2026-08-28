@@ -16,3 +16,21 @@ data class CombatRules(
     /** 人类爆炸伤害减免倍率（0.05 = 只受 5%） */
     val explosionDamageReduction: Double = 0.05,
 )
+
+
+/**
+ * 即时经济奖励规则（settings.yml economy 节可覆盖）。
+ */
+data class EconomyRules(
+    val killZombieCoins: Int = 50,
+    val killZombieXp: Int = 30,
+    val killZombieMainCoins: Int = 150,
+    val killZombieMainXp: Int = 30,
+    val infectHumanCoins: Int = 50,
+    val infectHumanXp: Int = 20,
+    val headshotXp: Int = 5,
+    val passDoorXp: Int = 5,
+    val surviveHumanCoins: Int = 200,
+    /** 结算榜单奖励：击杀/感染 Top3（index 0 = 第 1 名） */
+    val rankRewardCoins: List<Int> = listOf(200, 150, 100),
+)

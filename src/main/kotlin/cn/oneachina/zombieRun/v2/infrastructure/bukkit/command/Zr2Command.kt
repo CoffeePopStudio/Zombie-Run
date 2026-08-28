@@ -24,7 +24,35 @@ import org.bukkit.entity.Player
 class Zr2Command(
     private val root: V2CompositionRoot,
     private val defaultWorld: String,
-) : CommandExecutor, TabCompleter {
+) : CommandExecutor, TabCompleter, org.bukkit.event.Listener {
+
+    /** postool 已激活的玩家（/zr2 postool 切换）。 */
+    private val postoolUsers: MutableSet<java.util.UUID> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /** postool 选区：左键=pos1、右键=pos2（手持木棍且已激活）。 */
+    private val pos1 = java.util.concurrent.ConcurrentHashMap<java.util.UUID, org.bukkit.Location>()
+    private val pos2 = java.util.concurrent.ConcurrentHashMap<java.util.UUID, org.bukkit.Location>()
+
+    @org.bukkit.event.EventHandler
+    fun onPostoolInteract(event: org.bukkit.event.player.PlayerInteractEvent) {
+        val item = event.item ?: return
+        if (item.type != org.bukkit.Material.STICK) return
+        if (event.player.uniqueId !in postoolUsers) return
+        val block = event.clickedBlock ?: return
+        when (event.action) {
+            org.bukkit.event.block.Action.LEFT_CLICK_BLOCK -> {
+                pos1[event.player.uniqueId] = block.location
+                event.isCancelled = true
+                event.player.sendMessage(Component.text("pos1 已设为 (${block.x}, ${block.y}, ${block.z})", NamedTextColor.YELLOW))
+            }
+            org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK -> {
+                pos2[event.player.uniqueId] = block.location
+                event.isCancelled = true
+                event.player.sendMessage(Component.text("pos2 已设为 (${block.x}, ${block.y}, ${block.z})", NamedTextColor.YELLOW))
+            }
+            else -> Unit
+        }
+    }
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         try {
@@ -59,6 +87,7 @@ class Zr2Command(
             "task" -> handleTask(sender, args.drop(1))
             "mapflow" -> handleMapFlow(sender, args.drop(1))
             "v1" -> handleV1(sender, args.drop(1))
+            "postool" -> handlePostool(sender)
             else -> {
                 sender.sendMessage(Component.text("未知子命令：${args[0]}，输入 /zr2 help 查看帮助", NamedTextColor.RED))
             }
@@ -87,7 +116,8 @@ class Zr2Command(
         sender.sendMessage(Component.text("/zr2 version", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 arena list | info <名称> | create <名称> [世界] | remove <名称>", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 door list [世界] | info <id> | test <id> | trigger <门号>", NamedTextColor.YELLOW))
-        sender.sendMessage(Component.text("/zr2 door add --arena <名称> <x1> <y1> <z1> <x2> <y2> <z2> <axis> <front> [--number N] [--group G] [--open N] [--close N]", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 door add --arena <名称> [坐标6个] <axis> <front> [--number N] [--group G] [--open N] [--close N]（/zr2 postool 选区后可省略坐标）", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 postool - 切换选区工具（木棍左键=pos1 右键=pos2）", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 button add --arena <名称> <x> <y> <z> normal <门号>", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 respawn add --arena <名称> <type> <x> <y> <z> [door-number] [yaw] [pitch]", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 game list | status <世界> | start <世界> | end <世界> <human|zombie> | reset <世界>", NamedTextColor.YELLOW))
@@ -228,6 +258,23 @@ class Zr2Command(
         }
     }
 
+    private fun handlePostool(sender: CommandSender) {
+        if (sender !is Player) {
+            sender.sendMessage(Component.text("postool 需要玩家执行", NamedTextColor.RED))
+            return
+        }
+        val id = sender.uniqueId
+        if (!postoolUsers.remove(id)) {
+            postoolUsers.add(id)
+            pos1.remove(id); pos2.remove(id)
+            sender.inventory.addItem(org.bukkit.inventory.ItemStack(org.bukkit.Material.STICK))
+            sender.sendMessage(Component.text("已给你一根选区棒！左键方块=pos1，右键方块=pos2", NamedTextColor.GREEN))
+            sender.sendMessage(Component.text("之后可用 /zr2 door add --arena <名称> <axis> <front> 省略坐标", NamedTextColor.GRAY))
+        } else {
+            sender.sendMessage(Component.text("postool 已关闭", NamedTextColor.YELLOW))
+        }
+    }
+
     private fun addDoor(sender: CommandSender, args: List<String>) {
         if (!sender.hasPermission("zombie.run.v2.admin")) {
             noPermission(sender)
@@ -237,12 +284,26 @@ class Zr2Command(
         val arenaName = parsed.options["arena"]
         val arena = arenaName?.let { root.arenaRepository.byName(it) }
         if (arena == null) {
-            sender.sendMessage(Component.text("用法: /zr2 door add --arena <名称> <x1> <y1> <z1> <x2> <y2> <z2> <axis> <front>", NamedTextColor.RED))
+            sender.sendMessage(Component.text("用法: /zr2 door add --arena <名称> <坐标6个|省略> <axis> <front>（/zr2 postool 选区后可省略坐标）", NamedTextColor.RED))
             return
         }
 
+        // postool 选区补齐坐标：无坐标参数时取选区
+        val positional = if (parsed.positional.size >= 8) {
+            parsed.positional
+        } else {
+            val p = sender as? Player
+            val a = p?.let { pos1[it.uniqueId] }
+            val b = p?.let { pos2[it.uniqueId] }
+            if (a == null || b == null) {
+                sender.sendMessage(Component.text("需要 6 个坐标，或用 /zr2 postool 选区后省略坐标", NamedTextColor.RED))
+                return
+            }
+            listOf(a.blockX, a.blockY, a.blockZ, b.blockX, b.blockY, b.blockZ).map { it.toString() } + parsed.positional
+        }
+
         val doorId = "door_${System.currentTimeMillis()}"
-        val result = parseDoorAdd(arena, doorId, parsed.options, parsed.positional)
+        val result = parseDoorAdd(arena, doorId, parsed.options, positional)
         if (result is DoorAddParseResult.Error) {
             sender.sendMessage(Component.text(result.message, NamedTextColor.RED))
             return
