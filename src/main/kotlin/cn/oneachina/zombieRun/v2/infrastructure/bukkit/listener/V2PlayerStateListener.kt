@@ -35,14 +35,7 @@ class V2PlayerStateListener(
     private val logger: V2Logger,
 ) : Listener {
 
-    init {
-        // 开局状态接管：人类清状态，母体保持容器保护
-        gameFlowEventBridge = this
-    }
-
     companion object {
-        private var gameFlowEventBridge: V2PlayerStateListener? = null
-
         /** GameFlowService 僵尸 buff 钩子的默认实现。 */
         fun zombieBuffs(playerId: UUID) {
             val p = Bukkit.getPlayer(playerId) ?: return

@@ -115,6 +115,16 @@ class V2BattleListener(
         val victimTeam = gameFlow.teamOf(world, victim.uniqueId)
         val attackerTeam = gameFlow.teamOf(world, attacker.uniqueId)
         if (victimTeam == null || attackerTeam == null) return
+
+        // 母体未释放不能攻击；观战者不可被攻击
+        if (attackerTeam == GameTeam.ZOMBIE_MAIN && !gameFlow.isMotherReleased(world)) {
+            event.isCancelled = true
+            return
+        }
+        if (victimTeam == GameTeam.SPECTATOR || attackerTeam == GameTeam.SPECTATOR) {
+            event.isCancelled = true
+            return
+        }
         // QA 子弹伤害已由 onQADamage 接管，此处防双算（QA 链路之外的 isGun 兜底）
         if (me.zombie_striker.qg.api.QualityArmory.isGun(attacker.inventory.itemInMainHand)) {
             event.isCancelled = true
@@ -220,6 +230,7 @@ class V2BattleListener(
         victim.inventory.clear()
         victim.gameMode = GameMode.SPECTATOR
         victim.activePotionEffects.forEach { victim.removePotionEffect(it.type) }
+        victim.health = 20.0
         healthService.resetForTeam(victim.uniqueId, GameTeam.ZOMBIE)
         gameFlow.onHumanDiedByEnvironment(world, victim.uniqueId, message)
     }
@@ -228,6 +239,7 @@ class V2BattleListener(
         victim.inventory.clear()
         victim.gameMode = GameMode.SPECTATOR
         victim.activePotionEffects.forEach { victim.removePotionEffect(it.type) }
+        victim.health = 20.0
         healthService.resetForTeam(victim.uniqueId, GameTeam.ZOMBIE)
         gameFlow.onZombieDiedRespawn(world, victim.uniqueId)
     }
