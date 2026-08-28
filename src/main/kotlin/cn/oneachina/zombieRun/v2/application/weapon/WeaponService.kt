@@ -55,4 +55,30 @@ class WeaponService(
         }
         return weapon
     }
+
+    /**
+     * 开局发放：发武器本身（用配置的 type 精确匹配 QA 枪械），成功后补满弹药。
+     * 与商店购买的差异：不扣款、必定补弹。
+     */
+    fun giveStarter(playerId: UUID, weaponId: String): Boolean {
+        val weapon = repository.byId(weaponId) ?: return false
+        val ok = integration.giveWeapon(playerId, weapon.type)
+        if (!ok) {
+            messages.chat(playerId, "武器 ${weapon.displayName} 发放失败（外部武器系统不可用）")
+            return false
+        }
+        integration.refillAmmo(playerId, weapon.type, STARTER_MAGAZINES)
+        return true
+    }
+
+    /** 补充弹药（局内购买用），返回是否成功。 */
+    fun refillAmmo(playerId: UUID, weaponId: String, magazines: Int): Boolean {
+        val weapon = repository.byId(weaponId) ?: return false
+        return integration.refillAmmo(playerId, weapon.type, magazines)
+    }
+
+    companion object {
+        /** 开局补发的弹匣数量 */
+        const val STARTER_MAGAZINES = 5
+    }
 }

@@ -168,7 +168,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         }
 
         plugin.server.pluginManager.registerEvents(V2DoorListener(doorService, arenaRepository, gameFlow), plugin)
-        plugin.server.pluginManager.registerEvents(V2GameListener(gameFlow), plugin)
+        plugin.server.pluginManager.registerEvents(V2GameListener(gameFlow, guiService), plugin)
         plugin.server.pluginManager.registerEvents(V2PlayerDataListener(playerDataService), plugin)
         plugin.server.pluginManager.registerEvents(V2TaskListener(taskService), plugin)
         plugin.server.pluginManager.registerEvents(combatListener, plugin)

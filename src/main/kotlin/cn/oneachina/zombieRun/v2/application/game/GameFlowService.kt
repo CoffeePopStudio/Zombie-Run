@@ -283,7 +283,8 @@ class GameFlowService(
             }
             if (assignment.team == GameTeam.HUMAN) {
                 mapFlowDef(worldName)?.starterWeaponId?.let { weaponId ->
-                    weaponService?.giveWeapon(assignment.playerId, weaponId)
+                    // 开局发枪 + 自动补满弹药（不扣款）
+                    weaponService?.giveStarter(assignment.playerId, weaponId)
                 }
             } else if (assignment.team == GameTeam.ZOMBIE_MAIN) {
                 val releaseDelay = mapFlowDef(worldName)?.motherReleaseDelaySeconds ?: 0

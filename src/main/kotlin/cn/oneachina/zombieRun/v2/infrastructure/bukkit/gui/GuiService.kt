@@ -3,6 +3,7 @@ package cn.oneachina.zombierun.v2.infrastructure.bukkit.gui
 import cn.oneachina.zombierun.v2.application.player.PlayerDataService
 import cn.oneachina.zombierun.v2.application.task.TaskService
 import cn.oneachina.zombierun.v2.application.weapon.WeaponService
+import cn.oneachina.zombierun.v2.domain.weapon.WeaponCategory
 import cn.oneachina.zombierun.v2.support.V2Logger
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -44,8 +45,25 @@ class GuiService(
         },
 ) : Listener {
 
-    private val slots = ConcurrentHashMap<UUID, Map<Int, (Player, InventoryClickEvent) -> Unit>>()
+    companion object {
+        /** 商店总行数 6（5 行武器区 + 1 行操作栏） */
+        private const val SHOP_SIZE = 54
 
+        /** 武器区格位数（不含底部操作栏） */
+        private const val SHOP_WEAPON_SLOTS = SHOP_SIZE - 9
+
+        /** 补弹费用 = 武器价 × 该比例（向上取整） */
+        private const val AMMO_COST_RATE = 0.2
+
+        /** 单把枪补弹最低费用 */
+        private const val MIN_AMMO_COST = 10
+    }
+
+    /** 武器集成端口：组合根注入 QA 实现；无法注入时（纯单测）补弹按“持有”处理。 */
+    private val integration: cn.oneachina.zombierun.v2.ports.WeaponIntegrationPort? =
+        cn.oneachina.zombierun.v2.infrastructure.bukkit.weapon.QaWeaponIntegrationPort(logger)
+
+    private val slots = ConcurrentHashMap<UUID, Map<Int, (Player, InventoryClickEvent) -> Unit>>()
     private class Holder(val menuId: String) : InventoryHolder {
         lateinit var backingInventory: Inventory
         override fun getInventory(): Inventory = backingInventory
@@ -95,12 +113,14 @@ class GuiService(
     fun openShop(player: Player) {
         val items = weapons.all()
         val holder = Holder("shop")
-        val inv = inventoryFactory(holder, minOf(54, (items.size / 9 + 1) * 9).coerceAtLeast(9), Component.text("武器商店"))
+        val inv = inventoryFactory(holder, SHOP_SIZE, Component.text("武器商店"))
         holder.backingInventory = inv
         val actions = mutableMapOf<Int, (Player, InventoryClickEvent) -> Unit>()
+
+        // 上半区：武器（点击立即购买并发放）
         items.forEachIndexed { index, weapon ->
             val slot = index
-            if (slot >= 54) return@forEachIndexed
+            if (slot >= SHOP_WEAPON_SLOTS) return@forEachIndexed
             inv.setItem(
                 slot,
                 icon(
@@ -110,7 +130,7 @@ class GuiService(
                         "类型: ${weapon.type}",
                         "分类: ${weapon.category.name.lowercase()}",
                         "价格: ${weapon.price.toInt()} 硬币",
-                        if (weapon.enabled) "§a点击购买" else "§c暂不可购买",
+                        if (weapon.enabled) "§a点击购买并发放" else "§c暂不可购买",
                     ),
                 ),
             )
@@ -125,6 +145,8 @@ class GuiService(
                     } else {
                         val ok = weapons.giveWeapon(p.uniqueId, weapon.id)
                         if (ok) {
+                            // 购买即送 1 个弹匣的弹药，保证新枪能直接开火
+                            weapons.refillAmmo(p.uniqueId, weapon.id, 1)
                             p.sendMessage(Component.text("购买成功：${weapon.displayName}", NamedTextColor.GREEN))
                         } else {
                             // 发枪失败（外部武器系统不可用）回滚扣款
@@ -135,8 +157,78 @@ class GuiService(
                 }
             }
         }
+
+        // 底部操作栏：补弹按钮（仅枪械）+ 关闭
+        val guns = items.filter { it.category == WeaponCategory.GUN && it.enabled }
+        val ammoSlot = SHOP_SIZE - 5
+        if (guns.isNotEmpty()) {
+            inv.setItem(
+                ammoSlot,
+                icon(
+                    Material.SPECTRAL_ARROW,
+                    "补充弹药",
+                    listOf(
+                        "为背包中的枪械补充 1 个弹匣",
+                        "价格: 枪械价 ×1 的 20%（向上取整，最低 10 硬币）",
+                        "§a点击补充",
+                    ),
+                ),
+            )
+            actions[ammoSlot] = { p, _ -> buyAmmoRefill(p) }
+        }
+        val closeSlot = SHOP_SIZE - 1
+        inv.setItem(closeSlot, icon(Material.BARRIER, "关闭", listOf("§7点击关闭商店")))
+        actions[closeSlot] = { p, _ -> p.closeInventory() }
+
         register(player, inv, "shop", actions)
     }
+
+    /**
+     * 局内补弹：遍历玩家背包中的 QA 枪械，按武器配置价格换算弹药费。
+     * 费用 = Σ(武器价 × 20%)，向上取整、单把最低 10 硬币。
+     */
+    private fun buyAmmoRefill(player: Player) {
+        val id = player.uniqueId
+        val heldWeapons = weapons.all()
+            .filter { it.category == WeaponCategory.GUN && it.enabled }
+            .filter { integrationHolds(player, it) }
+        if (heldWeapons.isEmpty()) {
+            player.sendMessage(Component.text("背包中没有可补弹的枪械", NamedTextColor.RED))
+            return
+        }
+        var cost = 0
+        heldWeapons.forEach { w ->
+            val unit = kotlin.math.ceil(w.price * AMMO_COST_RATE).toInt().coerceIn(MIN_AMMO_COST, Int.MAX_VALUE)
+            cost += unit
+        }
+        val afterSpend = playerData.spendCoins(id, cost)
+        if (afterSpend == null) {
+            player.sendMessage(Component.text("硬币不足，补弹需要 $cost 硬币", NamedTextColor.RED))
+            return
+        }
+        var refilled = 0
+        heldWeapons.forEach { w ->
+            if (weapons.refillAmmo(id, w.id, 1)) refilled++
+        }
+        if (refilled == 0) {
+            // 全部补弹失败，退款
+            playerData.addCoins(id, cost)
+            player.sendMessage(Component.text("弹药系统不可用，已退还 $cost 硬币", NamedTextColor.RED))
+            return
+        }
+        val refund = if (refilled < heldWeapons.size) {
+            // 部分失败按比例退款
+            val back = cost * (heldWeapons.size - refilled) / heldWeapons.size
+            if (back > 0) playerData.addCoins(id, back)
+            back
+        } else 0
+        val msg = if (refund > 0) "已为 $refilled 把枪补弹，花费 ${cost - refund} 硬币（退款 $refund）"
+        else "已为 $refilled 把枪补弹，花费 $cost 硬币"
+        player.sendMessage(Component.text(msg, NamedTextColor.GREEN))
+    }
+
+    private fun integrationHolds(player: Player, weapon: cn.oneachina.zombierun.v2.domain.weapon.WeaponDefinition): Boolean =
+        integration?.holdsWeapon(player.uniqueId, weapon.type) ?: true
 
     fun openTasks(player: Player) {
         val entries = tasks.progressOf(player.uniqueId)
