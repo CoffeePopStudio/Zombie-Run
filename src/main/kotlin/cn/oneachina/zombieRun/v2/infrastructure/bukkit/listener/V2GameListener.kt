@@ -64,57 +64,6 @@ class V2GameListener(
     }
 
     @EventHandler
-    fun onDamage(event: EntityDamageByEntityEvent) {
-        val victim = event.entity as? Player ?: return
-        val world = worldOf(victim)
-
-        // 复活保护/母体未释放保护：期间免疫伤害
-        if (gameFlow.isProtected(victim.uniqueId)) {
-            event.isCancelled = true
-            return
-        }
-
-        val attacker = when (val damager = event.damager) {
-            is Player -> damager
-            is Projectile -> damager.shooter as? Player
-            else -> null
-        } ?: return
-
-        val lethal = victim.health - event.finalDamage <= 0.0
-
-        // 人类击杀僵尸：记录统计，僵尸死亡后由重生逻辑送回僵尸出生点
-        val victimTeam = gameFlow.teamOf(world, victim.uniqueId)
-        val attackerTeam = gameFlow.teamOf(world, attacker.uniqueId)
-
-        // 母体未释放前无法攻击人类
-        if (attackerTeam == GameTeam.ZOMBIE_MAIN && !gameFlow.isMotherReleased(world)) {
-            event.isCancelled = true
-            return
-        }
-
-        if (lethal && attackerTeam == GameTeam.HUMAN &&
-            (victimTeam == GameTeam.ZOMBIE || victimTeam == GameTeam.ZOMBIE_MAIN)
-        ) {
-            gameFlow.onZombieKilled(world, attacker.uniqueId, victim.uniqueId)
-        }
-
-        val infected = gameFlow.onCombat(victim.uniqueId, attacker.uniqueId, world, lethal)
-        if (infected) {
-            event.isCancelled = true
-            victim.health = maxHealthProvider(victim)
-        }
-    }
-
-    @EventHandler
-    fun onDeath(event: PlayerDeathEvent) {
-        val victim = event.entity
-        val world = worldOf(victim)
-        if (gameFlow.teamOf(world, victim.uniqueId) == GameTeam.HUMAN) {
-            gameFlow.onHumanDied(world, victim.uniqueId)
-        }
-    }
-
-    @EventHandler
     fun onRespawn(event: PlayerRespawnEvent) {
         val world = event.respawnLocation.world?.name ?: worldOf(event.player)
         gameFlow.onPlayerRespawn(world, event.player.uniqueId)

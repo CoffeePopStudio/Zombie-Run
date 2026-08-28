@@ -1,12 +1,9 @@
 package cn.oneachina.zombierun.v2.infrastructure.bukkit.listener
 
 import cn.oneachina.zombierun.v2.application.game.GameFlowService
-import cn.oneachina.zombierun.v2.domain.game.GameTeam
 import org.bukkit.Location
 import org.bukkit.World
 import org.bukkit.entity.Player
-import org.bukkit.event.entity.EntityDamageByEntityEvent
-import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerRespawnEvent
@@ -66,78 +63,6 @@ class V2GameListenerTest {
     }
 
     @Test
-    fun `protected player damage is cancelled without combat handling`() {
-        val victim = player("w")
-        val event = mock<EntityDamageByEntityEvent>()
-        whenever(event.entity).thenReturn(victim)
-        whenever(gameFlow.isProtected(victim.uniqueId)).thenReturn(true)
-
-        listener.onDamage(event)
-
-        verify(event).setCancelled(true)
-        assertEquals(0, onCombatCallCount())
-    }
-
-    @Test
-    fun `lethal zombie attack on human is converted to infection`() {
-        val victim = player("w")
-        val attacker = mock<Player>()
-        whenever(attacker.uniqueId).thenReturn(UUID.randomUUID())
-        whenever(attacker.name).thenReturn("Zombie")
-
-        val event = mock<EntityDamageByEntityEvent>()
-        whenever(event.entity).thenReturn(victim)
-        whenever(event.damager).thenReturn(attacker)
-        whenever(event.finalDamage).thenReturn(20.0)
-        whenever(victim.health).thenReturn(5.0)
-
-        whenever(gameFlow.isProtected(victim.uniqueId)).thenReturn(false)
-        whenever(gameFlow.teamOf("w", victim.uniqueId)).thenReturn(GameTeam.HUMAN)
-        whenever(gameFlow.teamOf("w", attacker.uniqueId)).thenReturn(GameTeam.ZOMBIE_MAIN)
-        whenever(gameFlow.isMotherReleased("w")).thenReturn(true)
-        whenever(gameFlow.onCombat(victim.uniqueId, attacker.uniqueId, "w", true)).thenReturn(true)
-
-        listener.onDamage(event)
-
-        verify(gameFlow).onCombat(victim.uniqueId, attacker.uniqueId, "w", true)
-        verify(event).setCancelled(true)
-    }
-
-    @Test
-    fun `unreleased mother cannot damage human`() {
-        val victim = player("w")
-        val attacker = mock<Player>()
-        whenever(attacker.uniqueId).thenReturn(UUID.randomUUID())
-
-        val event = mock<EntityDamageByEntityEvent>()
-        whenever(event.entity).thenReturn(victim)
-        whenever(event.damager).thenReturn(attacker)
-        whenever(event.finalDamage).thenReturn(20.0)
-
-        whenever(gameFlow.isProtected(victim.uniqueId)).thenReturn(false)
-        whenever(gameFlow.teamOf("w", victim.uniqueId)).thenReturn(GameTeam.HUMAN)
-        whenever(gameFlow.teamOf("w", attacker.uniqueId)).thenReturn(GameTeam.ZOMBIE_MAIN)
-        whenever(gameFlow.isMotherReleased("w")).thenReturn(false)
-
-        listener.onDamage(event)
-
-        verify(event).setCancelled(true)
-        assertEquals(0, onCombatCallCount())
-    }
-
-    @Test
-    fun `human death delegates to game flow`() {
-        val victim = player("w")
-        val event = mock<PlayerDeathEvent>()
-        whenever(event.entity).thenReturn(victim)
-        whenever(gameFlow.teamOf("w", victim.uniqueId)).thenReturn(GameTeam.HUMAN)
-
-        listener.onDeath(event)
-
-        verify(gameFlow).onHumanDied("w", victim.uniqueId)
-    }
-
-    @Test
     fun `respawn delegates with respawn world`() {
         val p = player("w")
         val respawnWorld = mock<World>()
@@ -152,6 +77,4 @@ class V2GameListenerTest {
         verify(gameFlow).onPlayerRespawn("w", id)
     }
 
-    private fun onCombatCallCount(): Int =
-        Mockito.mockingDetails(gameFlow).invocations.count { it.method.name == "onCombat" }
 }

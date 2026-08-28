@@ -23,3 +23,8 @@ data class ZombieKilledEvent(
     val killerId: UUID,
     val victimId: UUID,
 )
+
+data class InfectHumanEvent(
+    val attackerId: UUID,
+    val victimId: UUID,
+)

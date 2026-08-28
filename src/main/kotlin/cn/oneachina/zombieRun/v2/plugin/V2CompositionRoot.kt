@@ -1,5 +1,6 @@
 package cn.oneachina.zombierun.v2.plugin
 
+import cn.oneachina.zombierun.v2.application.combat.CombatHealthService
 import cn.oneachina.zombierun.v2.application.combat.StaminaService
 import cn.oneachina.zombierun.v2.application.door.DoorApplicationService
 import cn.oneachina.zombierun.v2.application.event.ApplicationEventBus
@@ -17,6 +18,11 @@ import cn.oneachina.zombierun.v2.infrastructure.bukkit.gui.GuiService
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.hook.ZombieRunV2Expansion
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2CombatListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2DoorListener
+import cn.oneachina.zombierun.v2.domain.combat.CombatRules
+import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2BattleListener
+import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2PlayerStateListener
+import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2ProtectionListener
+import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.bindPlayerStateBridge
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2GameListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2PlayerDataListener
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2TaskListener
@@ -72,6 +78,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
     val taskListener = V2TaskListener(taskService)
     val guiService = GuiService(playerDataService, weaponService, taskService, logger)
     val staminaService = StaminaService(logger)
+    val combatHealth = CombatHealthService(logger)
     val combatListener = V2CombatListener(staminaService, scheduler, taskRegistry)
 
     lateinit var gameFlow: GameFlowService
@@ -127,6 +134,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
 
         val settings = settingsLoader.load()
         logger.debugEnabled = settings.debug
+        combatHealth.applyRules(loadCombatRules())
         staminaService.applyRules(
             StaminaRules(
                 max = settings.staminaMax,
@@ -174,12 +182,44 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         plugin.server.pluginManager.registerEvents(combatListener, plugin)
         plugin.server.pluginManager.registerEvents(guiService, plugin)
 
+        // 战斗/状态接管/保护监听（依赖 gameFlow，故在 enable 内构造）
+        val battleListener = V2BattleListener(plugin, gameFlow, combatHealth, playerDataService, settings, logger)
+        val playerStateListener = V2PlayerStateListener(plugin, gameFlow, combatHealth, logger)
+        val protectionListener = V2ProtectionListener(plugin, gameFlow)
+        plugin.server.pluginManager.registerEvents(battleListener, plugin)
+        plugin.server.pluginManager.registerEvents(playerStateListener, plugin)
+        plugin.server.pluginManager.registerEvents(protectionListener, plugin)
+        bindPlayerStateBridge(eventBus, playerStateListener)
+        gameFlow.zombieBuffApplier = { id -> cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2PlayerStateListener.zombieBuffs(id) }
+        gameFlow.motherReleaseStateSync = { id -> cn.oneachina.zombierun.v2.infrastructure.bukkit.listener.V2PlayerStateListener.unfreezeAlpha(id) }
+        gameFlow.doorAutoOpener = { world, mode ->
+            try {
+                doorService.triggerAutoDoors(world, cn.oneachina.zombierun.v2.domain.door.DoorMode.valueOf(mode))
+            } catch (e: Exception) {
+                logger.warn("auto open $mode doors failed for $world: ${e.message}")
+            }
+        }
+
         gameFlow.start()
         combatListener.start()
 
         val command = Zr2Command(this, settings.defaultWorld)
         plugin.getCommand("zr2")?.setExecutor(command)
         plugin.getCommand("zr2")?.tabCompleter = command
+    }
+
+    private fun loadCombatRules(): CombatRules {
+        val f = java.io.File(plugin.dataFolder, "config/settings.yml")
+        val yaml = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(f)
+        return CombatRules(
+            swordDamage = yaml.getDouble("combat.sword-damage", 5.0),
+            zombieDamage = yaml.getDouble("combat.zombie-damage", 5.0),
+            zombieMainDamage = yaml.getDouble("combat.zombie-main-damage", 8.0),
+            zombieMaxHealth = yaml.getDouble("combat.zombie-max-health", 120.0),
+            zombieMainMaxHealth = yaml.getDouble("combat.zombie-main-max-health", 300.0),
+            humanMaxHealth = yaml.getDouble("combat.human-max-health", 20.0),
+            explosionDamageReduction = yaml.getDouble("combat.explosion-damage-reduction", 0.05),
+        )
     }
 
     fun disable() {

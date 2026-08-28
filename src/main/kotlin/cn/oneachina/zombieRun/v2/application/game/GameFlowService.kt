@@ -2,6 +2,7 @@ package cn.oneachina.zombierun.v2.application.game
 
 import cn.oneachina.zombierun.v2.application.event.ApplicationEventBus
 import cn.oneachina.zombierun.v2.application.event.GameEndedEvent
+import cn.oneachina.zombierun.v2.application.event.InfectHumanEvent
 import cn.oneachina.zombierun.v2.application.event.GameStartedEvent
 import cn.oneachina.zombierun.v2.application.event.PlayerPassedDoorEvent
 import cn.oneachina.zombierun.v2.application.event.ZombieKilledEvent
@@ -60,10 +61,12 @@ class GameFlowService(
     )
 
     private val games = ConcurrentHashMap<String, GameInstance>()
+    private val gameStartTimes = ConcurrentHashMap<String, Long>()
     private val mapFlows = ConcurrentHashMap<String, MapFlowStateMachine>()
     private val countdowns = ConcurrentHashMap<String, Countdown>()
     private val escapeCountdowns = ConcurrentHashMap<String, EscapeCountdown>()
     private val maxDurationTasks = ConcurrentHashMap<String, TaskHandle>()
+    private val zombieDoorTasks = ConcurrentHashMap<String, TaskHandle>()
     private val autoResetTasks = ConcurrentHashMap<String, TaskHandle>()
     private val zombieKills = ConcurrentHashMap<UUID, Int>()
     private val protectedUntil = ConcurrentHashMap<UUID, Long>()
@@ -91,6 +94,8 @@ class GameFlowService(
         cancelEscapeCountdowns()
         maxDurationTasks.values.forEach { it.cancel() }
         maxDurationTasks.clear()
+        zombieDoorTasks.values.forEach { it.cancel() }
+        zombieDoorTasks.clear()
         autoResetTasks.values.forEach { it.cancel() }
         autoResetTasks.clear()
         motherReleaseTasks.values.forEach { it.cancel() }
@@ -206,6 +211,8 @@ class GameFlowService(
 
     companion object {
         const val ESCAPE_SECONDS = 30
+        const val RESPAWN_DELAY_TICKS = 100L
+        const val ZOMBIE_DOOR_DELAY_TICKS = 100L
     }
 
     private fun beginCountdown(worldName: String, game: GameInstance) {
@@ -273,6 +280,7 @@ class GameFlowService(
             machine.start()
         }
 
+        val startToken = System.currentTimeMillis()
         val assignments = game.start(playerIds, alphaIndex = Random.nextInt(playerIds.size))
         val alphaId = game.alphaId()
 
@@ -311,6 +319,18 @@ class GameFlowService(
                 playerAssignments = assignments.associate { it.playerId to it.team.name },
             ),
         )
+
+        // 自动门：START/PLAYER 立即开启，ZOMBIE 门 5 秒后开启（对齐 v1 行为）
+        autoOpenDoors(worldName, "START")
+        autoOpenDoors(worldName, "PLAYER")
+        zombieDoorTasks.remove(worldName)?.cancel()
+        val zombieDoorHandle = scheduler.globalLater(ZOMBIE_DOOR_DELAY_TICKS) {
+            if (game.phaseSnapshot() == GamePhase.RUNNING && gameStartTimes[worldName] == startToken) {
+                autoOpenDoors(worldName, "ZOMBIE")
+            }
+        }
+        zombieDoorTasks[worldName] = zombieDoorHandle
+        taskRegistry.register(zombieDoorHandle)
 
         val durationTicks = rules(worldName).maxDurationSeconds * 20L
         val handle = scheduler.globalLater(durationTicks) {
@@ -371,7 +391,10 @@ class GameFlowService(
                 remaining--
             } else {
                 motherReleasedWorlds[worldName] = true
-                worldAccess.player(alphaId)?.let { messages.chat(it.id, "母体已释放，狩猎开始！") }
+                worldAccess.player(alphaId)?.let {
+                    messages.chat(it.id, "母体已释放，狩猎开始！")
+                    motherReleaseStateSync?.invoke(alphaId)
+                }
                 worldAccess.playersIn(worldName).forEach { p ->
                     messages.chat(p.id, "母体已释放！")
                 }
@@ -517,7 +540,47 @@ class GameFlowService(
         return true
     }
 
-    /** 人类非感染死亡（摔死/环境伤害等）：直接淘汰转观战，不再复活回人类。 */
+    /** 监听器已确认感染成立（attacker→victim）：执行感染转化 + 延迟复活。 */
+    fun onCombatInfection(worldName: String, attackerId: UUID, victimId: UUID): Boolean {
+        val game = games[worldName] ?: return false
+        if (game.phaseSnapshot() != GamePhase.RUNNING) return false
+        if (game.teamOf(victimId) != GameTeam.HUMAN) return false
+        val attackerTeam = game.teamOf(attackerId) ?: return false
+        if (attackerTeam != GameTeam.ZOMBIE && attackerTeam != GameTeam.ZOMBIE_MAIN) return false
+
+        val result = game.infect(victimId)
+        val victimName = worldAccess.player(victimId)?.name ?: victimId.toString()
+        val attackerName = worldAccess.player(attackerId)?.name ?: attackerId.toString()
+        worldAccess.playersIn(worldName).forEach {
+            messages.chat(it.id, "$attackerName 感染了 $victimName！")
+        }
+        eventBus.publish(InfectHumanEvent(attackerId, victimId))
+        logger.info("[$worldName] $victimName infected by $attackerName; remaining humans=${result.remainingHumans}")
+
+        scheduleZombieRespawn(worldName, victimId, "你现在是僵尸！阻止人类前进！")
+        if (result.gameEnded) {
+            mapFlows[worldName]?.onAllHumansInfected()
+            endGame(worldName, game, GameTeam.ZOMBIE_MAIN, "人类被感染殆尽，僵尸获胜")
+        }
+        return true
+    }
+
+    /** 人类非感染死亡（摔死/环境伤害等）：直接感染转僵尸。 */
+    fun onHumanDiedByEnvironment(worldName: String, playerId: UUID, message: String) {
+        val game = games[worldName] ?: return
+        if (game.phaseSnapshot() != GamePhase.RUNNING) return
+        if (game.teamOf(playerId) != GameTeam.HUMAN) return
+        val result = game.infect(playerId)
+        worldAccess.player(playerId)?.let { messages.chat(it.id, message) }
+        logger.info("[$worldName] ${worldAccess.player(playerId)?.name ?: playerId} died to environment")
+        scheduleZombieRespawn(worldName, playerId, "你现在是僵尸！阻止人类前进！")
+        if (result.gameEnded) {
+            mapFlows[worldName]?.onAllHumansInfected()
+            endGame(worldName, game, GameTeam.ZOMBIE_MAIN, "人类全部阵亡，僵尸获胜")
+        }
+    }
+
+    /** 保留旧入口：转观战并按原逻辑结算。 */
     fun onHumanDied(worldName: String, playerId: UUID) {
         val game = games[worldName] ?: return
         if (game.phaseSnapshot() != GamePhase.RUNNING) return
@@ -530,6 +593,42 @@ class GameFlowService(
             mapFlows[worldName]?.onAllHumansInfected()
             endGame(worldName, game, GameTeam.ZOMBIE_MAIN, "人类全部阵亡，僵尸获胜")
         }
+    }
+
+    /** 僵尸死亡后延迟复活：应用僵尸效果、按进度布防传送。 */
+    fun onZombieDiedRespawn(worldName: String, playerId: UUID) {
+        val game = games[worldName] ?: return
+        if (game.phaseSnapshot() != GamePhase.RUNNING) return
+        val team = game.teamOf(playerId) ?: return
+        if (team != GameTeam.ZOMBIE && team != GameTeam.ZOMBIE_MAIN) return
+        scheduleZombieRespawn(worldName, playerId, "你已复活为僵尸！")
+    }
+
+    /** 延迟复活僵尸：传送布防 + 僵尸增益 + 消息。 */
+    private fun scheduleZombieRespawn(worldName: String, playerId: UUID, message: String) {
+        val handle = scheduler.globalLater(RESPAWN_DELAY_TICKS) {
+            val game = games[worldName] ?: return@globalLater
+            if (game.phaseSnapshot() != GamePhase.RUNNING) return@globalLater
+            if (game.teamOf(playerId) != GameTeam.ZOMBIE) return@globalLater
+            val spawn = spawnForTeam(worldName, GameTeam.ZOMBIE)
+            if (spawn != null) teleportTo(worldName, playerId, spawn)
+            zombieBuffApplier?.invoke(playerId)
+            worldAccess.player(playerId)?.let { messages.chat(it.id, message) }
+        }
+        taskRegistry.register(handle)
+    }
+
+    /** 僵尸药水增益钩子：由装配点注入（Infrastructure 层 Bukkit 效果）。 */
+    var zombieBuffApplier: ((UUID) -> Unit)? = null
+
+    /** 母体释放状态同步钩子：SPECTATOR 冻结 → ADVENTURE（装配点注入）。 */
+    var motherReleaseStateSync: ((UUID) -> Unit)? = null
+
+    /** 自动开门钩子：由装配点注入（DoorApplicationService.triggerAutoDoors）。 */
+    var doorAutoOpener: ((worldName: String, mode: String) -> Unit)? = null
+
+    private fun autoOpenDoors(worldName: String, mode: String) {
+        doorAutoOpener?.invoke(worldName, mode)
     }
 
     fun killCount(playerId: UUID): Int = zombieKills[playerId] ?: 0
@@ -615,6 +714,7 @@ class GameFlowService(
         cancelEscape(worldName)
         cancelMotherRelease(worldName)
         maxDurationTasks.remove(worldName)?.cancel()
+        zombieDoorTasks.remove(worldName)?.cancel()
         game.end(winner)
         worldAccess.playersIn(worldName).forEach { messages.chat(it.id, message) }
         awardMapFlowRewards(worldName, game, winner)
@@ -637,6 +737,7 @@ class GameFlowService(
         cancelEscape(worldName)
         cancelMotherRelease(worldName)
         maxDurationTasks.remove(worldName)?.cancel()
+        zombieDoorTasks.remove(worldName)?.cancel()
         autoResetTasks.remove(worldName)?.cancel()
         motherReleasedWorlds.remove(worldName)
         games.remove(worldName)

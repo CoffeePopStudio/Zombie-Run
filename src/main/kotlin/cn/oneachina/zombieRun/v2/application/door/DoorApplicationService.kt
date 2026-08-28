@@ -7,6 +7,7 @@ import cn.oneachina.zombierun.v2.domain.arena.RespawnDefinition
 import cn.oneachina.zombierun.v2.domain.arena.RespawnType
 import cn.oneachina.zombierun.v2.domain.door.DoorBehavior
 import cn.oneachina.zombierun.v2.domain.door.DoorDefinition
+import cn.oneachina.zombierun.v2.domain.door.DoorMode
 import cn.oneachina.zombierun.v2.domain.door.DoorPassDecision
 import cn.oneachina.zombierun.v2.domain.door.DoorSessionPhase
 import cn.oneachina.zombierun.v2.domain.door.DoorSessionStateMachine
@@ -67,6 +68,31 @@ class DoorApplicationService(
 
     fun doorByNumber(worldName: String, number: Int): DoorDefinition? =
         doorsInWorld(worldName).firstOrNull { it.number == number }
+
+    /**
+     * 按模式触发自动门（开局流程调用）：
+     * - START/PLAYER：立即开门（有门号走会话的 0 秒路径，无门号直接开区域）
+     * - ZOMBIE：由 GameFlowService 延迟调度 triggerAutoDoors 实现
+     * 返回实际被触发的门数。
+     */
+    fun triggerAutoDoors(worldName: String, mode: DoorMode): Int {
+        val doors = doorsInWorld(worldName).filter { it.mode == mode }
+        if (doors.isEmpty()) return 0
+        var triggered = 0
+        doors.forEach { door ->
+            val number = door.number
+            if (number != null) {
+                if (triggerDoor(worldName, number, operator = "auto-$mode").success) triggered++
+            } else {
+                blockOps.openRegion(door.world, door.region)
+                triggered++
+            }
+        }
+        if (triggered > 0) {
+            logger.info("[$worldName] auto-opened ${mode.name.lowercase()} door(s): $triggered")
+        }
+        return triggered
+    }
 
     /** 触发开门；group 非空时同组所有门联动。 */
     fun triggerDoor(worldName: String, doorNumber: Int, operator: String? = null): TriggerResult {
