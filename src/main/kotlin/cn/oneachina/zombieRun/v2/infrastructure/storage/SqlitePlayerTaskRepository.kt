@@ -24,6 +24,8 @@ class SqlitePlayerTaskRepository(
             jdbcUrl = "jdbc:sqlite:${dbFile.absolutePath.replace('\\', '/')}"
             maximumPoolSize = 1
             poolName = "zombie-run-v2-tasks"
+            // 与经济库一致：WAL + busy_timeout，防 Folia 多线程写入 "database is locked"
+            connectionInitSql = "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000"
         }
         dataSource = HikariDataSource(config)
         dataSource.connection.use { connection ->
