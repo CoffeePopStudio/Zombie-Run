@@ -83,6 +83,8 @@ class Zr2Command(
             "coins" -> handleCoins(sender, args.drop(1))
             "xp" -> handleXp(sender, args.drop(1))
             "title" -> handleTitle(sender, args.drop(1))
+            "level" -> handleLevel(sender, args.drop(1))
+            "reset" -> handleReset(sender, args.drop(1))
             "menu" -> handleMenu(sender, args.drop(1))
             "task" -> handleTask(sender, args.drop(1))
             "mapflow" -> handleMapFlow(sender, args.drop(1))
@@ -106,9 +108,7 @@ class Zr2Command(
             noPermission(sender)
             return
         }
-        root.doorService.reload()
-        root.weaponService.reload()
-        sender.sendMessage(Component.text("已重载 v2 arena + weapon 配置", NamedTextColor.GREEN))
+        sender.sendMessage(Component.text(root.reload(), NamedTextColor.GREEN))
     }
 
     private fun help(sender: CommandSender) {
@@ -121,8 +121,8 @@ class Zr2Command(
         sender.sendMessage(Component.text("/zr2 button add --arena <名称> <x> <y> <z> normal <门号>", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 respawn add --arena <名称> <type> <x> <y> <z> [door-number] [yaw] [pitch]", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 game list | status <世界> | start <世界> | end <世界> <human|zombie> | reset <世界>", NamedTextColor.YELLOW))
-        sender.sendMessage(Component.text("/zr2 weapon list | info <id> | add <id> <type> <category> <price> [name] | remove <id> | give <id> | random [category]", NamedTextColor.YELLOW))
-        sender.sendMessage(Component.text("/zr2 profile [玩家] | coins add|give|spend | xp add | title set|clear", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 weapon list | info <id> | add <id> <type> <category> <price> [name] | remove <id> | give <id> | random [category] | select <id> | unselect", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 profile [玩家] | coins add|give|remove|set|get|spend|transfer|top | xp add|set | level set | reset <玩家> | title set|clear", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 menu profile|shop|tasks|titles", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 task list|claim <任务id>", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 mapflow list|info|init|set|stage|finish|remove", NamedTextColor.YELLOW))
@@ -254,8 +254,148 @@ class Zr2Command(
                 sender.sendMessage(Component.text(result.message, if (result.success) NamedTextColor.GREEN else NamedTextColor.RED))
             }
             "add" -> addDoor(sender, args.drop(1))
+            "remove" -> removeDoor(sender, args.drop(1))
+            "edit" -> editDoor(sender, args.drop(1))
+            "reset" -> {
+                if (!sender.hasPermission("zombie.run.v2.admin")) {
+                    noPermission(sender)
+                    return
+                }
+                root.doorService.reload()
+                sender.sendMessage(Component.text("已重新加载所有 arena 门配置", NamedTextColor.GREEN))
+            }
+            "behavior" -> handleDoorBehavior(sender, args.drop(1))
             else -> sender.sendMessage(Component.text("未知子命令", NamedTextColor.RED))
         }
+    }
+
+    private fun removeDoor(sender: CommandSender, args: List<String>) {
+        if (!sender.hasPermission("zombie.run.v2.admin")) {
+            noPermission(sender)
+            return
+        }
+        val id = args.firstOrNull() ?: run {
+            sender.sendMessage(Component.text("用法: /zr2 door remove <id>", NamedTextColor.RED))
+            return
+        }
+        val arena = root.arenaRepository.all().firstOrNull { it.doorById(id) != null } ?: run {
+            sender.sendMessage(Component.text("门不存在：$id", NamedTextColor.RED))
+            return
+        }
+        val door = arena.doorById(id)!!
+        door.snapshotId?.let { root.snapshotStore.delete(it) }
+        root.arenaRepository.save(arena.copy(doors = arena.doors.filterNot { it.id == id }))
+        sender.sendMessage(Component.text("门 '$id' 已删除", NamedTextColor.GREEN))
+    }
+
+    private fun editDoor(sender: CommandSender, args: List<String>) {
+        if (!sender.hasPermission("zombie.run.v2.admin")) {
+            noPermission(sender)
+            return
+        }
+        val id = args.firstOrNull() ?: run {
+            sender.sendMessage(Component.text("用法: /zr2 door edit <id> [--open N] [--close N] [--group G] [--mode MODE] [--number N]", NamedTextColor.RED))
+            return
+        }
+        val arena = root.arenaRepository.all().firstOrNull { it.doorById(id) != null } ?: run {
+            sender.sendMessage(Component.text("门不存在：$id", NamedTextColor.RED))
+            return
+        }
+        val door = arena.doorById(id)!!
+        val (options, _) = parseArgs(args.drop(1))
+        var updated = door
+        options["open"]?.toIntOrNull()?.let { updated = updated.copy(openSeconds = it) }
+        options["close"]?.toIntOrNull()?.let { updated = updated.copy(closeSeconds = it) }
+        options["group"]?.let { updated = updated.copy(group = it.ifBlank { null }) }
+        options["mode"]?.let {
+            val mode = cn.oneachina.zombierun.v2.domain.door.DoorMode.entries.firstOrNull { m -> m.name.equals(it, true) }
+                ?: run { sender.sendMessage(Component.text("mode 必须是 normal|start|player|zombie", NamedTextColor.RED)); return }
+            updated = updated.copy(mode = mode, number = if (mode == cn.oneachina.zombierun.v2.domain.door.DoorMode.NORMAL) updated.number ?: 1 else null)
+        }
+        options["number"]?.toIntOrNull()?.let { updated = updated.copy(number = it) }
+        root.arenaRepository.save(arena.copy(doors = arena.doors.map { if (it.id == id) updated else it }))
+        sender.sendMessage(Component.text("门 '$id' 已更新", NamedTextColor.GREEN))
+    }
+
+    private fun handleDoorBehavior(sender: CommandSender, args: List<String>) {
+        if (!sender.hasPermission("zombie.run.v2.admin")) {
+            noPermission(sender)
+            return
+        }
+        when (args.getOrNull(0)?.lowercase()) {
+            "info" -> {
+                val id = args.getOrNull(1) ?: run {
+                    sender.sendMessage(Component.text("用法: /zr2 door behavior info <id>", NamedTextColor.RED)); return
+                }
+                val arena = root.arenaRepository.all().firstOrNull { it.doorById(id) != null } ?: run {
+                    sender.sendMessage(Component.text("门不存在：$id", NamedTextColor.RED)); return
+                }
+                val behavior = arena.doorById(id)?.behavior
+                sender.sendMessage(
+                    Component.text(
+                        if (behavior == null) "门 $id 没有特殊行为" else "门 $id 行为=${behavior.type.name.lowercase()} human=(${behavior.humanTargetX},${behavior.humanTargetY},${behavior.humanTargetZ}) zombie=(${behavior.zombieTargetX},${behavior.zombieTargetY},${behavior.zombieTargetZ}) countdown=${behavior.countdown}",
+                        NamedTextColor.GREEN,
+                    ),
+                )
+            }
+            "set" -> setDoorBehavior(sender, args.drop(1))
+            "remove" -> {
+                val id = args.getOrNull(1) ?: run {
+                    sender.sendMessage(Component.text("用法: /zr2 door behavior remove <id>", NamedTextColor.RED)); return
+                }
+                val arena = root.arenaRepository.all().firstOrNull { it.doorById(id) != null } ?: run {
+                    sender.sendMessage(Component.text("门不存在：$id", NamedTextColor.RED)); return
+                }
+                root.arenaRepository.save(
+                    arena.copy(doors = arena.doors.map { if (it.id == id) it.copy(behavior = null) else it }),
+                )
+                sender.sendMessage(Component.text("已移除门 $id 的特殊行为", NamedTextColor.GREEN))
+            }
+            else -> sender.sendMessage(Component.text("用法: /zr2 door behavior info|set|remove", NamedTextColor.RED))
+        }
+    }
+
+    private fun setDoorBehavior(sender: CommandSender, args: List<String>) {
+        val id = args.firstOrNull() ?: run {
+            sender.sendMessage(Component.text("用法: /zr2 door behavior set <id> <elevator|subway|airport> [--human x,y,z] [--zombie x,y,z] [--line name] [--countdown n]", NamedTextColor.RED)); return
+        }
+        val type = cn.oneachina.zombierun.v2.domain.door.DoorBehaviorType.entries.firstOrNull {
+            it.name.equals(args.getOrNull(1), ignoreCase = true)
+        } ?: run {
+            sender.sendMessage(Component.text("类型必须是 elevator|subway|airport", NamedTextColor.RED)); return
+        }
+        val arena = root.arenaRepository.all().firstOrNull { it.doorById(id) != null } ?: run {
+            sender.sendMessage(Component.text("门不存在：$id", NamedTextColor.RED)); return
+        }
+        val door = arena.doorById(id)!!
+        val (options, _) = parseArgs(args.drop(2))
+        fun triple(value: String?): Triple<Double?, Double?, Double?>? {
+            if (value == null) return null
+            val parts = value.split(',').map { it.trim().toDoubleOrNull() }
+            if (parts.size != 3 || parts.any { it == null }) {
+                sender.sendMessage(Component.text("坐标格式: x,y,z", NamedTextColor.RED))
+                return null
+            }
+            return Triple(parts[0], parts[1], parts[2])
+        }
+        val human = triple(options["human"])
+        if (human == null && options["human"] != null) return
+        val zombie = triple(options["zombie"])
+        if (zombie == null && options["zombie"] != null) return
+        val behavior = cn.oneachina.zombierun.v2.domain.door.DoorBehavior(
+            type = type,
+            humanTargetX = human?.first,
+            humanTargetY = human?.second,
+            humanTargetZ = human?.third,
+            zombieTargetX = zombie?.first,
+            zombieTargetY = zombie?.second,
+            zombieTargetZ = zombie?.third,
+            lineName = options["line"],
+            countdown = options["countdown"]?.toIntOrNull() ?: 5,
+            delayTicks = options["delay"]?.toLongOrNull() ?: 0,
+        )
+        root.arenaRepository.save(arena.copy(doors = arena.doors.map { if (it.id == id) it.copy(behavior = behavior) else it }))
+        sender.sendMessage(Component.text("门 $id 特殊行为已设置：${type.name.lowercase()}", NamedTextColor.GREEN))
     }
 
     private fun handlePostool(sender: CommandSender) {
@@ -323,14 +463,38 @@ class Zr2Command(
             noPermission(sender)
             return
         }
-        if (args.isEmpty() || args[0].lowercase() != "add") {
-            sender.sendMessage(Component.text("用法: /zr2 button add --arena <名称> <x> <y> <z> normal <门号>", NamedTextColor.RED))
-            return
+        when (args.getOrNull(0)?.lowercase()) {
+            "add" -> addButton(sender, args.drop(1))
+            "remove" -> {
+                val id = args.getOrNull(1) ?: run {
+                    sender.sendMessage(Component.text("用法: /zr2 button remove <id>", NamedTextColor.RED)); return
+                }
+                val arena = root.arenaRepository.all().firstOrNull { it.buttons.any { b -> b.id == id } } ?: run {
+                    sender.sendMessage(Component.text("按钮不存在：$id", NamedTextColor.RED)); return
+                }
+                root.arenaRepository.save(arena.copy(buttons = arena.buttons.filterNot { it.id == id }))
+                sender.sendMessage(Component.text("按钮 '$id' 已删除", NamedTextColor.GREEN))
+            }
+            "list" -> {
+                val world = args.getOrNull(1) ?: (sender as? Player)?.world?.name ?: defaultWorld
+                val buttons = root.arenaRepository.byWorld(world).flatMap { it.buttons }
+                if (buttons.isEmpty()) {
+                    sender.sendMessage(Component.text("世界 $world 还没有按钮", NamedTextColor.YELLOW))
+                } else {
+                    buttons.forEach {
+                        sender.sendMessage(Component.text("- ${it.id}  mode=${it.mode.name.lowercase()} at=(${it.x},${it.y},${it.z}) doors=${it.doorNumbers.joinToString("/")}", NamedTextColor.GREEN))
+                    }
+                }
+            }
+            else -> sender.sendMessage(Component.text("用法: /zr2 button add|remove|list", NamedTextColor.RED))
         }
-        val (options, positional) = parseArgs(args.drop(1))
+    }
+
+    private fun addButton(sender: CommandSender, args: List<String>) {
+        val (options, positional) = parseArgs(args)
         val arena = options["arena"]?.let { root.arenaRepository.byName(it) }
-        if (arena == null || positional.size < 5) {
-            sender.sendMessage(Component.text("用法: /zr2 button add --arena <名称> <x> <y> <z> normal <门号>", NamedTextColor.RED))
+        if (arena == null || positional.size < 4) {
+            sender.sendMessage(Component.text("用法: /zr2 button add --arena <名称> <x> <y> <z> <normal|escape> [门号...]", NamedTextColor.RED))
             return
         }
         val coords = positional.take(3).map { it.toIntOrNull() }
@@ -338,13 +502,14 @@ class Zr2Command(
             sender.sendMessage(Component.text("坐标必须是整数", NamedTextColor.RED))
             return
         }
-        if (!positional[3].equals("normal", ignoreCase = true)) {
-            sender.sendMessage(Component.text("v2 M1 仅支持 normal 按钮", NamedTextColor.RED))
-            return
-        }
+        val mode = ButtonMode.entries.firstOrNull { it.name.equals(positional[3], ignoreCase = true) }
+            ?: run {
+                sender.sendMessage(Component.text("mode 必须是 normal|escape", NamedTextColor.RED))
+                return
+            }
         val doorNumbers = positional.drop(4).mapNotNull { it.trim().toIntOrNull() }
-        if (doorNumbers.isEmpty()) {
-            sender.sendMessage(Component.text("至少指定一个门号", NamedTextColor.RED))
+        if (mode == ButtonMode.NORMAL && doorNumbers.isEmpty()) {
+            sender.sendMessage(Component.text("normal 按钮至少指定一个门号", NamedTextColor.RED))
             return
         }
         val id = "button_${System.currentTimeMillis()}"
@@ -354,11 +519,11 @@ class Zr2Command(
             x = coords[0]!!,
             y = coords[1]!!,
             z = coords[2]!!,
-            mode = ButtonMode.NORMAL,
+            mode = mode,
             doorNumbers = doorNumbers,
         )
         root.arenaRepository.save(arena.copy(buttons = arena.buttons + button))
-        sender.sendMessage(Component.text("按钮 '$id' 已添加", NamedTextColor.GREEN))
+        sender.sendMessage(Component.text("按钮 '$id' 已添加（${mode.name.lowercase()}）", NamedTextColor.GREEN))
     }
 
     private fun handleRespawn(sender: CommandSender, args: List<String>) {
@@ -366,11 +531,35 @@ class Zr2Command(
             noPermission(sender)
             return
         }
-        if (args.isEmpty() || args[0].lowercase() != "add") {
-            sender.sendMessage(Component.text("用法: /zr2 respawn add --arena <名称> <type> <x> <y> <z> [door-number] [yaw] [pitch]", NamedTextColor.RED))
-            return
+        when (args.getOrNull(0)?.lowercase()) {
+            "add" -> addRespawn(sender, args.drop(1))
+            "remove" -> {
+                val id = args.getOrNull(1) ?: run {
+                    sender.sendMessage(Component.text("用法: /zr2 respawn remove <id>", NamedTextColor.RED)); return
+                }
+                val arena = root.arenaRepository.all().firstOrNull { it.respawns.any { r -> r.id == id } } ?: run {
+                    sender.sendMessage(Component.text("respawn 不存在：$id", NamedTextColor.RED)); return
+                }
+                root.arenaRepository.save(arena.copy(respawns = arena.respawns.filterNot { it.id == id }))
+                sender.sendMessage(Component.text("respawn '$id' 已删除", NamedTextColor.GREEN))
+            }
+            "list" -> {
+                val world = args.getOrNull(1) ?: (sender as? Player)?.world?.name ?: defaultWorld
+                val respawns = root.arenaRepository.byWorld(world).flatMap { it.respawns }
+                if (respawns.isEmpty()) {
+                    sender.sendMessage(Component.text("世界 $world 还没有重生点", NamedTextColor.YELLOW))
+                } else {
+                    respawns.forEach {
+                        sender.sendMessage(Component.text("- ${it.id}  ${it.type.name.lowercase()} at=(${it.x},${it.y},${it.z}) door=${it.doorNumber ?: "-"}", NamedTextColor.GREEN))
+                    }
+                }
+            }
+            else -> sender.sendMessage(Component.text("用法: /zr2 respawn add|remove|list", NamedTextColor.RED))
         }
-        val (options, positional) = parseArgs(args.drop(1))
+    }
+
+    private fun addRespawn(sender: CommandSender, args: List<String>) {
+        val (options, positional) = parseArgs(args)
         val arena = options["arena"]?.let { root.arenaRepository.byName(it) }
         if (arena == null || positional.size < 4) {
             sender.sendMessage(Component.text("用法: /zr2 respawn add --arena <名称> <type> <x> <y> <z> [door-number] [yaw] [pitch]", NamedTextColor.RED))
@@ -551,7 +740,7 @@ class Zr2Command(
                     sender.sendMessage(Component.text("give 命令需要玩家执行", NamedTextColor.RED))
                     return
                 }
-                root.weaponService.giveWeapon(player.uniqueId, id)
+                root.weaponService.giveWeaponWithAmmo(player.uniqueId, id)
             }
             "random" -> {
                 val player = sender as? Player ?: run {
@@ -563,6 +752,26 @@ class Zr2Command(
                 }
                 val weapon = root.weaponService.giveRandom(player.uniqueId, category)
                 if (weapon == null) sender.sendMessage(Component.text("没有可用武器", NamedTextColor.RED))
+            }
+            "select" -> {
+                val player = sender as? Player ?: run {
+                    sender.sendMessage(Component.text("select 命令需要玩家执行", NamedTextColor.RED))
+                    return
+                }
+                val id = args.getOrNull(1) ?: run {
+                    sender.sendMessage(Component.text("用法: /zr2 weapon select <id>", NamedTextColor.RED))
+                    return
+                }
+                if (!root.weaponService.selectWeapon(player.uniqueId, id)) {
+                    sender.sendMessage(Component.text("武器不存在或未启用：$id", NamedTextColor.RED))
+                }
+            }
+            "unselect" -> {
+                val player = sender as? Player ?: run {
+                    sender.sendMessage(Component.text("unselect 命令需要玩家执行", NamedTextColor.RED))
+                    return
+                }
+                root.weaponService.unselectWeapon(player.uniqueId)
             }
             else -> sender.sendMessage(Component.text("未知子命令", NamedTextColor.RED))
         }
@@ -615,7 +824,8 @@ class Zr2Command(
         val profile = root.playerDataService.profileOf(target.uniqueId)
         sender.sendMessage(Component.text("===== ${target.name} 资料 =====", NamedTextColor.GREEN))
         sender.sendMessage(Component.text("等级 ${profile.level}  经验 ${profile.xp}  硬币 ${profile.coins}  称号 ${profile.title ?: "-"}", NamedTextColor.GREEN))
-        sender.sendMessage(Component.text("门数 ${profile.doorPasses}  击杀 ${profile.zombieKills}", NamedTextColor.GREEN))
+        sender.sendMessage(Component.text("门数 ${profile.doorPasses}  击杀 ${profile.zombieKills}  感染 ${profile.totalInfections}", NamedTextColor.GREEN))
+        sender.sendMessage(Component.text("场次 ${profile.gamesPlayed}  人类胜利 ${profile.humanWins}  已解锁称号 ${profile.unlockedTitles.size}", NamedTextColor.GREEN))
     }
 
     private fun handleCoins(sender: CommandSender, args: List<String>) {
@@ -640,6 +850,32 @@ class Zr2Command(
                 val profile = root.playerDataService.addCoins(target.uniqueId, amount)
                 sender.sendMessage(Component.text("已给 ${target.name} $amount 硬币，当前 ${profile.coins}", NamedTextColor.GREEN))
             }
+            "remove" -> {
+                if (!sender.hasPermission("zombie.run.v2.admin")) { noPermission(sender); return }
+                val target = Bukkit.getPlayerExact(args.getOrNull(1) ?: "") ?: run {
+                    sender.sendMessage(Component.text("玩家不在线：${args.getOrNull(1)}", NamedTextColor.RED)); return
+                }
+                val amount = args.getOrNull(2)?.toIntOrNull() ?: return badNumber(sender)
+                val profile = root.playerDataService.removeCoins(target.uniqueId, amount)
+                sender.sendMessage(Component.text("已扣除 ${target.name} $amount 硬币，当前 ${profile.coins}", NamedTextColor.GREEN))
+            }
+            "set" -> {
+                if (!sender.hasPermission("zombie.run.v2.admin")) { noPermission(sender); return }
+                val target = Bukkit.getPlayerExact(args.getOrNull(1) ?: "") ?: run {
+                    sender.sendMessage(Component.text("玩家不在线：${args.getOrNull(1)}", NamedTextColor.RED)); return
+                }
+                val amount = args.getOrNull(2)?.toIntOrNull() ?: return badNumber(sender)
+                val profile = root.playerDataService.setCoins(target.uniqueId, amount)
+                sender.sendMessage(Component.text("已设置 ${target.name} 硬币为 ${profile.coins}", NamedTextColor.GREEN))
+            }
+            "get" -> {
+                if (!sender.hasPermission("zombie.run.v2.admin")) { noPermission(sender); return }
+                val target = Bukkit.getPlayerExact(args.getOrNull(1) ?: "") ?: run {
+                    sender.sendMessage(Component.text("玩家不在线：${args.getOrNull(1)}", NamedTextColor.RED)); return
+                }
+                val profile = root.playerDataService.profileOf(target.uniqueId)
+                sender.sendMessage(Component.text("${target.name} 当前硬币：${profile.coins}", NamedTextColor.GREEN))
+            }
             "spend" -> {
                 val player = sender as? Player ?: run { sender.sendMessage(Component.text("spend 需要玩家执行", NamedTextColor.RED)); return }
                 val amount = args.getOrNull(1)?.toIntOrNull() ?: return badNumber(sender)
@@ -647,22 +883,84 @@ class Zr2Command(
                 if (profile == null) sender.sendMessage(Component.text("硬币不足", NamedTextColor.RED))
                 else sender.sendMessage(Component.text("已花费 $amount，剩余 ${profile.coins}", NamedTextColor.GREEN))
             }
+            "transfer" -> {
+                val player = sender as? Player ?: run { sender.sendMessage(Component.text("transfer 需要玩家执行", NamedTextColor.RED)); return }
+                val target = Bukkit.getPlayerExact(args.getOrNull(1) ?: "") ?: run {
+                    sender.sendMessage(Component.text("玩家不在线：${args.getOrNull(1)}", NamedTextColor.RED)); return
+                }
+                val amount = args.getOrNull(2)?.toIntOrNull() ?: return badNumber(sender)
+                if (amount <= 0) {
+                    sender.sendMessage(Component.text("转账金额必须为正数", NamedTextColor.RED))
+                    return
+                }
+                if (target.uniqueId == player.uniqueId) {
+                    sender.sendMessage(Component.text("不能给自己转账", NamedTextColor.RED))
+                    return
+                }
+                if (root.playerDataService.transferCoins(player.uniqueId, target.uniqueId, amount)) {
+                    sender.sendMessage(Component.text("已转账 $amount 硬币给 ${target.name}", NamedTextColor.GREEN))
+                    target.sendMessage(Component.text("收到 ${player.name} 转账 $amount 硬币", NamedTextColor.GREEN))
+                } else {
+                    sender.sendMessage(Component.text("转账失败：硬币不足", NamedTextColor.RED))
+                }
+            }
+            "top" -> {
+                val limit = (args.getOrNull(1)?.toIntOrNull() ?: 10).coerceIn(1, 100)
+                val top = root.playerDataService.topCoins(limit)
+                if (top.isEmpty()) {
+                    sender.sendMessage(Component.text("暂无排行榜数据", NamedTextColor.YELLOW))
+                } else {
+                    sender.sendMessage(Component.text("===== 金币排行榜 Top $limit =====", NamedTextColor.GREEN))
+                    top.forEachIndexed { index, (id, coins) ->
+                        val name = root.worldAccess.player(id)?.name ?: Bukkit.getOfflinePlayer(id).name ?: id.toString()
+                        sender.sendMessage(Component.text("${index + 1}. $name  $coins 硬币", NamedTextColor.GREEN))
+                    }
+                }
+            }
             else -> sender.sendMessage(Component.text("未知子命令", NamedTextColor.RED))
         }
     }
 
     private fun handleXp(sender: CommandSender, args: List<String>) {
         if (!sender.hasPermission("zombie.run.v2.admin")) { noPermission(sender); return }
-        if (args.size < 2) {
-            sender.sendMessage(Component.text("用法: /zr2 xp add <玩家> <数量>", NamedTextColor.RED))
-            return
+        when (args.getOrNull(0)?.lowercase()) {
+            "add" -> {
+                val target = Bukkit.getPlayerExact(args.getOrNull(1) ?: "") ?: run {
+                    sender.sendMessage(Component.text("玩家不在线：${args.getOrNull(1)}", NamedTextColor.RED)); return
+                }
+                val amount = args.getOrNull(2)?.toIntOrNull() ?: return badNumber(sender)
+                val profile = root.playerDataService.addXp(target.uniqueId, amount)
+                sender.sendMessage(Component.text("已给 ${target.name} $amount 经验，当前等级 ${profile.level}", NamedTextColor.GREEN))
+            }
+            "set" -> {
+                val target = Bukkit.getPlayerExact(args.getOrNull(1) ?: "") ?: run {
+                    sender.sendMessage(Component.text("玩家不在线：${args.getOrNull(1)}", NamedTextColor.RED)); return
+                }
+                val amount = args.getOrNull(2)?.toIntOrNull() ?: return badNumber(sender)
+                val profile = root.playerDataService.setXp(target.uniqueId, amount)
+                sender.sendMessage(Component.text("已设置 ${target.name} 经验为 ${profile.xp}", NamedTextColor.GREEN))
+            }
+            else -> sender.sendMessage(Component.text("用法: /zr2 xp add|set <玩家> <数量>", NamedTextColor.RED))
         }
-        val target = Bukkit.getPlayerExact(args[0]) ?: run {
-            sender.sendMessage(Component.text("玩家不在线：${args[0]}", NamedTextColor.RED)); return
+    }
+
+    private fun handleLevel(sender: CommandSender, args: List<String>) {
+        if (!sender.hasPermission("zombie.run.v2.admin")) { noPermission(sender); return }
+        val target = Bukkit.getPlayerExact(args.getOrNull(0) ?: "") ?: run {
+            sender.sendMessage(Component.text("用法: /zr2 level set <玩家> <等级>", NamedTextColor.RED)); return
         }
-        val amount = args[1].toIntOrNull() ?: return badNumber(sender)
-        val profile = root.playerDataService.addXp(target.uniqueId, amount)
-        sender.sendMessage(Component.text("已给 ${target.name} $amount 经验，当前等级 ${profile.level}", NamedTextColor.GREEN))
+        val level = args.getOrNull(1)?.toIntOrNull() ?: return badNumber(sender)
+        val profile = root.playerDataService.setLevel(target.uniqueId, level)
+        sender.sendMessage(Component.text("已设置 ${target.name} 等级为 ${profile.level}", NamedTextColor.GREEN))
+    }
+
+    private fun handleReset(sender: CommandSender, args: List<String>) {
+        if (!sender.hasPermission("zombie.run.v2.admin")) { noPermission(sender); return }
+        val target = Bukkit.getPlayerExact(args.getOrNull(0) ?: "") ?: run {
+            sender.sendMessage(Component.text("玩家不在线：${args.getOrNull(0)}", NamedTextColor.RED)); return
+        }
+        root.playerDataService.resetPlayer(target.uniqueId)
+        sender.sendMessage(Component.text("已重置 ${target.name} 的玩家数据", NamedTextColor.GREEN))
     }
 
     private fun handleTitle(sender: CommandSender, args: List<String>) {
@@ -998,7 +1296,7 @@ class Zr2Command(
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): List<String> {
         if (args.size == 1) {
-            return listOf("help", "version", "reload", "arena", "door", "button", "respawn", "game", "weapon", "profile", "coins", "xp", "title", "menu", "task", "mapflow", "v1")
+            return listOf("help", "version", "reload", "arena", "door", "button", "respawn", "game", "weapon", "profile", "coins", "xp", "level", "reset", "title", "menu", "task", "mapflow", "v1")
                 .filter { it.startsWith(args[0].lowercase()) }
         }
         return when (args[0].lowercase()) {
@@ -1008,16 +1306,26 @@ class Zr2Command(
                 else -> emptyList()
             }
             "door" -> when (args.size) {
-                2 -> listOf("list", "info", "test", "trigger", "add").filter { it.startsWith(args[1].lowercase()) }
+                2 -> listOf("list", "info", "test", "trigger", "add", "remove", "edit", "reset", "behavior").filter { it.startsWith(args[1].lowercase()) }
                 3 -> when (args[1].lowercase()) {
-                    "info", "test" -> root.arenaRepository.all().flatMap { it.doors }.map { it.id }.filter { it.startsWith(args[2], true) }
+                    "info", "test", "remove", "edit" -> root.arenaRepository.all().flatMap { it.doors }.map { it.id }.filter { it.startsWith(args[2], true) }
                     "trigger" -> root.doorService.doorsInWorld((sender as? Player)?.world?.name ?: defaultWorld).mapNotNull { it.number?.toString() }.filter { it.startsWith(args[2]) }
+                    "behavior" -> listOf("info", "set", "remove").filter { it.startsWith(args[2].lowercase()) }
                     else -> emptyList()
                 }
+                4 -> if (args[1].equals("behavior", true)) root.arenaRepository.all().flatMap { it.doors }.map { it.id }.filter { it.startsWith(args[3], true) } else emptyList()
                 else -> emptyList()
             }
-            "button" -> if (args.size == 2) listOf("add").filter { it.startsWith(args[1].lowercase()) } else emptyList()
-            "respawn" -> if (args.size == 2) listOf("add").filter { it.startsWith(args[1].lowercase()) } else emptyList()
+            "button" -> when (args.size) {
+                2 -> listOf("add", "remove", "list").filter { it.startsWith(args[1].lowercase()) }
+                3 -> if (args[1].equals("remove", true)) root.arenaRepository.all().flatMap { it.buttons }.map { it.id }.filter { it.startsWith(args[2], true) } else emptyList()
+                else -> emptyList()
+            }
+            "respawn" -> when (args.size) {
+                2 -> listOf("add", "remove", "list").filter { it.startsWith(args[1].lowercase()) }
+                3 -> if (args[1].equals("remove", true)) root.arenaRepository.all().flatMap { it.respawns }.map { it.id }.filter { it.startsWith(args[2], true) } else emptyList()
+                else -> emptyList()
+            }
             "game" -> when (args.size) {
                 2 -> listOf("list", "status", "start", "end", "reset").filter { it.startsWith(args[1].lowercase()) }
                 3 -> when (args[1].lowercase()) {
@@ -1028,9 +1336,9 @@ class Zr2Command(
                 else -> emptyList()
             }
             "weapon" -> when (args.size) {
-                2 -> listOf("list", "info", "add", "remove", "give", "random").filter { it.startsWith(args[1].lowercase()) }
+                2 -> listOf("list", "info", "add", "remove", "give", "random", "select", "unselect").filter { it.startsWith(args[1].lowercase()) }
                 3 -> when (args[1].lowercase()) {
-                    "info", "remove", "give" -> root.weaponService.all().map { it.id }.filter { it.startsWith(args[2], true) }
+                    "info", "remove", "give", "select" -> root.weaponService.all().map { it.id }.filter { it.startsWith(args[2], true) }
                     "random" -> listOf("gun", "melee", "special").filter { it.startsWith(args[2].lowercase()) }
                     else -> emptyList()
                 }
@@ -1038,14 +1346,21 @@ class Zr2Command(
                 else -> emptyList()
             }
             "coins" -> when (args.size) {
-                2 -> listOf("add", "give", "spend").filter { it.startsWith(args[1].lowercase()) }
+                2 -> listOf("add", "give", "remove", "set", "get", "spend", "transfer", "top").filter { it.startsWith(args[1].lowercase()) }
+                3 -> if (args[1] in listOf("give", "remove", "set", "get", "transfer")) Bukkit.getOnlinePlayers().map { it.name }.filter { it.startsWith(args[2], true) } else emptyList()
                 else -> emptyList()
             }
             "title" -> when (args.size) {
                 2 -> listOf("set", "clear").filter { it.startsWith(args[1].lowercase()) }
                 else -> emptyList()
             }
-            "xp" -> if (args.size == 2) listOf("add").filter { it.startsWith(args[1].lowercase()) } else emptyList()
+            "xp" -> when (args.size) {
+                2 -> listOf("add", "set").filter { it.startsWith(args[1].lowercase()) }
+                3 -> if (args[1] in listOf("add", "set")) Bukkit.getOnlinePlayers().map { it.name }.filter { it.startsWith(args[2], true) } else emptyList()
+                else -> emptyList()
+            }
+            "level" -> if (args.size == 2) listOf("set").filter { it.startsWith(args[1].lowercase()) } else if (args.size == 3 && args[1].equals("set", true)) Bukkit.getOnlinePlayers().map { it.name }.filter { it.startsWith(args[2], true) } else emptyList()
+            "reset" -> if (args.size == 2) Bukkit.getOnlinePlayers().map { it.name }.filter { it.startsWith(args[1], true) } else emptyList()
             "menu" -> if (args.size == 2) listOf("profile", "shop", "tasks", "titles").filter { it.startsWith(args[1].lowercase()) } else emptyList()
             "task" -> if (args.size == 2) listOf("list", "claim").filter { it.startsWith(args[1].lowercase()) } else if (args.size == 3 && args[1].equals("claim", true)) root.taskService.allTasks().map { it.id }.filter { it.startsWith(args[2], true) } else emptyList()
             "mapflow" -> when (args.size) {
