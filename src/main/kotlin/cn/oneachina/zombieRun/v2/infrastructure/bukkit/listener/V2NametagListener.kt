@@ -15,19 +15,24 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.plugin.java.JavaPlugin
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 头顶名牌/血量显示（对齐 v1 NametagManager）。
  *
- * 只对 arena 世界玩家生效；离开 arena 世界/退出时恢复原始名字，避免污染其他世界。
+ * 只对 arena 世界玩家生效；只恢复本插件设置过的名牌，避免覆盖其他昵称/称号插件。
  */
 class V2NametagListener(
     private val gameFlow: GameFlowService,
     private val healthService: CombatHealthService,
     private val scheduler: SchedulerPort,
     private val taskRegistry: TaskRegistry,
+    private val plugin: JavaPlugin? = null,
 ) : Listener {
 
+    private val managedNames = ConcurrentHashMap.newKeySet<UUID>()
     private var tickTask: TaskHandle? = null
 
     fun start() {
@@ -40,20 +45,26 @@ class V2NametagListener(
     fun stop() {
         tickTask?.cancel()
         tickTask = null
-        // 停止时恢复所有在线玩家原始名字
-        Bukkit.getOnlinePlayers().forEach { it.displayName(Component.text(it.name)) }
+        // 只恢复本插件设置过的名牌
+        managedNames.forEach { id -> Bukkit.getPlayer(id)?.let { runOnPlayer(it) { resetName(it) } } }
+        managedNames.clear()
     }
 
     private fun refresh() {
         Bukkit.getOnlinePlayers().forEach { player ->
             val world = player.world.name
             if (!gameFlow.isArenaWorld(world)) {
-                resetNameIfNeeded(player)
+                if (player.uniqueId in managedNames) {
+                    runOnPlayer(player) { resetName(player) }
+                }
                 return@forEach
             }
             val team = gameFlow.teamOf(world, player.uniqueId)
             val percent = healthService.getHealthPercent(player.uniqueId)
-            player.displayName(buildNametag(player.name, team, percent))
+            runOnPlayer(player) {
+                player.displayName(buildNametag(player.name, team, percent))
+                managedNames.add(player.uniqueId)
+            }
         }
     }
 
@@ -73,23 +84,31 @@ class V2NametagListener(
             .build()
     }
 
-    private fun resetNameIfNeeded(player: Player) {
-        val current = PlainTextComponentSerializer.plainText().serialize(player.displayName())
-        if (current != player.name) {
-            player.displayName(Component.text(player.name))
+    private fun resetName(player: Player) {
+        player.displayName(Component.text(player.name))
+        managedNames.remove(player.uniqueId)
+    }
+
+    private fun runOnPlayer(player: Player, action: () -> Unit) {
+        val p = plugin
+        if (p != null) {
+            player.scheduler.run(p, { _ -> action() }, null)
+        } else {
+            action()
         }
     }
 
     @EventHandler
     fun onWorldChange(event: PlayerChangedWorldEvent) {
-        if (!gameFlow.isArenaWorld(event.player.world.name)) {
-            event.player.displayName(Component.text(event.player.name))
+        val id = event.player.uniqueId
+        if (!gameFlow.isArenaWorld(event.player.world.name) && id in managedNames) {
+            runOnPlayer(event.player) { resetName(event.player) }
         }
     }
 
     @EventHandler
     fun onQuit(event: PlayerQuitEvent) {
-        event.player.displayName(Component.text(event.player.name))
+        managedNames.remove(event.player.uniqueId)
     }
 
     companion object {

@@ -20,6 +20,7 @@ class CombatHealthService(
     private val maxHealth = ConcurrentHashMap<UUID, Double>()
     private val lastDamager = ConcurrentHashMap<UUID, UUID>()
 
+    @Volatile
     var rules: CombatRules = CombatRules()
         private set
 

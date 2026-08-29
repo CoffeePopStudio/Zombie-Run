@@ -71,6 +71,8 @@ class V2SettingsLoader(
                 headshotXp = yaml.getInt("economy.headshot-xp", 5),
                 passDoorXp = yaml.getInt("economy.pass-door-xp", 5),
                 surviveHumanCoins = yaml.getInt("economy.survive-human-coins", 200),
+                humanWinXp = yaml.getInt("economy.human-win-xp", 100),
+                participateXp = yaml.getInt("economy.participate-xp", 50),
                 rankRewardCoins = yaml.getIntegerList("economy.rank-reward-coins").ifEmpty { listOf(200, 150, 100) },
             ),
         ).also {
@@ -112,6 +114,8 @@ class V2SettingsLoader(
               headshot-xp: 5
               pass-door-xp: 5
               survive-human-coins: 200
+              human-win-xp: 100
+              participate-xp: 50
               rank-reward-coins: [200, 150, 100]
         """.trimIndent() + "\n"
     }

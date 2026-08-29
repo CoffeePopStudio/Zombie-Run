@@ -2,6 +2,7 @@ package cn.oneachina.zombierun.v2.infrastructure.bukkit.listener
 
 import cn.oneachina.zombierun.v2.application.game.GameFlowService
 import cn.oneachina.zombierun.v2.domain.game.GameTeam
+import cn.oneachina.zombierun.v2.infrastructure.bukkit.gui.GuiService
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
@@ -33,6 +34,7 @@ import org.bukkit.event.player.PlayerSwapHandItemsEvent
 class V2ProtectionListener(
     private val plugin: org.bukkit.plugin.java.JavaPlugin,
     private val gameFlow: GameFlowService,
+    private val guiService: GuiService? = null,
 ) : Listener {
 
     // ==================== 方块保护 ====================
@@ -73,8 +75,8 @@ class V2ProtectionListener(
         val player = event.whoClicked as? Player ?: return
         val top = player.openInventory.topInventory
         val topHolder = top.holder
-        // 只针对 v2 自有 GUI：点击上层格子交给 GuiService；点击下层时拦截 shift 类动作
-        if (topHolder == null) return
+        // 只针对 v2 自有 GUI，避免影响第三方插件菜单
+        if (guiService?.isV2Holder(topHolder) != true) return
         if (event.clickedInventory === top) return // 上层点击由 GuiService 处理/取消
         val click = event.click
         if (click.isShiftClick || click == org.bukkit.event.inventory.ClickType.NUMBER_KEY ||
@@ -88,7 +90,7 @@ class V2ProtectionListener(
     fun onInventoryDrag(event: InventoryDragEvent) {
         val player = event.whoClicked as? Player ?: return
         val top = player.openInventory.topInventory ?: return
-        if (top.holder == null) return
+        if (guiService?.isV2Holder(top.holder) != true) return
         // 拖拽任何一格落在 v2 面板内即取消
         if (event.rawSlots.any { it < top.size }) event.isCancelled = true
     }

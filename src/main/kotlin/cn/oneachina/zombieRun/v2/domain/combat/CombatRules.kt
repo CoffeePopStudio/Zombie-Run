@@ -31,6 +31,8 @@ data class EconomyRules(
     val headshotXp: Int = 5,
     val passDoorXp: Int = 5,
     val surviveHumanCoins: Int = 200,
+    val humanWinXp: Int = 100,
+    val participateXp: Int = 50,
     /** 结算榜单奖励：击杀/感染 Top3（index 0 = 第 1 名） */
     val rankRewardCoins: List<Int> = listOf(200, 150, 100),
 )

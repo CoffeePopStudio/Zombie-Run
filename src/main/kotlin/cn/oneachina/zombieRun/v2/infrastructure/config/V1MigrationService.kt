@@ -68,6 +68,7 @@ class V1MigrationService(
 
         try {
             DriverManager.getConnection("jdbc:sqlite:${v1Db.absolutePath.replace('\\', '/')}").use { conn ->
+                conn.createStatement().use { it.execute("PRAGMA busy_timeout=5000") }
                 val economy = HashMap<String, Int>()
                 conn.createStatement().executeQuery("SELECT uuid, coins FROM zr_economy").use { rs ->
                     while (rs.next()) {
@@ -78,7 +79,7 @@ class V1MigrationService(
 
                 val progression = HashMap<String, PlayerProfile>()
                 conn.createStatement().executeQuery(
-                    "SELECT uuid, level, xp, total_kills, equipped_title FROM player_progression",
+                    "SELECT uuid, level, xp, total_kills, equipped_title, total_infections, games_played, human_wins FROM player_progression",
                 ).use { rs ->
                     while (rs.next()) {
                         val uuid = rs.getString("uuid") ?: continue
@@ -91,6 +92,9 @@ class V1MigrationService(
                             level = rs.getInt("level").coerceAtLeast(1),
                             title = rs.getString("equipped_title")?.takeIf { it.isNotBlank() },
                             zombieKills = rs.getInt("total_kills"),
+                            totalInfections = rs.getInt("total_infections"),
+                            gamesPlayed = rs.getInt("games_played"),
+                            humanWins = rs.getInt("human_wins"),
                         )
                         progression[uuid] = profile
                     }

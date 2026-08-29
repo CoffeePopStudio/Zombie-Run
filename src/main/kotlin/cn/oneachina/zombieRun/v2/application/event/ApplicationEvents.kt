@@ -17,6 +17,7 @@ data class GameEndedEvent(
     val worldName: String,
     val winner: String,
     val winnerPlayerIds: Set<UUID> = emptySet(),
+    val survivalSecondsByPlayer: Map<UUID, Int> = emptyMap(),
 )
 
 data class ZombieKilledEvent(

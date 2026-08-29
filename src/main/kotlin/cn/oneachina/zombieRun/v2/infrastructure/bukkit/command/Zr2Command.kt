@@ -24,6 +24,7 @@ import org.bukkit.entity.Player
 class Zr2Command(
     private val root: V2CompositionRoot,
     private val defaultWorld: String,
+    private val plugin: org.bukkit.plugin.java.JavaPlugin,
 ) : CommandExecutor, TabCompleter, org.bukkit.event.Listener {
 
     /** postool 已激活的玩家（/zr2 postool 切换）。 */
@@ -65,6 +66,10 @@ class Zr2Command(
     }
 
     private fun handleCommand(sender: CommandSender, args: Array<out String>): Boolean {
+        if (sender is Player && !sender.hasPermission("zombie.run.v2.admin") && !sender.hasPermission("zombie.run.v2.player")) {
+            sender.sendMessage(Component.text("你没有权限使用 ZombieRun v2 命令", NamedTextColor.RED))
+            return true
+        }
         if (args.isEmpty()) {
             help(sender)
             return true
@@ -90,6 +95,8 @@ class Zr2Command(
             "mapflow" -> handleMapFlow(sender, args.drop(1))
             "v1" -> handleV1(sender, args.drop(1))
             "postool" -> handlePostool(sender)
+            "lobby" -> handleLobby(sender)
+            "debug" -> handleDebug(sender)
             else -> {
                 sender.sendMessage(Component.text("未知子命令：${args[0]}，输入 /zr2 help 查看帮助", NamedTextColor.RED))
             }
@@ -118,6 +125,8 @@ class Zr2Command(
         sender.sendMessage(Component.text("/zr2 door list [世界] | info <id> | test <id> | trigger <门号>", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 door add --arena <名称> [坐标6个] <axis> <front> [--number N] [--group G] [--open N] [--close N]（/zr2 postool 选区后可省略坐标）", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 postool - 切换选区工具（木棍左键=pos1 右键=pos2）", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 lobby - 返回当前世界等待大厅", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 debug - 切换 debug 日志（管理员）", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 button add --arena <名称> <x> <y> <z> normal <门号>", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 respawn add --arena <名称> <type> <x> <y> <z> [door-number] [yaw] [pitch]", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 game list | status <世界> | start <世界> | end <世界> <human|zombie> | reset <世界>", NamedTextColor.YELLOW))
@@ -398,6 +407,30 @@ class Zr2Command(
         sender.sendMessage(Component.text("门 $id 特殊行为已设置：${type.name.lowercase()}", NamedTextColor.GREEN))
     }
 
+    private fun handleLobby(sender: CommandSender) {
+        val player = sender as? Player ?: run {
+            sender.sendMessage(Component.text("lobby 需要玩家执行", NamedTextColor.RED)); return
+        }
+        val wait = root.arenaRepository.byWorld(player.world.name)
+            .flatMap { it.respawns }
+            .firstOrNull { it.type == RespawnType.WAIT }
+        if (wait == null) {
+            player.sendMessage(Component.text("当前世界没有配置等待大厅重生点", NamedTextColor.RED))
+            return
+        }
+        root.teleporter.teleport(player.uniqueId, wait.world, wait.x, wait.y, wait.z, wait.yaw, wait.pitch)
+        player.sendMessage(Component.text("已返回等待大厅", NamedTextColor.GREEN))
+    }
+
+    private fun handleDebug(sender: CommandSender) {
+        if (!sender.hasPermission("zombie.run.v2.admin")) {
+            noPermission(sender)
+            return
+        }
+        root.logger.debugEnabled = !root.logger.debugEnabled
+        sender.sendMessage(Component.text("debug 模式：${if (root.logger.debugEnabled) "开启" else "关闭"}", NamedTextColor.GREEN))
+    }
+
     private fun handlePostool(sender: CommandSender) {
         if (sender !is Player) {
             sender.sendMessage(Component.text("postool 需要玩家执行", NamedTextColor.RED))
@@ -449,6 +482,13 @@ class Zr2Command(
             return
         }
         val door = (result as DoorAddParseResult.Success).door
+        val volume = (door.region.maxX - door.region.minX + 1).toLong() *
+            (door.region.maxY - door.region.minY + 1).toLong() *
+            (door.region.maxZ - door.region.minZ + 1).toLong()
+        if (volume > MAX_DOOR_BLOCKS) {
+            sender.sendMessage(Component.text("门区域过大：$volume 方块超过上限 $MAX_DOOR_BLOCKS，请缩小选区", NamedTextColor.RED))
+            return
+        }
 
         val snapshot = root.blockOps.scanRegion(arena.world, door.region)
         root.snapshotStore.save(door.snapshotId!!, snapshot)
@@ -906,14 +946,20 @@ class Zr2Command(
             }
             "top" -> {
                 val limit = (args.getOrNull(1)?.toIntOrNull() ?: 10).coerceIn(1, 100)
-                val top = root.playerDataService.topCoins(limit)
-                if (top.isEmpty()) {
-                    sender.sendMessage(Component.text("暂无排行榜数据", NamedTextColor.YELLOW))
-                } else {
-                    sender.sendMessage(Component.text("===== 金币排行榜 Top $limit =====", NamedTextColor.GREEN))
-                    top.forEachIndexed { index, (id, coins) ->
-                        val name = root.worldAccess.player(id)?.name ?: Bukkit.getOfflinePlayer(id).name ?: id.toString()
-                        sender.sendMessage(Component.text("${index + 1}. $name  $coins 硬币", NamedTextColor.GREEN))
+                // 异步查询排行榜，避免命令线程同步扫全表
+                java.util.concurrent.CompletableFuture.supplyAsync {
+                    root.playerDataService.topCoins(limit)
+                }.thenAccept { top ->
+                    Bukkit.getGlobalRegionScheduler().run(plugin) { _ ->
+                        if (top.isEmpty()) {
+                            sender.sendMessage(Component.text("暂无排行榜数据", NamedTextColor.YELLOW))
+                        } else {
+                            sender.sendMessage(Component.text("===== 金币排行榜 Top $limit =====", NamedTextColor.GREEN))
+                            top.forEachIndexed { index, (id, coins) ->
+                                val name = root.worldAccess.player(id)?.name ?: Bukkit.getOfflinePlayer(id).name ?: id.toString()
+                                sender.sendMessage(Component.text("${index + 1}. $name  $coins 硬币", NamedTextColor.GREEN))
+                            }
+                        }
                     }
                 }
             }
@@ -946,10 +992,11 @@ class Zr2Command(
 
     private fun handleLevel(sender: CommandSender, args: List<String>) {
         if (!sender.hasPermission("zombie.run.v2.admin")) { noPermission(sender); return }
-        val target = Bukkit.getPlayerExact(args.getOrNull(0) ?: "") ?: run {
+        val offset = if (args.firstOrNull()?.equals("set", ignoreCase = true) == true) 1 else 0
+        val target = Bukkit.getPlayerExact(args.getOrNull(offset) ?: "") ?: run {
             sender.sendMessage(Component.text("用法: /zr2 level set <玩家> <等级>", NamedTextColor.RED)); return
         }
-        val level = args.getOrNull(1)?.toIntOrNull() ?: return badNumber(sender)
+        val level = args.getOrNull(offset + 1)?.toIntOrNull() ?: return badNumber(sender)
         val profile = root.playerDataService.setLevel(target.uniqueId, level)
         sender.sendMessage(Component.text("已设置 ${target.name} 等级为 ${profile.level}", NamedTextColor.GREEN))
     }
@@ -1296,7 +1343,7 @@ class Zr2Command(
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): List<String> {
         if (args.size == 1) {
-            return listOf("help", "version", "reload", "arena", "door", "button", "respawn", "game", "weapon", "profile", "coins", "xp", "level", "reset", "title", "menu", "task", "mapflow", "v1")
+            return listOf("help", "version", "reload", "arena", "door", "button", "respawn", "game", "weapon", "profile", "coins", "xp", "level", "reset", "title", "menu", "task", "mapflow", "v1", "lobby", "debug", "postool")
                 .filter { it.startsWith(args[0].lowercase()) }
         }
         return when (args[0].lowercase()) {
@@ -1381,5 +1428,10 @@ class Zr2Command(
 
     private fun noPermission(sender: CommandSender) {
         sender.sendMessage(Component.text("你没有权限执行此命令", NamedTextColor.RED))
+    }
+
+    companion object {
+        /** 门区域最大方块数，防止同步扫描超大区域卡服。 */
+        private const val MAX_DOOR_BLOCKS = 10_000L
     }
 }

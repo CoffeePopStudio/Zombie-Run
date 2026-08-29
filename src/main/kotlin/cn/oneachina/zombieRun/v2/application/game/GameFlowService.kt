@@ -18,6 +18,7 @@ import cn.oneachina.zombierun.v2.domain.game.MapFlowAdvanceResult
 import cn.oneachina.zombierun.v2.domain.game.MapFlowDefinition
 import cn.oneachina.zombierun.v2.domain.game.MapFlowPhase
 import cn.oneachina.zombierun.v2.domain.game.MapFlowStateMachine
+import cn.oneachina.zombierun.v2.infrastructure.bukkit.hook.MultiverseWorldResolver
 import cn.oneachina.zombierun.v2.infrastructure.config.ArenaYamlRepository
 import cn.oneachina.zombierun.v2.infrastructure.config.V2Settings
 import cn.oneachina.zombierun.v2.ports.GameContextPort
@@ -37,7 +38,7 @@ import kotlin.random.Random
  * 通过 [GameContextPort] 供门系统查询队伍与推进房间。
  */
 class GameFlowService(
-    private var settings: V2Settings,
+    @Volatile private var settings: V2Settings,
     private val arenaRepository: ArenaYamlRepository,
     private val worldAccess: WorldAccessPort,
     private val scheduler: SchedulerPort,
@@ -61,6 +62,7 @@ class GameFlowService(
     )
 
     private val games = ConcurrentHashMap<String, GameInstance>()
+    private val worldLocks = ConcurrentHashMap<String, Any>()
     private val gameStartTimes = ConcurrentHashMap<String, Long>()
     private val mapFlows = ConcurrentHashMap<String, MapFlowStateMachine>()
     private val countdowns = ConcurrentHashMap<String, Countdown>()
@@ -117,14 +119,24 @@ class GameFlowService(
     fun gameWorlds(): Set<String> = arenaRepository.all().map { it.world }.toSet()
 
     /** 是否为已配置 arena 的世界；所有全局副作用 listener 都应先用它过滤。 */
-    fun isArenaWorld(worldName: String): Boolean = worldName in gameWorlds()
+    private fun canonicalWorld(worldName: String): String = try {
+        MultiverseWorldResolver.resolve(worldName)
+    } catch (_: Exception) {
+        // 单元测试/无 Bukkit 环境下保持原世界名
+        worldName
+    }
+
+    fun isArenaWorld(worldName: String): Boolean =
+        worldName in gameWorlds() || canonicalWorld(worldName) in gameWorlds()
+
+    private fun worldLock(worldName: String): Any = worldLocks.computeIfAbsent(worldName) { Any() }
 
     fun instance(worldName: String): GameInstance? = games[worldName]
 
     fun phaseOf(worldName: String): GamePhase? = games[worldName]?.phaseSnapshot()
 
     private fun mapFlowDef(worldName: String): MapFlowDefinition? =
-        arenaRepository.byWorld(worldName).firstNotNullOfOrNull { it.mapFlow }
+        arenaRepository.byWorld(canonicalWorld(worldName)).firstNotNullOfOrNull { it.mapFlow }
 
     private fun rules(worldName: String): GameRules {
         val flow = mapFlowDef(worldName)
@@ -279,6 +291,9 @@ class GameFlowService(
     }
 
     private fun startGame(worldName: String, game: GameInstance, playerIds: List<UUID>) {
+        synchronized(worldLock(worldName)) {
+        // 防止倒计时到点与管理员强开并发导致重复开局；ENDED 允许强开新一局（等价先 reset 再开）
+        if (game.phaseSnapshot() == GamePhase.RUNNING) return
         cancelCountdownSilently(worldName)
         maxDurationTasks.remove(worldName)?.cancel()
 
@@ -299,6 +314,8 @@ class GameFlowService(
         val alphaId = game.alphaId()
 
         assignments.forEach { assignment ->
+            // 必须先清状态/背包，再发武器，避免 onGameStarted 异步清理清掉刚发的枪
+            playerStatePreparer?.invoke(assignment.playerId, assignment.team)
             val spawn = spawnForTeam(worldName, assignment.team, initial = true)
             if (spawn != null) {
                 teleportTo(worldName, assignment.playerId, spawn)
@@ -330,8 +347,15 @@ class GameFlowService(
                     }
                     ws.clearSelected(assignment.playerId)
                 } else {
-                    // 开局默认武器（不扣款）
-                    starter?.let { ws?.giveStarter(assignment.playerId, it) }
+                    // 开局默认武器（不扣款）：优先配置的 starter-weapon，否则随机枪并补满弹药
+                    if (starter != null) {
+                        ws?.giveStarter(assignment.playerId, starter)
+                    } else {
+                        val random = ws?.giveRandom(assignment.playerId, null)
+                        if (random != null) {
+                            ws?.refillAmmo(assignment.playerId, random.id, cn.oneachina.zombierun.v2.application.weapon.WeaponService.STARTER_MAGAZINES)
+                        }
+                    }
                 }
             } else if (assignment.team == GameTeam.ZOMBIE_MAIN) {
                 val releaseDelay = mapFlowDef(worldName)?.motherReleaseDelaySeconds ?: 0
@@ -383,6 +407,7 @@ class GameFlowService(
         }
         maxDurationTasks[worldName] = handle
         taskRegistry.register(handle)
+        }
     }
 
     private fun cancelCountdownSilently(worldName: String) {
@@ -476,6 +501,8 @@ class GameFlowService(
     fun alphaName(worldName: String): String =
         instance(worldName)?.alphaId()?.let { worldAccess.player(it)?.name } ?: ""
 
+    fun alphaId(worldName: String): UUID? = instance(worldName)?.alphaId()
+
     fun gameStateFormatted(worldName: String): String =
         phaseOf(worldName)?.name?.lowercase() ?: "none"
 
@@ -537,21 +564,36 @@ class GameFlowService(
 
     /** 玩家进入配置了 arena 的世界。 */
     fun onPlayerJoin(worldName: String, playerId: UUID) {
-        if (worldName !in gameWorlds()) return
-        val game = games.computeIfAbsent(worldName) { GameInstance(worldName, rules(worldName)) }
+        val canonical = canonicalWorld(worldName)
+        if (canonical !in gameWorlds()) return
+        val game = games.computeIfAbsent(canonical) { GameInstance(canonical, rules(canonical)) }
         val team = game.addPlayer(playerId)
         when (game.phaseSnapshot()) {
             GamePhase.RUNNING -> {
                 messages.chat(playerId, "对局进行中，你以僵尸身份加入")
-                val spawn = spawnForTeam(worldName, GameTeam.ZOMBIE)
-                if (spawn != null) teleportTo(worldName, playerId, spawn)
+                playerStatePreparer?.invoke(playerId, GameTeam.ZOMBIE)
+                zombieBuffApplier?.invoke(playerId)
+                val spawn = spawnForTeam(canonical, GameTeam.ZOMBIE)
+                if (spawn != null) teleportTo(canonical, playerId, spawn)
             }
             GamePhase.WAITING, GamePhase.STARTING -> {
                 messages.chat(playerId, "你以观战身份等待对局")
+                playerStatePreparer?.invoke(playerId, GameTeam.SPECTATOR)
+                val waitSpawn = arenaRepository.byWorld(canonical)
+                    .flatMap { it.respawns }
+                    .firstOrNull { it.type == RespawnType.WAIT }
+                if (waitSpawn != null) teleportTo(canonical, playerId, waitSpawn)
             }
-            GamePhase.ENDED -> messages.chat(playerId, "本局已结束")
+            GamePhase.ENDED -> {
+                messages.chat(playerId, "本局已结束")
+                playerStatePreparer?.invoke(playerId, GameTeam.SPECTATOR)
+                val waitSpawn = arenaRepository.byWorld(canonical)
+                    .flatMap { it.respawns }
+                    .firstOrNull { it.type == RespawnType.WAIT }
+                if (waitSpawn != null) teleportTo(canonical, playerId, waitSpawn)
+            }
         }
-        if (team == GameTeam.ZOMBIE) logger.info("[$worldName] ${playerId} joined as zombie")
+        if (team == GameTeam.ZOMBIE) logger.info("[$canonical] ${playerId} joined as zombie")
     }
 
     fun onPlayerQuit(worldName: String, playerId: UUID) {
@@ -564,17 +606,18 @@ class GameFlowService(
     }
 
     private fun handlePlayerGone(worldName: String, playerId: UUID) {
-        val game = games[worldName] ?: return
+        val canonical = canonicalWorld(worldName)
+        val game = games[canonical] ?: return
         val removedTeam = game.removePlayer(playerId) ?: return
         // 离开对局世界/退出时清理保护状态，避免跨世界残留无敌
         protectedUntil.remove(playerId)
         if (game.phaseSnapshot() != GamePhase.RUNNING) return
 
         if (removedTeam == GameTeam.ZOMBIE_MAIN) {
-            replaceAlpha(worldName, game)
+            replaceAlpha(canonical, game)
         }
         if (game.humanIds().isEmpty()) {
-            endGame(worldName, game, GameTeam.ZOMBIE_MAIN, "人类被感染殆尽，僵尸获胜")
+            endGame(canonical, game, GameTeam.ZOMBIE_MAIN, "人类被感染殆尽，僵尸获胜")
         }
     }
 
@@ -585,6 +628,10 @@ class GameFlowService(
             // 取消原母体的未释放倒计时，新母体立即释放
             cancelMotherRelease(worldName)
             motherReleasedWorlds[worldName] = true
+            // 完整状态同步：解冻结、初始化母体血量、上僵尸增益
+            playerStatePreparer?.invoke(replacement, GameTeam.ZOMBIE_MAIN)
+            motherReleaseStateSync?.invoke(replacement)
+            zombieBuffApplier?.invoke(replacement)
             worldAccess.player(replacement)?.let {
                 messages.chat(it.id, "原母体已离开，你成为新的母体僵尸")
                 logger.info("[$worldName] ${it.name} promoted to alpha")
@@ -717,6 +764,9 @@ class GameFlowService(
     /** 开局效果钩子：由装配点注入（执行 settings.start-effects 控制台命令）。 */
     var startEffectExecutor: ((worldName: String) -> Unit)? = null
 
+    /** 开局前玩家状态准备钩子：清背包/药水、设 GameMode、初始化自定义血量。 */
+    var playerStatePreparer: ((playerId: UUID, team: GameTeam) -> Unit)? = null
+
     private fun autoOpenDoors(worldName: String, mode: String) {
         doorAutoOpener?.invoke(worldName, mode)
     }
@@ -737,11 +787,11 @@ class GameFlowService(
             infectCount(id).takeIf { it > 0 }?.let { id to it }
         }?.sortedByDescending { it.second }?.take(n) ?: emptyList()
 
-    /** 僵尸被击杀：记录击杀统计（僵尸死亡由监听器取消、按重生点传送）。 */
-    fun onZombieKilled(worldName: String, killerId: UUID, victimId: UUID) {
-        val game = games[worldName] ?: return
-        if (game.phaseSnapshot() != GamePhase.RUNNING) return
-        if (game.teamOf(victimId) != GameTeam.ZOMBIE && game.teamOf(victimId) != GameTeam.ZOMBIE_MAIN) return
+    /** 僵尸被击杀：记录击杀统计（僵尸死亡由监听器取消、按重生点传送）。返回是否成功计数。 */
+    fun onZombieKilled(worldName: String, killerId: UUID, victimId: UUID): Boolean {
+        val game = games[worldName] ?: return false
+        if (game.phaseSnapshot() != GamePhase.RUNNING) return false
+        if (game.teamOf(victimId) != GameTeam.ZOMBIE && game.teamOf(victimId) != GameTeam.ZOMBIE_MAIN) return false
         zombieKills.merge(killerId, 1, Int::plus)
         eventBus.publish(ZombieKilledEvent(worldName, killerId, victimId, game.teamOf(victimId)?.name))
         val killerName = worldAccess.player(killerId)?.name ?: killerId.toString()
@@ -750,6 +800,7 @@ class GameFlowService(
             messages.chat(it.id, "$killerName 击杀了僵尸 $victimName")
         }
         logger.info("[$worldName] $killerName killed zombie $victimName")
+        return true
     }
 
     fun onPlayerRespawn(worldName: String, playerId: UUID) {
@@ -765,7 +816,7 @@ class GameFlowService(
     }
 
     private fun spawnForTeam(worldName: String, team: GameTeam, initial: Boolean = false): RespawnDefinition? {
-        val respawns = arenaRepository.byWorld(worldName).flatMap { it.respawns }
+        val respawns = arenaRepository.byWorld(canonicalWorld(worldName)).flatMap { it.respawns }
         fun randomOf(type: RespawnType): RespawnDefinition? {
             val matches = respawns.filter { it.type == type }
             return if (matches.isEmpty()) null else matches.random()
@@ -814,13 +865,17 @@ class GameFlowService(
     }
 
     private fun endGame(worldName: String, game: GameInstance, winner: GameTeam, message: String) {
+        synchronized(worldLock(worldName)) {
+        // 幂等：只有 RUNNING -> ENDED 成功才继续结算
+        if (!game.tryEnd(winner)) return
         cancelCountdownSilently(worldName)
         cancelEscape(worldName)
         cancelMotherRelease(worldName)
         maxDurationTasks.remove(worldName)?.cancel()
         zombieDoorTasks.remove(worldName)?.cancel()
-        game.end(winner)
         worldAccess.playersIn(worldName).forEach { messages.chat(it.id, message) }
+        awardParticipationXp(worldName, game)
+        awardHumanWinXp(worldName, game, winner)
         awardSurviveReward(worldName, game, winner)
         awardRankRewards(worldName, game)
         awardMapFlowRewards(worldName, game, winner)
@@ -830,7 +885,15 @@ class GameFlowService(
             GameTeam.ZOMBIE, GameTeam.ZOMBIE_MAIN -> game.zombieIds()
             else -> emptySet()
         }
-        eventBus.publish(GameEndedEvent(worldName, winner.name, winnerPlayerIds))
+        val survivalSecondsByPlayer = if (winner == GameTeam.HUMAN) {
+            val start = gameStartTimes[worldName] ?: System.currentTimeMillis()
+            game.humanIds().associateWith {
+                ((System.currentTimeMillis() - start) / 1000L).toInt().coerceAtLeast(0)
+            }
+        } else {
+            emptyMap()
+        }
+        eventBus.publish(GameEndedEvent(worldName, winner.name, winnerPlayerIds, survivalSecondsByPlayer))
 
         // 完整流程：5 秒后自动回到等待阶段，准备下一局
         val resetHandle = scheduler.globalLater(100L) {
@@ -840,6 +903,7 @@ class GameFlowService(
         }
         autoResetTasks[worldName] = resetHandle
         taskRegistry.register(resetHandle)
+        }
     }
 
     fun reset(worldName: String): Boolean {
@@ -856,8 +920,29 @@ class GameFlowService(
         game.playerIds().forEach { zombieKills.remove(it); infectCount.remove(it) }
         val fresh = GameInstance(worldName, rules(worldName))
         games[worldName] = fresh
+        // 对局结束会把玩家设为 SPECTATOR；重置后恢复等待状态
+        worldAccess.playersIn(worldName).forEach {
+            playerStatePreparer?.invoke(it.id, GameTeam.SPECTATOR)
+        }
         logger.info("[$worldName] game reset to WAITING")
         return true
+    }
+
+    /** 参与对局 XP：对所有参与者发放。 */
+    private fun awardParticipationXp(worldName: String, game: GameInstance) {
+        val xp = settings.economy.participateXp
+        if (xp <= 0) return
+        val pd = playerData ?: return
+        game.playerIds().forEach { pd.addXp(it, xp) }
+    }
+
+    /** 人类胜利 XP：对人类阵营发放。 */
+    private fun awardHumanWinXp(worldName: String, game: GameInstance, winner: GameTeam) {
+        if (winner != GameTeam.HUMAN) return
+        val xp = settings.economy.humanWinXp
+        if (xp <= 0) return
+        val pd = playerData ?: return
+        game.humanIds().forEach { pd.addXp(it, xp) }
     }
 
     /** 直升机逃脱/撑到结束的人类存活奖励。 */

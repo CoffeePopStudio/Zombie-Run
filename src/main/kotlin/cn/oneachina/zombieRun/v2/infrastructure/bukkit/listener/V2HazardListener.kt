@@ -27,6 +27,7 @@ class V2HazardListener(
         if (gameFlow.phaseOf(world) != GamePhase.RUNNING) return
         val team = gameFlow.teamOf(world, player.uniqueId)
         if (team != GameTeam.HUMAN) return
+        if (gameFlow.isProtected(player.uniqueId)) return
         // 同格微动（蹲起/转圈）不重复判定
         val from = event.from
         val to = event.to

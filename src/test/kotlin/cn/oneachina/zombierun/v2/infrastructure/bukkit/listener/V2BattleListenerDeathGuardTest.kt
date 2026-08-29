@@ -6,6 +6,7 @@ import cn.oneachina.zombierun.v2.infrastructure.config.V2Settings
 import cn.oneachina.zombierun.v2.support.V2Logger
 import org.bukkit.World
 import org.bukkit.entity.Player
+import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.plugin.java.JavaPlugin
 import org.mockito.Mockito
@@ -72,5 +73,24 @@ class V2BattleListenerDeathGuardTest {
         listener(gameFlow).onPlayerDeath(event)
 
         Mockito.verify(event, Mockito.never()).setCancelled(true)
+    }
+
+    @Test
+    fun `protected player cannot be damaged by environment`() {
+        val world = mock<World>()
+        whenever(world.name).thenReturn("arena")
+        val victim = mock<Player>()
+        whenever(victim.uniqueId).thenReturn(UUID.randomUUID())
+        whenever(victim.world).thenReturn(world)
+        val gameFlow = mock<GameFlowService>()
+        whenever(gameFlow.isArenaWorld("arena")).thenReturn(true)
+        whenever(gameFlow.isProtected(victim.uniqueId)).thenReturn(true)
+        val event = mock<EntityDamageEvent>()
+        whenever(event.entity).thenReturn(victim)
+        whenever(event.cause).thenReturn(EntityDamageEvent.DamageCause.FALL)
+
+        listener(gameFlow).onEntityDamage(event)
+
+        Mockito.verify(event).setCancelled(true)
     }
 }

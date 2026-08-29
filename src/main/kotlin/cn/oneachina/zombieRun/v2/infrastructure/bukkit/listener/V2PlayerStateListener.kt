@@ -13,6 +13,7 @@ import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
+import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.potion.PotionEffect
@@ -21,10 +22,10 @@ import org.bukkit.plugin.java.JavaPlugin
 import java.util.UUID
 
 /**
- * 玩家状态接管：加入/开局/结算时统一 GameMode、背包、药水、血量载体。
+ * 玩家状态接管：加入/换世界/开局/结算时统一 GameMode、背包、药水、血量载体。
  *
- * - 加入 WAITING/ENDED 世界：ADVENTURE + 清理 + 观战名册
- * - 开局：人类 ADVENTURE 清状态初始化自定义血量；母体加 buff 延迟释放
+ * - 进入 arena：ADVENTURE + 清状态 + 初始化自定义血量
+ * - 开局：状态准备由 GameFlowService 在发枪前同步完成；事件回调不再清背包
  * - 僵尸：ADVENTURE + 力量/速度/跳跃 buff
  * - 结束：全员回观战清理
  */
@@ -57,6 +58,34 @@ class V2PlayerStateListener(
             p.inventory.clear()
             p.activePotionEffects.forEach { p.removePotionEffect(it.type) }
         }
+
+        /**
+         * 准备玩家进入对局状态。默认清背包；开局前调用应清背包，事件回调请传 [clearInventory]=false
+         * 以免异步清空刚发放的武器。
+         */
+        fun preparePlayer(
+            player: Player,
+            team: GameTeam,
+            healthService: CombatHealthService,
+            gameFlow: GameFlowService,
+            clearInventory: Boolean = true,
+        ) {
+            player.gameMode = GameMode.ADVENTURE
+            if (clearInventory) player.inventory.clear()
+            player.clearActivePotionEffects()
+            player.health = 20.0
+            healthService.initPlayer(player.uniqueId, team)
+            when (team) {
+                GameTeam.ZOMBIE_MAIN -> {
+                    // 母体容器：保护期内冻结（观察等待释放）
+                    if (gameFlow.isProtected(player.uniqueId)) {
+                        player.gameMode = GameMode.SPECTATOR
+                    }
+                }
+                GameTeam.HUMAN -> player.gameMode = GameMode.ADVENTURE
+                else -> Unit
+            }
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -64,11 +93,21 @@ class V2PlayerStateListener(
         val player = event.player
         val world = player.world.name
         if (gameFlow.phaseOf(world) == null) return // 非 arena 世界不接管
+        val team = gameFlow.teamOf(world, player.uniqueId) ?: GameTeam.SPECTATOR
+        runOnPlayer(player) {
+            preparePlayer(player, team, healthService, gameFlow, clearInventory = true)
+        }
+    }
 
-        player.gameMode = GameMode.ADVENTURE
-        player.clearActivePotionEffects()
-        player.health = 20.0
-        healthService.initPlayer(player.uniqueId, gameFlow.teamOf(world, player.uniqueId) ?: GameTeam.SPECTATOR)
+    @EventHandler
+    fun onWorldChange(event: PlayerChangedWorldEvent) {
+        val player = event.player
+        val world = player.world.name
+        if (gameFlow.phaseOf(world) == null) return // 非 arena 世界不接管
+        val team = gameFlow.teamOf(world, player.uniqueId) ?: GameTeam.SPECTATOR
+        runOnPlayer(player) {
+            preparePlayer(player, team, healthService, gameFlow, clearInventory = true)
+        }
     }
 
     @EventHandler
@@ -76,39 +115,30 @@ class V2PlayerStateListener(
         healthService.clear(event.player.uniqueId)
     }
 
-    /** 订阅开局事件：为每名玩家做队伍状态接管。 */
+    /** 订阅开局事件：在玩家所属线程补状态；不再清背包，避免清掉开局已发武器。 */
     fun onGameStarted(assignments: Map<UUID, String>, worldName: String) {
-        Bukkit.getGlobalRegionScheduler().run(plugin) { _ ->
-            assignments.forEach { (id, teamName) ->
-                val player = Bukkit.getPlayer(id) ?: return@forEach
-                val team = GameTeam.valueOf(teamName)
-                player.gameMode = GameMode.ADVENTURE
-                player.inventory.clear()
-                player.clearActivePotionEffects()
-                player.health = 20.0
-                healthService.initPlayer(id, team)
-                when (team) {
-                    GameTeam.ZOMBIE_MAIN -> {
-                        // 母体容器：保护期内冻结（观察等待释放）
-                        if (gameFlow.isProtected(id)) {
-                            player.gameMode = GameMode.SPECTATOR
-                        }
-                    }
-                    GameTeam.HUMAN -> {
-                        player.gameMode = GameMode.ADVENTURE
-                    }
-                    else -> Unit
-                }
+        assignments.forEach { (id, teamName) ->
+            val player = Bukkit.getPlayer(id) ?: return@forEach
+            val team = GameTeam.valueOf(teamName)
+            runOnPlayer(player) {
+                preparePlayer(player, team, healthService, gameFlow, clearInventory = false)
             }
-            logger.debug("state", "[$worldName] game start state applied to ${assignments.size} players")
         }
+        logger.debug("state", "[$worldName] game start state applied to ${assignments.size} players")
     }
 
     fun onGameEnded(worldName: String) {
-        Bukkit.getGlobalRegionScheduler().run(plugin) { _ ->
-            Bukkit.getWorld(worldName)?.players?.forEach { p ->
-                spectatorCleanup(p.uniqueId)
-            }
+        Bukkit.getWorld(worldName)?.players?.forEach { p ->
+            runOnPlayer(p) { spectatorCleanup(p.uniqueId) }
+        }
+    }
+
+    private fun runOnPlayer(player: Player, action: () -> Unit) {
+        val scheduler: io.papermc.paper.threadedregions.scheduler.EntityScheduler? = player.scheduler
+        if (scheduler != null) {
+            scheduler.run(plugin, { _ -> action() }, null)
+        } else {
+            action()
         }
     }
 }

@@ -12,17 +12,25 @@ import cn.oneachina.zombierun.v2.ports.PlayerMessagePort
 import cn.oneachina.zombierun.v2.support.V2Logger
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * 玩家经济/进度缓存与用例。事件总线驱动过门/击杀进度。
+ * [asyncWrites] 为 true 时写库投递到后台单线程，避免游戏线程同步 IO。
  */
 class PlayerDataService(
     private val storage: PlayerDataPort,
     private val messages: PlayerMessagePort,
     private val logger: V2Logger,
     private val eventBus: ApplicationEventBus,
+    private val asyncWrites: Boolean = false,
 ) {
     private val cache = ConcurrentHashMap<UUID, PlayerProfile>()
+    private val transferLock = Any()
+    private val writeExecutor = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "zombie-run-db-writer").apply { isDaemon = true }
+    }
 
     init {
         eventBus.subscribe(PlayerPassedDoorEvent::class.java) { event ->
@@ -59,11 +67,24 @@ class PlayerDataService(
     private fun mutate(playerId: UUID, action: (PlayerProfile) -> PlayerProfile): PlayerProfile {
         val updated = cache.compute(playerId) { _, existing ->
             val profile = existing ?: storage.load(playerId) ?: PlayerProfile(playerId)
-            val updated = action(profile)
-            storage.save(updated)
-            updated
+            action(profile)
         }!!
+        persist(updated)
         return updated
+    }
+
+    private fun persist(profile: PlayerProfile) {
+        if (asyncWrites) {
+            writeExecutor.execute {
+                try {
+                    storage.save(profile)
+                } catch (e: Exception) {
+                    logger.severe("async player data save failed for ${profile.playerId}: ${e.message}")
+                }
+            }
+        } else {
+            storage.save(profile)
+        }
     }
 
     fun addCoins(playerId: UUID, amount: Int): PlayerProfile =
@@ -78,11 +99,11 @@ class PlayerDataService(
                 result = null
                 profile
             } else {
-                storage.save(updated)
                 result = updated
                 updated
             }
         }
+        result?.let { persist(it) }
         return result
     }
 
@@ -144,13 +165,15 @@ class PlayerDataService(
         return result
     }
 
-    /** 玩家间转账：先原子扣款，再入账；余额不足或同玩家返回 false。 */
+    /** 玩家间转账：在全局转账锁内完成扣款/入账，避免并发转账交错导致单边扣款。 */
     fun transferCoins(fromId: UUID, toId: UUID, amount: Int): Boolean {
         if (fromId == toId || amount <= 0) return false
-        val spent = spendCoins(fromId, amount) ?: return false
-        addCoins(toId, amount)
-        logger.info("transfer $amount coins $fromId -> $toId (from balance=${spent.coins})")
-        return true
+        synchronized(transferLock) {
+            val spent = spendCoins(fromId, amount) ?: return false
+            addCoins(toId, amount)
+            logger.info("transfer $amount coins $fromId -> $toId (from balance=${spent.coins})")
+            return true
+        }
     }
 
     fun topCoins(limit: Int): List<Pair<UUID, Int>> = storage.topCoins(limit.coerceIn(1, 100))
@@ -173,9 +196,18 @@ class PlayerDataService(
     }
 
     fun close() {
-        cache.values.forEach { storage.save(it) }
-        cache.clear()
-        storage.close()
+        try {
+            cache.values.forEach { storage.save(it) }
+            cache.clear()
+        } finally {
+            writeExecutor.shutdown()
+            try {
+                writeExecutor.awaitTermination(5, TimeUnit.SECONDS)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+            storage.close()
+        }
     }
 
     companion object {

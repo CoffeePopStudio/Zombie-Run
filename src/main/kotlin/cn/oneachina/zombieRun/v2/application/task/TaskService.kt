@@ -21,6 +21,8 @@ import java.time.temporal.WeekFields
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
 /**
@@ -36,9 +38,14 @@ class TaskService(
     private val messages: PlayerMessagePort,
     private val logger: V2Logger,
     private val eventBus: ApplicationEventBus,
+    private val asyncWrites: Boolean = false,
 ) {
+    @Volatile
     private var configuredDefinitions: List<TaskDefinition> = taskRepository.loadAll()
     private val cache = ConcurrentHashMap<UUID, ConcurrentHashMap<String, TaskProgress>>()
+    private val writeExecutor = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "zombie-run-task-db-writer").apply { isDaemon = true }
+    }
 
     init {
         eventBus.subscribe(PlayerPassedDoorEvent::class.java) { event ->
@@ -62,7 +69,7 @@ class TaskService(
             if (event.winner == "HUMAN") {
                 event.winnerPlayerIds.forEach { playerId ->
                     increment(playerId, TaskType.HUMAN_WIN, 1)
-                    increment(playerId, TaskType.SURVIVE_TIME, 1)
+                    increment(playerId, TaskType.SURVIVE_TIME, event.survivalSecondsByPlayer[playerId] ?: 0)
                 }
             }
         }
@@ -127,9 +134,10 @@ class TaskService(
             if (!p.completed(task.target)) return "任务尚未完成"
             if (p.claimed) return "该任务奖励已领取"
 
-            p.claimed = true
+            // 先发奖励再标记已领取，避免“标记后奖励失败”导致永久吞奖励
             if (task.rewardCoins > 0) playerData.addCoins(playerId, task.rewardCoins)
             if (task.rewardXp > 0) playerData.addXp(playerId, task.rewardXp)
+            p.claimed = true
             save(playerId)
             messages.chat(playerId, "任务完成：${task.description}，奖励 ${task.rewardCoins} 硬币 / ${task.rewardXp} 经验")
             logger.info("player $playerId claimed task $taskId")
@@ -138,9 +146,18 @@ class TaskService(
     }
 
     fun close() {
-        cache.forEach { (playerId, progress) -> storage.save(playerId, progress) }
-        cache.clear()
-        storage.close()
+        try {
+            cache.forEach { (playerId, progress) -> storage.save(playerId, progress) }
+            cache.clear()
+        } finally {
+            writeExecutor.shutdown()
+            try {
+                writeExecutor.awaitTermination(5, TimeUnit.SECONDS)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+            storage.close()
+        }
     }
 
     private fun playerProgress(playerId: UUID): ConcurrentHashMap<String, TaskProgress> =
@@ -184,7 +201,19 @@ class TaskService(
     }
 
     private fun save(playerId: UUID) {
-        cache[playerId]?.let { storage.save(playerId, it) }
+        val progress = cache[playerId] ?: return
+        if (asyncWrites) {
+            val snapshot = HashMap(progress)
+            writeExecutor.execute {
+                try {
+                    storage.save(playerId, snapshot)
+                } catch (e: Exception) {
+                    logger.severe("async task save failed for $playerId: ${e.message}")
+                }
+            }
+        } else {
+            storage.save(playerId, progress)
+        }
     }
 
     private fun TaskProgress.isExpired(task: TaskDefinition, today: LocalDate): Boolean =
@@ -215,7 +244,7 @@ class TaskService(
             TaskDefinition("daily_alpha", "击杀 1 次母体", TaskType.KILL_ALPHA, 1, 120, 30, TaskPeriod.DAILY),
             TaskDefinition("daily_infect", "感染 2 名人类", TaskType.INFECT_HUMAN, 2, 80, 20, TaskPeriod.DAILY),
             TaskDefinition("daily_damage", "造成 200 点伤害", TaskType.DEAL_DAMAGE, 200, 100, 30, TaskPeriod.DAILY),
-            TaskDefinition("daily_survive", "作为人类存活 1 次胜利", TaskType.SURVIVE_TIME, 1, 120, 30, TaskPeriod.DAILY),
+            TaskDefinition("daily_survive", "作为人类存活 300 秒", TaskType.SURVIVE_TIME, 300, 120, 30, TaskPeriod.DAILY),
         )
 
         private val FIXED_WEEKLY = listOf(
@@ -227,7 +256,7 @@ class TaskService(
             TaskDefinition("weekly_alpha", "击杀 2 次母体", TaskType.KILL_ALPHA, 2, 300, 80, TaskPeriod.WEEKLY),
             TaskDefinition("weekly_infect", "感染 5 名人类", TaskType.INFECT_HUMAN, 5, 250, 60, TaskPeriod.WEEKLY),
             TaskDefinition("weekly_damage", "造成 1000 点伤害", TaskType.DEAL_DAMAGE, 1000, 300, 80, TaskPeriod.WEEKLY),
-            TaskDefinition("weekly_survive", "作为人类存活 3 次胜利", TaskType.SURVIVE_TIME, 3, 250, 60, TaskPeriod.WEEKLY),
+            TaskDefinition("weekly_survive", "作为人类存活 1800 秒", TaskType.SURVIVE_TIME, 1800, 250, 60, TaskPeriod.WEEKLY),
         )
     }
 }

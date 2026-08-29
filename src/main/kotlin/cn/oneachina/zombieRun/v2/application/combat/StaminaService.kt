@@ -14,6 +14,7 @@ class StaminaService(
 ) {
     private val states = ConcurrentHashMap<UUID, StaminaState>()
 
+    @Volatile
     var rules: StaminaRules = StaminaRules()
         private set
 

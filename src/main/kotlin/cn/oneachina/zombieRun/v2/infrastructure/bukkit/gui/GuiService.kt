@@ -69,6 +69,9 @@ class GuiService(
         override fun getInventory(): Inventory = backingInventory
     }
 
+    /** 是否为 v2 自有 GUI 容器；用于保护监听精确拦截，避免影响第三方 GUI。 */
+    fun isV2Holder(holder: org.bukkit.inventory.InventoryHolder?): Boolean = holder is Holder
+
     @EventHandler
     fun onClick(event: InventoryClickEvent) {
         val player = event.whoClicked as? Player ?: return

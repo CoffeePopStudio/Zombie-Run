@@ -21,8 +21,11 @@ data class PlayerProfile(
     val humanWins: Int = 0,
     val unlockedTitles: Set<String> = emptySet(),
 ) {
-    fun addCoins(amount: Int): PlayerProfile =
-        copy(coins = coins + amount)
+    fun addCoins(amount: Int): PlayerProfile {
+        if (amount <= 0) return this
+        val newCoins = coins.toLong() + amount
+        return copy(coins = if (newCoins > Int.MAX_VALUE) Int.MAX_VALUE else newCoins.toInt())
+    }
 
     fun spendCoins(amount: Int): PlayerProfile? {
         if (amount < 0 || coins < amount) return null

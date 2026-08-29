@@ -125,6 +125,31 @@ class GameInstanceTest {
     }
 
     @Test
+    fun `tryEnd is idempotent`() {
+        val game = GameInstance("world", rules())
+        val ids = listOf(uuid(1), uuid(2))
+        game.start(ids, alphaIndex = 0)
+
+        assertTrue(game.tryEnd(GameTeam.HUMAN))
+        assertFalse(game.tryEnd(GameTeam.HUMAN))
+        assertFalse(game.tryEnd(GameTeam.ZOMBIE_MAIN))
+        assertEquals(GameTeam.HUMAN, game.lastWinner())
+        assertEquals(GamePhase.ENDED, game.phaseSnapshot())
+    }
+
+    @Test
+    fun `tryEnd allows settlement after infect already ended phase`() {
+        val game = GameInstance("world", rules())
+        val ids = listOf(uuid(1), uuid(2))
+        game.start(ids, alphaIndex = 0)
+        game.infect(ids[1])
+
+        // infect 已把 phase 置为 ENDED，但首次结算仍应成功
+        assertTrue(game.tryEnd(GameTeam.ZOMBIE_MAIN))
+        assertFalse(game.tryEnd(GameTeam.ZOMBIE_MAIN))
+    }
+
+    @Test
     fun `end records winner`() {
         val game = GameInstance("world", rules())
         game.end(GameTeam.HUMAN)

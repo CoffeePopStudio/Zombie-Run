@@ -151,11 +151,27 @@ class GameInstance(
         true
     }
 
+    /**
+     * 原子结束：只有第一次调用返回 true，后续重复调用返回 false。
+     * 感染导致 phase 已提前变为 ENDED 时也允许首次结算。
+     */
+    fun tryEnd(winner: GameTeam): Boolean = synchronized(lock) {
+        if (settled) return false
+        settled = true
+        phase = GamePhase.ENDED
+        if (winner == GameTeam.HUMAN || winner == GameTeam.ZOMBIE || winner == GameTeam.ZOMBIE_MAIN) {
+            // 记录胜者，未来接结算系统
+            lastWinner = winner
+        }
+        true
+    }
+
+    /** 旧入口，保留给测试/兼容；新代码请使用 [tryEnd]。 */
     fun end(winner: GameTeam) {
         synchronized(lock) {
             phase = GamePhase.ENDED
+            settled = true
             if (winner == GameTeam.HUMAN || winner == GameTeam.ZOMBIE || winner == GameTeam.ZOMBIE_MAIN) {
-                // 记录胜者，未来接结算系统
                 lastWinner = winner
             }
         }
@@ -166,4 +182,5 @@ class GameInstance(
     }
 
     private var lastWinner: GameTeam? = null
+    private var settled: Boolean = false
 }

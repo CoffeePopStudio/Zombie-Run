@@ -53,7 +53,9 @@ class DoorApplicationService(
     private val transferTasks = ConcurrentHashMap<UUID, TaskHandle>()
     private val behaviorTasks = ConcurrentHashMap<UUID, TaskHandle>()
     private val lastTriggerTimes = ConcurrentHashMap<String, Long>()
+    @Volatile
     private var doorOpenCooldownMs: Long = 0
+    @Volatile
     private var transferCountdownSeconds: Int = 10
 
     /** 由组合根在加载 settings 后调用，应用 balance 配置。 */
@@ -306,29 +308,37 @@ class DoorApplicationService(
             ?.let { messages.chat(playerId, it) }
         var remaining = behavior.countdown
         val label = doorLabel(session.doors)
-        val handle = scheduler.globalTimer(1L, 20L) { taskHandle ->
-            if (remaining > 0) {
-                messages.title(playerId, "$remaining", "$label 传送倒计时")
-                remaining--
-            } else {
-                teleporter.teleport(
-                    playerId = playerId,
-                    worldName = session.worldName,
-                    x = tx,
-                    y = ty,
-                    z = tz,
-                    yaw = 0f,
-                    pitch = 0f,
-                )
-                behavior.arrivalMessage
-                    ?.replace("{line}", line ?: "")
-                    ?.let { messages.chat(playerId, it) }
-                logger.info("[${session.worldName}] player $playerId teleported by ${behavior.type}")
-                behaviorTasks.remove(playerId)
-                taskHandle.cancel()
+        val startCountdown = {
+            val handle = scheduler.globalTimer(1L, 20L) { taskHandle ->
+                if (remaining > 0) {
+                    messages.title(playerId, "$remaining", "$label 传送倒计时")
+                    remaining--
+                } else {
+                    teleporter.teleport(
+                        playerId = playerId,
+                        worldName = session.worldName,
+                        x = tx,
+                        y = ty,
+                        z = tz,
+                        yaw = 0f,
+                        pitch = 0f,
+                    )
+                    behavior.arrivalMessage
+                        ?.replace("{line}", line ?: "")
+                        ?.let { messages.chat(playerId, it) }
+                    logger.info("[${session.worldName}] player $playerId teleported by ${behavior.type}")
+                    behaviorTasks.remove(playerId)
+                    taskHandle.cancel()
+                }
             }
+            behaviorTasks[playerId] = handle
         }
-        behaviorTasks[playerId] = handle
+        if (behavior.delayTicks > 0) {
+            val delayHandle = scheduler.globalLater(behavior.delayTicks) { startCountdown() }
+            behaviorTasks[playerId] = delayHandle
+        } else {
+            startCountdown()
+        }
     }
 
     private fun resolveBehindRespawn(worldName: String, doorNumber: Int?, playerId: UUID): RespawnDefinition? {
@@ -369,6 +379,12 @@ class DoorApplicationService(
     fun activeSessionInfo(worldName: String): String? {
         val session = activeSessions[worldName] ?: return null
         return "${doorLabel(session.doors)} phase=${session.phase} remaining=${session.remainingSeconds}s"
+    }
+
+    /** 玩家退出/跨世界时取消其门传送/特殊行为倒计时，避免对已离开玩家继续生效。 */
+    fun cancelPlayerTasks(playerId: UUID) {
+        transferTasks.remove(playerId)?.cancel()
+        behaviorTasks.remove(playerId)?.cancel()
     }
 
     fun cancelAllSessions() {

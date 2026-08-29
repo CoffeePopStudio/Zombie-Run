@@ -1,5 +1,6 @@
 package cn.oneachina.zombierun.v2.infrastructure.bukkit.hook
 
+import cn.oneachina.zombierun.v2.application.combat.CombatHealthService
 import cn.oneachina.zombierun.v2.application.combat.StaminaService
 import cn.oneachina.zombierun.v2.application.game.GameFlowService
 import cn.oneachina.zombierun.v2.application.player.PlayerDataService
@@ -17,6 +18,7 @@ class ZombieRunV2Expansion(
     private val gameFlow: GameFlowService,
     private val staminaService: StaminaService? = null,
     private val weaponService: WeaponService? = null,
+    private val healthService: CombatHealthService? = null,
 ) : PlaceholderExpansion() {
 
     override fun getIdentifier(): String = "zombierun"
@@ -63,6 +65,9 @@ class ZombieRunV2Expansion(
 
             // ---- 母体 ----
             "alpha_zombie_name" -> gameFlow.alphaName(world)
+            "alpha_zombie_health" -> gameFlow.alphaId(world)?.let { healthService?.getHealth(it)?.toInt()?.toString() } ?: "0"
+            "alpha_zombie_max_health" -> gameFlow.alphaId(world)?.let { healthService?.getMaxHealth(it)?.toInt()?.toString() } ?: "0"
+            "alpha_zombie_health_percent" -> gameFlow.alphaId(world)?.let { healthService?.getHealthPercent(it)?.toString() } ?: "0"
 
             // ---- 玩家对局状态 ----
             "team" -> gameFlow.teamOf(world, player.uniqueId)?.name?.lowercase() ?: "none"

@@ -1,7 +1,10 @@
 package cn.oneachina.zombierun.v2.infrastructure.bukkit.listener
 
 import cn.oneachina.zombierun.v2.application.combat.StaminaService
+import cn.oneachina.zombierun.v2.application.game.GameFlowService
 import cn.oneachina.zombierun.v2.domain.combat.StaminaStatus
+import cn.oneachina.zombierun.v2.domain.game.GamePhase
+import cn.oneachina.zombierun.v2.domain.game.GameTeam
 import cn.oneachina.zombierun.v2.ports.SchedulerPort
 import cn.oneachina.zombierun.v2.ports.TaskHandle
 import cn.oneachina.zombierun.v2.support.TaskRegistry
@@ -21,6 +24,8 @@ class V2CombatListener(
     private val scheduler: SchedulerPort,
     private val taskRegistry: TaskRegistry,
     private val arenaFilter: (String?) -> Boolean = { true },
+    private val plugin: org.bukkit.plugin.java.JavaPlugin? = null,
+    private val gameFlow: GameFlowService? = null,
 ) : Listener {
 
     private var tickTask: TaskHandle? = null
@@ -40,10 +45,29 @@ class V2CombatListener(
     private fun tick() {
         Bukkit.getOnlinePlayers().forEach { player ->
             if (!arenaFilter(player.world.name)) return@forEach
+            val gf = gameFlow
+            if (gf != null) {
+                val world = player.world.name
+                if (gf.phaseOf(world) != GamePhase.RUNNING || gf.teamOf(world, player.uniqueId) != GameTeam.HUMAN) {
+                    return@forEach
+                }
+            }
             val newlyExhausted = stamina.update(player.uniqueId, player.isSprinting)
-            if (newlyExhausted && player.isSprinting) {
-                player.isSprinting = false
-                player.sendActionBar(net.kyori.adventure.text.Component.text("体力耗尽！"))
+            val action = {
+                if (newlyExhausted && player.isSprinting) {
+                    player.isSprinting = false
+                    player.addPotionEffect(org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.SLOWNESS, 60, 1, false, false, false))
+                    player.addPotionEffect(org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.WEAKNESS, 60, 0, false, false, false))
+                    player.addPotionEffect(org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.GLOWING, 60, 0, false, false, false))
+                    player.sendActionBar(net.kyori.adventure.text.Component.text("体力耗尽！"))
+                }
+                player.sendActionBar(net.kyori.adventure.text.Component.text("体力 ${(stamina.fraction(player.uniqueId) * 100).toInt()}%"))
+            }
+            val p = plugin
+            if (p != null) {
+                player.scheduler.run(p, { _ -> action() }, null)
+            } else {
+                action()
             }
         }
     }
@@ -52,6 +76,11 @@ class V2CombatListener(
     fun onToggleSprint(event: PlayerToggleSprintEvent) {
         if (!event.isSprinting) return
         if (!arenaFilter(event.player.world?.name)) return
+        val gf = gameFlow
+        if (gf != null) {
+            val world = event.player.world.name
+            if (gf.phaseOf(world) != GamePhase.RUNNING || gf.teamOf(world, event.player.uniqueId) != GameTeam.HUMAN) return
+        }
         val state = stamina.stateOf(event.player.uniqueId)
         if (state.status == StaminaStatus.EXHAUSTED) {
             event.isCancelled = true

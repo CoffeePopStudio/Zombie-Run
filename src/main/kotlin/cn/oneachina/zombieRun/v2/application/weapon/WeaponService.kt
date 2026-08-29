@@ -70,6 +70,7 @@ class WeaponService(
         val weapon = candidates.randomOrNull() ?: return null
         val ok = integration.giveWeapon(playerId, weapon.type)
         if (ok) {
+            integration.refillAmmo(playerId, weapon.type, 1)
             messages.chat(playerId, "随机武器：${weapon.displayName}")
         } else {
             messages.chat(playerId, "随机武器 ${weapon.displayName} 发放失败（外部武器系统不可用）")

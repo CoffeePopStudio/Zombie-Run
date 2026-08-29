@@ -7,13 +7,16 @@ import cn.oneachina.zombierun.v2.domain.door.Vec3
 import cn.oneachina.zombierun.v2.infrastructure.config.ArenaYamlRepository
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
+import org.bukkit.Bukkit
 import org.bukkit.Material
+import org.bukkit.block.Block
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.block.Action
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerMoveEvent
 import org.bukkit.event.player.PlayerTeleportEvent
+import org.bukkit.plugin.java.JavaPlugin
 
 /**
  * Bukkit 事件 → v2 应用服务的适配层。
@@ -23,6 +26,7 @@ class V2DoorListener(
     private val doorService: DoorApplicationService,
     private val arenaRepository: ArenaYamlRepository,
     private val gameFlow: GameFlowService,
+    private val plugin: JavaPlugin? = null,
 ) : Listener {
 
     @EventHandler(ignoreCancelled = true)
@@ -68,9 +72,11 @@ class V2DoorListener(
                 }
                 val result = doorService.triggerDoor(player.world.name, doorNumber, player.name)
                 player.sendMessage(Component.text(result.message, if (result.success) NamedTextColor.GREEN else NamedTextColor.RED))
+                if (result.success) lightButton(block)
             }
             ButtonMode.ESCAPE -> {
                 val ok = gameFlow.triggerEscape(player.world.name, player.name)
+                if (ok) lightButton(block)
                 player.sendMessage(
                     Component.text(
                         if (ok) "直升机撤离已启动" else "撤离失败：对局未进行或没有人类",
@@ -79,5 +85,13 @@ class V2DoorListener(
                 )
             }
         }
+    }
+
+    /** 触发成功时点亮按钮方块，并在 30 秒后还原（对齐 v1 ButtonManager）。 */
+    private fun lightButton(block: Block) {
+        val original = block.type
+        block.type = Material.SEA_LANTERN
+        val p = plugin ?: return
+        Bukkit.getGlobalRegionScheduler().runDelayed(p, { _ -> block.type = original }, 600L)
     }
 }

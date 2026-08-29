@@ -25,6 +25,7 @@ class V2GameListener(
     private val gameFlow: GameFlowService,
     private val guiService: GuiService? = null,
     private val healthService: cn.oneachina.zombierun.v2.application.combat.CombatHealthService? = null,
+    private val doorService: cn.oneachina.zombierun.v2.application.door.DoorApplicationService? = null,
     private val maxHealthProvider: (Player) -> Double = { player ->
         player.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH)?.value ?: 20.0
     },
@@ -48,6 +49,7 @@ class V2GameListener(
     fun onQuit(event: PlayerQuitEvent) {
         val id = event.player.uniqueId
         val world = playerWorlds.remove(id) ?: "world"
+        doorService?.cancelPlayerTasks(id)
         gameFlow.onPlayerQuit(world, id)
     }
 
@@ -58,6 +60,7 @@ class V2GameListener(
         val oldWorld = playerWorlds[id]
         // 先退出旧世界对局（母体离开需补位、最后一名人类离开需结算），再加入新世界
         if (oldWorld != null && oldWorld != newWorld) {
+            doorService?.cancelPlayerTasks(id)
             gameFlow.onPlayerLeaveWorld(oldWorld, id)
             // 跨世界后清掉旧世界自定义血量，避免旧世界状态泄漏到新世界
             healthService?.clear(id)

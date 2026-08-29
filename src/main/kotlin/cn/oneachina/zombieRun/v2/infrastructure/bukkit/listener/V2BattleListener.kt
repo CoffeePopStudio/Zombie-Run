@@ -41,10 +41,15 @@ class V2BattleListener(
     private val gameFlow: GameFlowService,
     private val healthService: CombatHealthService,
     private val playerData: PlayerDataService?,
-    private val settings: V2Settings,
+    @Volatile private var settings: V2Settings,
     private val logger: V2Logger,
     private val eventBus: ApplicationEventBus? = null,
 ) : Listener {
+
+    /** reload 后由组合根调用，让奖励/调试配置立即生效。 */
+    fun updateSettings(newSettings: V2Settings) {
+        settings = newSettings
+    }
 
     // ==================== QA 枪械 ====================
 
@@ -74,6 +79,7 @@ class V2BattleListener(
             val victimTeam = gameFlow.teamOf(world, victim.uniqueId)
             if (shooterTeam != GameTeam.HUMAN || victimTeam !in setOf(GameTeam.ZOMBIE, GameTeam.ZOMBIE_MAIN)) return
         }
+        if (gameFlow.isProtected(victim.uniqueId)) return
 
         // 取消 QA 原版伤害，改走自定义血量
         event.isCancelled = true
@@ -121,6 +127,11 @@ class V2BattleListener(
         val victimTeam = gameFlow.teamOf(world, victim.uniqueId)
         val attackerTeam = gameFlow.teamOf(world, attacker.uniqueId)
         if (victimTeam == null || attackerTeam == null) return
+        // 复活/母体保护期：受害者不可被伤害
+        if (gameFlow.isProtected(victim.uniqueId)) {
+            event.isCancelled = true
+            return
+        }
 
         // 母体未释放不能攻击；观战者不可被攻击
         if (attackerTeam == GameTeam.ZOMBIE_MAIN && !gameFlow.isMotherReleased(world)) {
@@ -172,6 +183,10 @@ class V2BattleListener(
         val player = event.entity as? Player ?: return
         val world = player.world.name
         if (!gameFlow.isArenaWorld(world)) return
+        if (gameFlow.isProtected(player.uniqueId)) {
+            event.isCancelled = true
+            return
+        }
         if (event.cause == EntityDamageEvent.DamageCause.FALL) {
             event.isCancelled = true
             return
@@ -200,8 +215,9 @@ class V2BattleListener(
         event.drops.clear()
         event.deathMessage(null)
 
-        val killer = victim.killer
-            ?: healthService.pollLastDamager(victim.uniqueId)?.let { Bukkit.getPlayer(it) }
+        // 无条件消费 lastDamager，避免旧攻击者在后续环境死亡时被错误继承
+        val lastDamager = healthService.pollLastDamager(victim.uniqueId)
+        val killer = victim.killer ?: lastDamager?.let { Bukkit.getPlayer(it) }
 
         when (victimTeam) {
             GameTeam.HUMAN -> {
@@ -217,14 +233,15 @@ class V2BattleListener(
                 val killerTeam = killer?.let { gameFlow.teamOf(world, it.uniqueId) }
                 if (killer != null && killerTeam == GameTeam.HUMAN) {
                     val isMain = victimTeam == GameTeam.ZOMBIE_MAIN
-                    gameFlow.onZombieKilled(world, killer.uniqueId, victim.uniqueId)
-                    val coins = if (isMain) economy.killZombieMainCoins else economy.killZombieCoins
-                    val xp = if (isMain) economy.killZombieMainXp else economy.killZombieXp
-                    playerData?.addCoins(killer.uniqueId, coins)
-                    playerData?.addXp(killer.uniqueId, xp)
-                    killer.sendMessage(Component.text("+ $coins 硬币!", NamedTextColor.GOLD))
+                    if (gameFlow.onZombieKilled(world, killer.uniqueId, victim.uniqueId)) {
+                        val coins = if (isMain) economy.killZombieMainCoins else economy.killZombieCoins
+                        val xp = if (isMain) economy.killZombieMainXp else economy.killZombieXp
+                        playerData?.addCoins(killer.uniqueId, coins)
+                        playerData?.addXp(killer.uniqueId, xp)
+                        killer.sendMessage(Component.text("+ $coins 硬币!", NamedTextColor.GOLD))
+                    }
                 }
-                respawnZombie(victim, world)
+                respawnZombie(victim, world, victimTeam)
             }
             // 其他队伍（SPECTATOR 等）不接管，允许服务器正常处理
             else -> Unit
@@ -232,7 +249,7 @@ class V2BattleListener(
     }
 
     private fun infectHuman(attacker: Player, victim: Player, world: String) {
-        gameFlow.onCombatInfection(world, attacker.uniqueId, victim.uniqueId)
+        if (!gameFlow.onCombatInfection(world, attacker.uniqueId, victim.uniqueId)) return
         playerData?.addCoins(attacker.uniqueId, economy.infectHumanCoins)
         playerData?.addXp(attacker.uniqueId, economy.infectHumanXp)
         attacker.sendMessage(Component.text("+ ${economy.infectHumanCoins} 硬币！感染了一名人类", NamedTextColor.GOLD))
@@ -247,12 +264,12 @@ class V2BattleListener(
         gameFlow.onHumanDiedByEnvironment(world, victim.uniqueId, message)
     }
 
-    private fun respawnZombie(victim: Player, world: String) {
+    private fun respawnZombie(victim: Player, world: String, team: GameTeam) {
         victim.inventory.clear()
         victim.gameMode = GameMode.SPECTATOR
         victim.activePotionEffects.forEach { victim.removePotionEffect(it.type) }
         victim.health = 20.0
-        healthService.resetForTeam(victim.uniqueId, GameTeam.ZOMBIE)
+        healthService.resetForTeam(victim.uniqueId, team)
         gameFlow.onZombieDiedRespawn(world, victim.uniqueId)
     }
 

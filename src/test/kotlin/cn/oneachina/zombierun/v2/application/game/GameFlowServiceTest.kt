@@ -431,4 +431,46 @@ class GameFlowServiceTest {
         f.taskRegistry.cancelAll()
         assertEquals(0, f.taskRegistry.size())
     }
+
+    @Test
+    fun `endGame is idempotent`() {
+        val f = Fixture()
+        f.repo.save(ArenaDefinition("a", "w"))
+        f.world.setPlayers("w", listOf(uuid(1), uuid(2)))
+        f.service.start()
+        f.service.forceStart("w")
+
+        val ended = mutableListOf<GameEndedEvent>()
+        f.eventBus.subscribe(GameEndedEvent::class.java) { ended.add(it) }
+
+        f.service.endGame("w", GameTeam.HUMAN)
+        f.service.endGame("w", GameTeam.HUMAN)
+        f.service.endGame("w", GameTeam.ZOMBIE_MAIN)
+
+        assertEquals(1, ended.size)
+        assertEquals(GameTeam.HUMAN.name, ended[0].winner)
+        assertEquals(GamePhase.ENDED, f.service.phaseOf("w"))
+    }
+
+    @Test
+    fun `forceStart while running does not restart game`() {
+        val f = Fixture()
+        f.repo.save(ArenaDefinition("a", "w"))
+        f.world.setPlayers("w", listOf(uuid(1), uuid(2)))
+        f.service.start()
+
+        val started = mutableListOf<GameStartedEvent>()
+        f.eventBus.subscribe(GameStartedEvent::class.java) { started.add(it) }
+
+        f.service.forceStart("w")
+        val instanceBefore = f.service.instance("w")!!
+        val humansBefore = instanceBefore.humanIds().size
+        val alphaBefore = instanceBefore.alphaId()
+
+        f.service.forceStart("w")
+
+        assertEquals(1, started.size)
+        assertEquals(humansBefore, f.service.instance("w")!!.humanIds().size)
+        assertEquals(alphaBefore, f.service.instance("w")!!.alphaId())
+    }
 }

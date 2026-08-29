@@ -32,6 +32,7 @@ import cn.oneachina.zombierun.v2.infrastructure.bukkit.scheduler.BukkitScheduler
 import cn.oneachina.zombierun.v2.infrastructure.bukkit.weapon.QaWeaponIntegrationPort
 import cn.oneachina.zombierun.v2.infrastructure.config.ArenaYamlRepository
 import cn.oneachina.zombierun.v2.infrastructure.config.BlockSnapshotStore
+import cn.oneachina.zombierun.v2.infrastructure.config.V2Settings
 import cn.oneachina.zombierun.v2.infrastructure.config.V2SettingsLoader
 import cn.oneachina.zombierun.v2.infrastructure.config.V1MigrationService
 import cn.oneachina.zombierun.v2.infrastructure.config.TaskYamlRepository
@@ -72,11 +73,11 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
     val weaponService = WeaponService(weaponRepository, weaponIntegration, messages, logger)
     val playerDataRepository: PlayerDataPort = SqlitePlayerDataRepository(plugin.dataFolder, logger)
     val v1MigrationService = V1MigrationService(plugin.dataFolder, arenaRepository, playerDataRepository, snapshotStore, logger)
-    val playerDataService = PlayerDataService(playerDataRepository, messages, logger, eventBus)
+    val playerDataService = PlayerDataService(playerDataRepository, messages, logger, eventBus, asyncWrites = true)
     val playerDataListener = V2PlayerDataListener(playerDataService)
     val taskRepository = TaskYamlRepository(plugin.dataFolder, logger)
     val taskStorage: PlayerTaskPort = SqlitePlayerTaskRepository(plugin.dataFolder, logger)
-    val taskService = TaskService(taskStorage, taskRepository, playerDataService, messages, logger, eventBus)
+    val taskService = TaskService(taskStorage, taskRepository, playerDataService, messages, logger, eventBus, asyncWrites = true)
     val taskListener = V2TaskListener(taskService)
     val guiService = GuiService(playerDataService, weaponService, taskService, logger)
     val staminaService = StaminaService(logger)
@@ -88,6 +89,9 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         private set
 
     private var nametagListener: V2NametagListener? = null
+    private var battleListener: V2BattleListener? = null
+    @Volatile
+    private var currentSettings: V2Settings? = null
 
     val doorService: DoorApplicationService = DoorApplicationService(
         arenaRepository = arenaRepository,
@@ -138,6 +142,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         services.register(TaskService::class, taskService)
 
         val settings = settingsLoader.load()
+        currentSettings = settings
         doorService.configure(settings.doorOpenCooldownMs, settings.transferCountdownSec)
         logger.debugEnabled = settings.debug
         combatHealth.applyRules(loadCombatRules())
@@ -176,24 +181,30 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         services.register(GameFlowService::class, gameFlow)
         services.register(DoorApplicationService::class, doorService)
         gameFlow.startEffectExecutor = { worldName ->
-            settings.startEffects.forEach { command ->
+            currentSettings?.startEffects.orEmpty().forEach { command ->
                 val resolved = command.replace("{world}", worldName).replace("{arena}", worldName)
                 plugin.server.dispatchCommand(plugin.server.consoleSender, resolved)
             }
         }
-        combatListener = V2CombatListener(staminaService, scheduler, taskRegistry) { world ->
-            world != null && gameFlow.isArenaWorld(world)
+        gameFlow.playerStatePreparer = { id, team ->
+            val player = plugin.server.getPlayer(id)
+            if (player != null) {
+                V2PlayerStateListener.preparePlayer(player, team, combatHealth, gameFlow, clearInventory = true)
+            }
         }
-        val nametag = V2NametagListener(gameFlow, combatHealth, scheduler, taskRegistry).also { it.start() }
+        combatListener = V2CombatListener(staminaService, scheduler, taskRegistry, { world ->
+            world != null && gameFlow.isArenaWorld(world)
+        }, plugin, gameFlow)
+        val nametag = V2NametagListener(gameFlow, combatHealth, scheduler, taskRegistry, plugin).also { it.start() }
         nametagListener = nametag
 
         if (plugin.server.pluginManager.getPlugin("PlaceholderAPI") != null) {
-            ZombieRunV2Expansion(playerDataService, gameFlow, staminaService, weaponService).register()
+            ZombieRunV2Expansion(playerDataService, gameFlow, staminaService, weaponService, combatHealth).register()
             logger.info("PlaceholderAPI expansion registered: %zombierun_*%")
         }
 
-        plugin.server.pluginManager.registerEvents(V2DoorListener(doorService, arenaRepository, gameFlow), plugin)
-        plugin.server.pluginManager.registerEvents(V2GameListener(gameFlow, guiService, combatHealth), plugin)
+        plugin.server.pluginManager.registerEvents(V2DoorListener(doorService, arenaRepository, gameFlow, plugin), plugin)
+        plugin.server.pluginManager.registerEvents(V2GameListener(gameFlow, guiService, combatHealth, doorService), plugin)
         plugin.server.pluginManager.registerEvents(V2PlayerDataListener(playerDataService), plugin)
         plugin.server.pluginManager.registerEvents(V2TaskListener(taskService), plugin)
         plugin.server.pluginManager.registerEvents(combatListener, plugin)
@@ -202,8 +213,9 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
 
         // 战斗/状态接管/保护监听（依赖 gameFlow，故在 enable 内构造）
         val battleListener = V2BattleListener(plugin, gameFlow, combatHealth, playerDataService, settings, logger, eventBus)
+        this.battleListener = battleListener
         val playerStateListener = V2PlayerStateListener(plugin, gameFlow, combatHealth, logger)
-        val protectionListener = V2ProtectionListener(plugin, gameFlow)
+        val protectionListener = V2ProtectionListener(plugin, gameFlow, guiService)
         plugin.server.pluginManager.registerEvents(battleListener, plugin)
         plugin.server.pluginManager.registerEvents(playerStateListener, plugin)
         plugin.server.pluginManager.registerEvents(protectionListener, plugin)
@@ -222,7 +234,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         gameFlow.start()
         combatListener.start()
 
-        val command = Zr2Command(this, settings.defaultWorld)
+        val command = Zr2Command(this, settings.defaultWorld, plugin)
         plugin.getCommand("zr2")?.setExecutor(command)
         plugin.getCommand("zr2")?.tabCompleter = command
         plugin.server.pluginManager.registerEvents(command, plugin)
@@ -245,8 +257,10 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
     /** 完整热重载：settings / arena / weapon / tasks / combat / stamina。 */
     fun reload(): String {
         val settings = settingsLoader.load()
+        currentSettings = settings
         doorService.configure(settings.doorOpenCooldownMs, settings.transferCountdownSec)
         logger.debugEnabled = settings.debug
+        battleListener?.updateSettings(settings)
         if (::gameFlow.isInitialized) {
             gameFlow.updateSettings(settings)
         }
@@ -269,6 +283,14 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         combatListener.stop()
         nametagListener?.stop()
         doorService.cancelAllSessions()
+        // 恢复在线玩家状态，避免插件禁用后停留在 SPECTATOR/自定义血量/药水状态
+        plugin.server.onlinePlayers.forEach { p ->
+            p.gameMode = org.bukkit.GameMode.SURVIVAL
+            p.clearActivePotionEffects()
+            p.health = 20.0
+            p.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH)?.baseValue = 20.0
+            p.displayName(net.kyori.adventure.text.Component.text(p.name))
+        }
         if (::gameFlow.isInitialized) gameFlow.stop()
         taskRegistry.cancelAll()
         taskService.close()
