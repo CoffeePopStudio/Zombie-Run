@@ -1510,11 +1510,27 @@ class Zr2Command(
     private fun arenaNames(prefix: String): List<String> =
         root.arenaRepository.all().map { it.name }.filter { it.startsWith(prefix, true) }
 
-    /** 解析 arena：显式 --arena 优先；省略时按玩家当前世界智能推断。 */
+    /**
+     * 解析 arena：显式 --arena 优先；省略时按玩家当前世界智能推断。
+     * 如果当前世界还没有 arena，会自动创建一个，避免新手被 --arena 卡住。
+     */
     private fun resolveArena(sender: CommandSender, arenaName: String?): ArenaDefinition? {
         if (arenaName != null) return root.arenaRepository.byName(arenaName)
         val player = sender as? Player ?: return null
-        return root.arenaRepository.byWorld(player.world.name).firstOrNull()
+        val world = player.world.name
+        root.arenaRepository.byWorld(world).firstOrNull()?.let { return it }
+
+        // 自动创建：以世界名作为 arena 名，重名时追加序号
+        var name = world
+        var suffix = 1
+        while (root.arenaRepository.byName(name) != null) {
+            name = "${world}_$suffix"
+            suffix++
+        }
+        val arena = ArenaDefinition(name = name, world = world)
+        root.arenaRepository.save(arena)
+        sender.sendMessage(Component.text("当前世界还没有 arena，已自动创建：$name（world=$world）", NamedTextColor.GREEN))
+        return arena
     }
 
     /**
