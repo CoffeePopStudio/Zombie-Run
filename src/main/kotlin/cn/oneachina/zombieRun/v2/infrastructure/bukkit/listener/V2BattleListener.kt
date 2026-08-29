@@ -3,6 +3,7 @@ package cn.oneachina.zombierun.v2.infrastructure.bukkit.listener
 import cn.oneachina.zombierun.v2.application.combat.CombatHealthService
 import cn.oneachina.zombierun.v2.application.event.ApplicationEventBus
 import cn.oneachina.zombierun.v2.application.event.InfectHumanEvent
+import cn.oneachina.zombierun.v2.application.event.PlayerDamageDealtEvent
 import cn.oneachina.zombierun.v2.application.game.GameFlowService
 import cn.oneachina.zombierun.v2.application.player.PlayerDataService
 import cn.oneachina.zombierun.v2.domain.game.GamePhase
@@ -42,6 +43,7 @@ class V2BattleListener(
     private val playerData: PlayerDataService?,
     private val settings: V2Settings,
     private val logger: V2Logger,
+    private val eventBus: ApplicationEventBus? = null,
 ) : Listener {
 
     // ==================== QA 枪械 ====================
@@ -51,6 +53,7 @@ class V2BattleListener(
         if (settings.debug) return
         val player = event.player
         val world = player.world.name
+        if (!gameFlow.isArenaWorld(world)) return
         val ok = gameFlow.phaseOf(world) == GamePhase.RUNNING &&
             gameFlow.teamOf(world, player.uniqueId) == GameTeam.HUMAN
         if (!ok) {
@@ -63,6 +66,7 @@ class V2BattleListener(
         val victim = event.damaged as? Player ?: return
         val shooter = event.player
         val world = victim.world.name
+        if (!gameFlow.isArenaWorld(world)) return
 
         if (!settings.debug) {
             if (gameFlow.phaseOf(world) != GamePhase.RUNNING) return
@@ -78,6 +82,7 @@ class V2BattleListener(
 
         Bukkit.getRegionScheduler().execute(plugin, victim.location) {
             val dead = healthService.damage(victim.uniqueId, damage, shooter.uniqueId)
+            eventBus?.publish(PlayerDamageDealtEvent(shooter.uniqueId, victim.uniqueId, damage))
             // 沿 shooter→victim 方向击退
             val dir = victim.location.toVector().subtract(shooter.location.toVector())
             dir.y = 0.0
@@ -106,6 +111,7 @@ class V2BattleListener(
     fun onEntityDamageByEntity(event: EntityDamageByEntityEvent) {
         val victim = event.entity as? Player ?: return
         val world = victim.world.name
+        if (!gameFlow.isArenaWorld(world)) return
         val attacker = when (val damager = event.damager) {
             is Player -> damager
             is Projectile -> damager.shooter as? Player
@@ -140,7 +146,9 @@ class V2BattleListener(
         when {
             attackerTeam == GameTeam.HUMAN && victimTeam in setOf(GameTeam.ZOMBIE, GameTeam.ZOMBIE_MAIN) -> {
                 event.isCancelled = true
-                val dead = healthService.damage(victim.uniqueId, healthService.rules.swordDamage, attacker.uniqueId)
+                val damage = healthService.rules.swordDamage
+                val dead = healthService.damage(victim.uniqueId, damage, attacker.uniqueId)
+                eventBus?.publish(PlayerDamageDealtEvent(attacker.uniqueId, victim.uniqueId, damage))
                 if (dead) victim.health = 0.0 else flashRed(victim)
             }
             attackerTeam in setOf(GameTeam.ZOMBIE, GameTeam.ZOMBIE_MAIN) && victimTeam == GameTeam.HUMAN -> {
@@ -162,6 +170,8 @@ class V2BattleListener(
     @EventHandler(ignoreCancelled = true)
     fun onEntityDamage(event: EntityDamageEvent) {
         val player = event.entity as? Player ?: return
+        val world = player.world.name
+        if (!gameFlow.isArenaWorld(world)) return
         if (event.cause == EntityDamageEvent.DamageCause.FALL) {
             event.isCancelled = true
             return
@@ -170,7 +180,6 @@ class V2BattleListener(
         if (event.cause == EntityDamageEvent.DamageCause.ENTITY_EXPLOSION ||
             event.cause == EntityDamageEvent.DamageCause.BLOCK_EXPLOSION
         ) {
-            val world = player.world.name
             if (gameFlow.teamOf(world, player.uniqueId) == GameTeam.HUMAN) {
                 event.damage *= healthService.rules.explosionDamageReduction
             }
@@ -181,16 +190,18 @@ class V2BattleListener(
 
     @EventHandler
     fun onPlayerDeath(event: PlayerDeathEvent) {
-        event.isCancelled = true
         val victim = event.entity
         val world = victim.world.name
+        // 非 arena 世界不接管死亡；不在当前对局名册中的玩家也不做任何转化
+        if (!gameFlow.isArenaWorld(world)) return
+        val victimTeam = gameFlow.teamOf(world, victim.uniqueId) ?: return
+
+        event.isCancelled = true
         event.drops.clear()
         event.deathMessage(null)
 
         val killer = victim.killer
             ?: healthService.pollLastDamager(victim.uniqueId)?.let { Bukkit.getPlayer(it) }
-
-        val victimTeam = gameFlow.teamOf(world, victim.uniqueId)
 
         when (victimTeam) {
             GameTeam.HUMAN -> {
@@ -215,7 +226,8 @@ class V2BattleListener(
                 }
                 respawnZombie(victim, world)
             }
-            else -> convertToZombie(victim, world, "你已死亡并变为僵尸！")
+            // 其他队伍（SPECTATOR 等）不接管，允许服务器正常处理
+            else -> Unit
         }
     }
 

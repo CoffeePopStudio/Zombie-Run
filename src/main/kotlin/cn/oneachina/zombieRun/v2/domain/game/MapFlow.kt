@@ -3,6 +3,9 @@ package cn.oneachina.zombierun.v2.domain.game
 /**
  * 完整游戏流程（MapFlow）：一张地图从等待、开局、门推进到结算的状态机。
  * 纯 Kotlin/领域层，不依赖 Bukkit。
+ *
+ * 该类可能被门事件、战斗感染、全局定时任务从不同线程调用，
+ * 因此所有可变状态读写都通过 [lock] 同步。
  */
 enum class MapFlowPhase { WAITING, STARTING, RUNNING, HUMAN_WIN, ZOMBIE_WIN }
 
@@ -69,35 +72,37 @@ enum class MapFlowAdvanceResult {
 class MapFlowStateMachine(
     val definition: MapFlowDefinition,
 ) {
+    private val lock = Any()
     private var phase: MapFlowPhase = MapFlowPhase.WAITING
     private var currentStage: MapFlowStage = definition.stages.first()
     private val passedStageIds = LinkedHashSet<String>()
 
-    fun phaseSnapshot(): MapFlowPhase = phase
+    fun phaseSnapshot(): MapFlowPhase = synchronized(lock) { phase }
 
-    fun currentStage(): MapFlowStage = currentStage
+    fun currentStage(): MapFlowStage = synchronized(lock) { currentStage }
 
-    fun currentDoorNumbers(): List<Int> = currentStage.doorNumbers
+    fun currentDoorNumbers(): List<Int> = synchronized(lock) { currentStage.doorNumbers }
 
-    fun passedStages(): Set<String> = passedStageIds.toSet()
+    fun passedStages(): Set<String> = synchronized(lock) { passedStageIds.toSet() }
 
-    fun isFinished(): Boolean =
+    fun isFinished(): Boolean = synchronized(lock) {
         phase == MapFlowPhase.HUMAN_WIN || phase == MapFlowPhase.ZOMBIE_WIN
-
-    fun beginCountdown(): Boolean {
-        if (phase != MapFlowPhase.WAITING) return false
-        phase = MapFlowPhase.STARTING
-        return true
     }
 
-    fun start(): Boolean {
+    fun beginCountdown(): Boolean = synchronized(lock) {
+        if (phase != MapFlowPhase.WAITING) return false
+        phase = MapFlowPhase.STARTING
+        true
+    }
+
+    fun start(): Boolean = synchronized(lock) {
         if (phase != MapFlowPhase.STARTING) return false
         phase = MapFlowPhase.RUNNING
-        return true
+        true
     }
 
     /** 玩家穿过当前阶段门。命中当前阶段则推进或结算。 */
-    fun onDoorPassed(doorNumbers: Collection<Int>): MapFlowAdvanceResult {
+    fun onDoorPassed(doorNumbers: Collection<Int>): MapFlowAdvanceResult = synchronized(lock) {
         if (phase != MapFlowPhase.RUNNING) return MapFlowAdvanceResult.WRONG_DOOR
         if (currentStage.doorNumbers.none { it in doorNumbers }) return MapFlowAdvanceResult.WRONG_DOOR
 
@@ -108,30 +113,32 @@ class MapFlowStateMachine(
             return MapFlowAdvanceResult.FINISHED
         }
         currentStage = next
-        return MapFlowAdvanceResult.STAGE_ADVANCED
+        MapFlowAdvanceResult.STAGE_ADVANCED
     }
 
-    fun onAllHumansInfected(): Boolean {
+    fun onAllHumansInfected(): Boolean = synchronized(lock) {
         if (phase != MapFlowPhase.RUNNING) return false
         phase = MapFlowPhase.ZOMBIE_WIN
-        return true
+        true
     }
 
-    fun onTimeUp(): Boolean {
+    fun onTimeUp(): Boolean = synchronized(lock) {
         if (phase != MapFlowPhase.RUNNING) return false
         phase = MapFlowPhase.HUMAN_WIN
-        return true
+        true
     }
 
-    fun onExtraction(): Boolean {
+    fun onExtraction(): Boolean = synchronized(lock) {
         if (phase != MapFlowPhase.RUNNING) return false
         phase = MapFlowPhase.HUMAN_WIN
-        return true
+        true
     }
 
     fun reset() {
-        phase = MapFlowPhase.WAITING
-        currentStage = definition.stages.first()
-        passedStageIds.clear()
+        synchronized(lock) {
+            phase = MapFlowPhase.WAITING
+            currentStage = definition.stages.first()
+            passedStageIds.clear()
+        }
     }
 }

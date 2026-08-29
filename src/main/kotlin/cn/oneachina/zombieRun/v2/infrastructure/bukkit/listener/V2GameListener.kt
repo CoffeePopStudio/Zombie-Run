@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap
 class V2GameListener(
     private val gameFlow: GameFlowService,
     private val guiService: GuiService? = null,
+    private val healthService: cn.oneachina.zombierun.v2.application.combat.CombatHealthService? = null,
     private val maxHealthProvider: (Player) -> Double = { player ->
         player.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH)?.value ?: 20.0
     },
@@ -58,6 +59,8 @@ class V2GameListener(
         // 先退出旧世界对局（母体离开需补位、最后一名人类离开需结算），再加入新世界
         if (oldWorld != null && oldWorld != newWorld) {
             gameFlow.onPlayerLeaveWorld(oldWorld, id)
+            // 跨世界后清掉旧世界自定义血量，避免旧世界状态泄漏到新世界
+            healthService?.clear(id)
         }
         playerWorlds[id] = newWorld
         gameFlow.onPlayerJoin(newWorld, id)

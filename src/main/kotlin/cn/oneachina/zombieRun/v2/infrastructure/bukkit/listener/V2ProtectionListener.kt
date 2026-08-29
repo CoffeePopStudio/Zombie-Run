@@ -39,11 +39,13 @@ class V2ProtectionListener(
 
     @EventHandler(ignoreCancelled = true)
     fun onBlockBreak(event: BlockBreakEvent) {
+        if (!gameFlow.isArenaWorld(event.player.world.name)) return
         if (event.player.gameMode != GameMode.CREATIVE) event.isCancelled = true
     }
 
     @EventHandler(ignoreCancelled = true)
     fun onBlockPlace(event: BlockPlaceEvent) {
+        if (!gameFlow.isArenaWorld(event.player.world.name)) return
         if (event.player.gameMode != GameMode.CREATIVE) event.isCancelled = true
     }
 
@@ -51,6 +53,7 @@ class V2ProtectionListener(
 
     @EventHandler(ignoreCancelled = true)
     fun onDropItem(event: PlayerDropItemEvent) {
+        if (!gameFlow.isArenaWorld(event.player.world.name)) return
         if (event.player.gameMode != GameMode.CREATIVE) event.isCancelled = true
     }
 
@@ -94,7 +97,8 @@ class V2ProtectionListener(
 
     @EventHandler(ignoreCancelled = true)
     fun onSwapHandItems(event: PlayerSwapHandItemsEvent) {
-        // 非潜行 F 一律取消（防误触副手）；潜行+F 开商店逻辑在 V2GameListener
+        // 只在对局世界拦截非潜行 F（防误触副手）；潜行+F 开商店逻辑在 V2GameListener
+        if (!gameFlow.isArenaWorld(event.player.world.name)) return
         if (!event.player.isSneaking) {
             event.isCancelled = true
         }
@@ -104,9 +108,12 @@ class V2ProtectionListener(
 
     @EventHandler
     fun onChat(event: AsyncChatEvent) {
-        event.isCancelled = true
         val player = event.player
         val world = player.world.name
+        // 只接管 arena 世界聊天；非游戏世界放行给服务器原有聊天逻辑
+        if (!gameFlow.isArenaWorld(world)) return
+
+        event.isCancelled = true
         val raw = PlainTextComponentSerializer.plainText().serialize(event.message()).replace("&", "")
         val team = gameFlow.teamOf(world, player.uniqueId)
         val prefix = when (team) {
@@ -122,6 +129,9 @@ class V2ProtectionListener(
             .append(Component.text(" >> ", NamedTextColor.GOLD))
             .append(Component.text(raw, NamedTextColor.WHITE))
             .build()
-        Bukkit.getGlobalRegionScheduler().run(plugin, { _ -> Bukkit.broadcast(message) })
+        // 只广播给同一对局世界内的玩家，避免跨世界消息泄漏
+        Bukkit.getGlobalRegionScheduler().run(plugin) { _ ->
+            Bukkit.getWorld(world)?.players?.forEach { it.sendMessage(message) }
+        }
     }
 }

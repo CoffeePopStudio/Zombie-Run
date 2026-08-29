@@ -1,5 +1,6 @@
 package cn.oneachina.zombierun.v2.infrastructure.bukkit.scheduler
 
+import cn.oneachina.zombierun.v2.infrastructure.bukkit.hook.MultiverseWorldResolver
 import cn.oneachina.zombierun.v2.ports.RegionLocation
 import cn.oneachina.zombierun.v2.ports.SchedulerPort
 import cn.oneachina.zombierun.v2.ports.TaskHandle
@@ -33,7 +34,9 @@ class BukkitSchedulerPort(private val plugin: JavaPlugin) : SchedulerPort {
     }
 
     override fun regionExecute(location: RegionLocation, action: () -> Unit) {
-        val world = Bukkit.getWorld(location.worldName) ?: return
+        // 与 BukkitPorts 保持一致：先走 Multiverse 别名/大小写解析，避免门方块操作拿不到 World
+        val worldName = MultiverseWorldResolver.resolve(location.worldName)
+        val world = Bukkit.getWorld(worldName) ?: return
         Bukkit.getRegionScheduler().execute(
             plugin,
             Location(world, location.x, location.y, location.z)

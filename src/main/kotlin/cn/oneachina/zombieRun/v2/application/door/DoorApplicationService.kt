@@ -52,6 +52,15 @@ class DoorApplicationService(
     private val activeSessions = ConcurrentHashMap<String, RuntimeSession>()
     private val transferTasks = ConcurrentHashMap<UUID, TaskHandle>()
     private val behaviorTasks = ConcurrentHashMap<UUID, TaskHandle>()
+    private val lastTriggerTimes = ConcurrentHashMap<String, Long>()
+    private var doorOpenCooldownMs: Long = 0
+    private var transferCountdownSeconds: Int = 10
+
+    /** 由组合根在加载 settings 后调用，应用 balance 配置。 */
+    fun configure(doorOpenCooldownMs: Long, transferCountdownSeconds: Int) {
+        this.doorOpenCooldownMs = doorOpenCooldownMs.coerceAtLeast(0)
+        this.transferCountdownSeconds = transferCountdownSeconds.coerceAtLeast(1)
+    }
 
     fun reload() {
         cancelAllSessions()
@@ -96,9 +105,6 @@ class DoorApplicationService(
 
     /** 触发开门；group 非空时同组所有门联动。 */
     fun triggerDoor(worldName: String, doorNumber: Int, operator: String? = null): TriggerResult {
-        if (activeSessions.containsKey(worldName)) {
-            return TriggerResult(false, "该世界已有门会话进行中")
-        }
         val door = doorByNumber(worldName, doorNumber)
             ?: return TriggerResult(false, "世界 $worldName 不存在 $doorNumber 号门")
 
@@ -112,6 +118,15 @@ class DoorApplicationService(
             doorsInWorld(worldName).filter { it.group == door.group }
         }
         if (doors.isEmpty()) return TriggerResult(false, "门组为空")
+
+        if (doorOpenCooldownMs > 0) {
+            val now = System.currentTimeMillis()
+            val last = lastTriggerTimes[worldName] ?: 0L
+            if (now - last < doorOpenCooldownMs) {
+                return TriggerResult(false, "门操作冷却中，请稍后再试")
+            }
+            lastTriggerTimes[worldName] = now
+        }
 
         val players = worldAccess.playersIn(worldName)
         val initialPositions = players.associate { it.id to it.position }
@@ -128,7 +143,11 @@ class DoorApplicationService(
             remainingSeconds = door.openSeconds,
             phase = DoorSessionPhase.OPENING,
         )
-        activeSessions[worldName] = session
+        // putIfAbsent 保证“检查 + 插入”原子：并发触发时只有一个会话能进入调度
+        val previous = activeSessions.putIfAbsent(worldName, session)
+        if (previous != null) {
+            return TriggerResult(false, "该世界已有门会话进行中")
+        }
 
         val label = doorLabel(doors)
         players.forEach { p ->
@@ -234,7 +253,7 @@ class DoorApplicationService(
 
     private fun startTransferCountdown(session: RuntimeSession, playerId: UUID) {
         transferTasks.remove(playerId)?.cancel()
-        var remaining = 10
+        var remaining = transferCountdownSeconds
         val doorNumber = session.doors.firstNotNullOfOrNull { it.number }
 
         val handle = scheduler.globalTimer(1L, 20L) { taskHandle ->
@@ -354,6 +373,13 @@ class DoorApplicationService(
 
     fun cancelAllSessions() {
         activeSessions.values.forEach { session ->
+            // 取消前先恢复仍处于开启状态的门方块，避免 reload/disable 遗留打开的门
+            if (session.phase == DoorSessionPhase.CLOSING) {
+                session.doors.forEach { door ->
+                    val snapshot = door.snapshotId?.let { snapshotStore.load(it) } ?: emptyMap()
+                    blockOps.closeRegion(door.world, door.region, snapshot, door.fallbackMaterial)
+                }
+            }
             session.state.close(emptyMap())
             session.task?.cancel()
         }
@@ -362,6 +388,7 @@ class DoorApplicationService(
         transferTasks.clear()
         behaviorTasks.values.forEach { it.cancel() }
         behaviorTasks.clear()
+        lastTriggerTimes.clear()
     }
 
     private fun doorLabel(doors: List<DoorDefinition>): String =

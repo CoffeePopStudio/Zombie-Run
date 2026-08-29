@@ -8,6 +8,7 @@ import cn.oneachina.zombierun.v2.support.TaskRegistry
 import org.bukkit.Bukkit
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
+import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerToggleSprintEvent
@@ -19,6 +20,7 @@ class V2CombatListener(
     private val stamina: StaminaService,
     private val scheduler: SchedulerPort,
     private val taskRegistry: TaskRegistry,
+    private val arenaFilter: (String?) -> Boolean = { true },
 ) : Listener {
 
     private var tickTask: TaskHandle? = null
@@ -37,6 +39,7 @@ class V2CombatListener(
 
     private fun tick() {
         Bukkit.getOnlinePlayers().forEach { player ->
+            if (!arenaFilter(player.world.name)) return@forEach
             val newlyExhausted = stamina.update(player.uniqueId, player.isSprinting)
             if (newlyExhausted && player.isSprinting) {
                 player.isSprinting = false
@@ -48,6 +51,7 @@ class V2CombatListener(
     @EventHandler
     fun onToggleSprint(event: PlayerToggleSprintEvent) {
         if (!event.isSprinting) return
+        if (!arenaFilter(event.player.world?.name)) return
         val state = stamina.stateOf(event.player.uniqueId)
         if (state.status == StaminaStatus.EXHAUSTED) {
             event.isCancelled = true
@@ -57,11 +61,19 @@ class V2CombatListener(
 
     @EventHandler
     fun onJoin(event: PlayerJoinEvent) {
+        if (!arenaFilter(event.player.world?.name)) return
         stamina.reset(event.player.uniqueId)
     }
 
     @EventHandler
     fun onQuit(event: PlayerQuitEvent) {
         stamina.remove(event.player.uniqueId)
+    }
+
+    @EventHandler
+    fun onWorldChange(event: PlayerChangedWorldEvent) {
+        val id = event.player.uniqueId
+        val newWorld = event.player.world.name
+        if (arenaFilter(newWorld)) stamina.reset(id) else stamina.remove(id)
     }
 }

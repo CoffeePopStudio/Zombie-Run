@@ -15,6 +15,7 @@ import java.util.concurrent.ConcurrentHashMap
 class CombatHealthService(
     private val logger: V2Logger,
 ) {
+    private val lock = Any()
     private val health = ConcurrentHashMap<UUID, Double>()
     private val maxHealth = ConcurrentHashMap<UUID, Double>()
     private val lastDamager = ConcurrentHashMap<UUID, UUID>()
@@ -39,9 +40,11 @@ class CombatHealthService(
     /** 对局身份初始化（队伍切换时调用）：满血并重置归因。 */
     fun initPlayer(playerId: UUID, team: GameTeam) {
         val max = maxHealthFor(team)
-        maxHealth[playerId] = max
-        health[playerId] = max
-        lastDamager.remove(playerId)
+        synchronized(lock) {
+            maxHealth[playerId] = max
+            health[playerId] = max
+            lastDamager.remove(playerId)
+        }
     }
 
     /** 重置为对应队伍满血（复活转僵尸等）。 */
@@ -60,20 +63,22 @@ class CombatHealthService(
      * 记录伤害并扣血；[damager] 可为 null（环境伤害）。
      * 返回扣血后是否已归零（死亡判定由调用方处理）。
      */
-    fun damage(playerId: UUID, amount: Double, damager: UUID?): Boolean {
-        if (amount <= 0) return health[playerId]?.let { it <= 0 } ?: true
+    fun damage(playerId: UUID, amount: Double, damager: UUID?): Boolean = synchronized(lock) {
+        if (amount <= 0) return@synchronized health[playerId]?.let { it <= 0 } ?: true
         if (damager != null) lastDamager[playerId] = damager
         val remaining = (health[playerId] ?: 0.0) - amount
         val clamped = remaining.coerceAtLeast(0.0)
         health[playerId] = clamped
         logger.debug("combat", "damage $amount -> $playerId remaining=$clamped")
-        return clamped <= 0.0
+        clamped <= 0.0
     }
 
     fun heal(playerId: UUID, amount: Double) {
         if (amount <= 0) return
-        val max = getMaxHealth(playerId)
-        health[playerId] = ((health[playerId] ?: 0.0) + amount).coerceAtMost(max)
+        synchronized(lock) {
+            val max = getMaxHealth(playerId)
+            health[playerId] = ((health[playerId] ?: 0.0) + amount).coerceAtMost(max)
+        }
     }
 
     /** 取出最近攻击者（一次性：取出即清除）。 */
