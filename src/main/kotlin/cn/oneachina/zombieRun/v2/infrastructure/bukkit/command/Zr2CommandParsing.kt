@@ -51,6 +51,7 @@ fun parseDoorAdd(
     doorId: String,
     options: Map<String, String>,
     positional: List<String>,
+    mode: DoorMode = DoorMode.NORMAL,
 ): DoorAddParseResult {
     if (positional.size < 8) {
         return DoorAddParseResult.Error("需要 6 个坐标 + axis + front")
@@ -73,10 +74,16 @@ fun parseDoorAdd(
     val maxZ = maxOf(coords[2]!!, coords[5]!!)
     val region = BlockRegion(minX, minY, minZ, maxX, maxY, maxZ)
 
-    val number = options["number"]?.toIntOrNull()
-        ?: (arena.doors.mapNotNull { it.number }.maxOrNull() ?: 0) + 1
-    if (arena.doors.any { it.number == number }) {
-        return DoorAddParseResult.Error("门号 $number 已存在")
+    // 只有 normal 门有顺序门号；初始门（player/zombie/start）由开局自动开门，不需要门号
+    val number = if (mode == DoorMode.NORMAL) {
+        val n = options["number"]?.toIntOrNull()
+            ?: (arena.doors.mapNotNull { it.number }.maxOrNull() ?: 0) + 1
+        if (arena.doors.any { it.number == n }) {
+            return DoorAddParseResult.Error("门号 $n 已存在")
+        }
+        n
+    } else {
+        null
     }
 
     val snapshotId = "${arena.name}_$doorId"
@@ -108,7 +115,7 @@ fun parseDoorAdd(
         id = doorId,
         world = arena.world,
         number = number,
-        mode = DoorMode.NORMAL,
+        mode = mode,
         group = options["group"],
         openSeconds = options["open"]?.toIntOrNull() ?: 15,
         closeSeconds = options["close"]?.toIntOrNull() ?: 15,

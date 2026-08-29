@@ -175,7 +175,7 @@ class Zr2Command(
         sender.sendMessage(Component.text("/zr2 version", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 arena list | info <名称> | create <名称> [世界] | remove <名称>", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 door list [世界] | info <id> | test <id> | trigger <门号>", NamedTextColor.YELLOW))
-        sender.sendMessage(Component.text("/zr2 door add [--arena <名称>] [坐标6个] [axis] [front] [--number N] [--group G] [--open N] [--close N]（省略 --arena 自动使用当前世界；用 postool 选区后可省略坐标并自动推断 axis/front）", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 door add [--arena <名称>] [normal|player|zombie|start] [坐标6个] [axis] [front] [--number N] [--group G] [--open N] [--close N]（省略 --arena 自动使用当前世界；用 postool 选区后可省略坐标并自动推断 axis/front）", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 postool - 切换选区工具（木棍左键=pos1 右键=pos2）", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 lobby - 返回当前世界等待大厅", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 debug - 切换 debug 日志（管理员）", NamedTextColor.YELLOW))
@@ -509,13 +509,29 @@ class Zr2Command(
         val parsed = parseArgs(args)
         val arena = resolveArena(sender, parsed.options["arena"])
         if (arena == null) {
-            sender.sendMessage(Component.text("用法: /zr2 door add [--arena <名称>] <坐标6个|省略> <axis> <front>（省略 --arena 时自动使用当前世界 arena；/zr2 postool 选区后可省略坐标）", NamedTextColor.RED))
+            sender.sendMessage(Component.text("用法: /zr2 door add [--arena <名称>] [normal|player|zombie|start] <坐标6个|省略> <axis> <front>（省略 --arena 时自动使用当前世界 arena；/zr2 postool 选区后可省略坐标）", NamedTextColor.RED))
             return
         }
 
-        // postool 选区补齐坐标：无坐标参数时取选区
-        val positional = if (parsed.positional.size >= 8) {
+        // 支持 --mode player，也兼容 v1 的“/zr doors add player”写法
+        val v1ModeNames = setOf("normal", "player", "zombie", "start")
+        val modeToken = parsed.options["mode"]
+            ?: parsed.positional.firstOrNull()?.lowercase()?.takeIf { it in v1ModeNames }
+        val mode = when (modeToken) {
+            "player" -> cn.oneachina.zombierun.v2.domain.door.DoorMode.PLAYER
+            "zombie" -> cn.oneachina.zombierun.v2.domain.door.DoorMode.ZOMBIE
+            "start" -> cn.oneachina.zombierun.v2.domain.door.DoorMode.START
+            else -> cn.oneachina.zombierun.v2.domain.door.DoorMode.NORMAL
+        }
+        val positionalInput = if (parsed.positional.firstOrNull()?.lowercase() in v1ModeNames) {
+            parsed.positional.drop(1)
+        } else {
             parsed.positional
+        }
+
+        // postool 选区补齐坐标：无坐标参数时取选区
+        val positional = if (positionalInput.size >= 8) {
+            positionalInput
         } else {
             val p = sender as? Player
             val a = p?.let { pos1[it.uniqueId] }
@@ -524,7 +540,7 @@ class Zr2Command(
                 sender.sendMessage(Component.text("需要 6 个坐标，或用 /zr2 postool 选区后省略坐标", NamedTextColor.RED))
                 return
             }
-            listOf(a.blockX, a.blockY, a.blockZ, b.blockX, b.blockY, b.blockZ).map { it.toString() } + parsed.positional
+            listOf(a.blockX, a.blockY, a.blockZ, b.blockX, b.blockY, b.blockZ).map { it.toString() } + positionalInput
         }
 
         // 懒人模式：没写 axis/front 时，根据 postool 选区和玩家所站位置自动推断
@@ -560,7 +576,7 @@ class Zr2Command(
         }
 
         val doorId = "door_${System.currentTimeMillis()}"
-        val result = parseDoorAdd(arena, doorId, parsed.options, finalPositional)
+        val result = parseDoorAdd(arena, doorId, parsed.options, finalPositional, mode)
         if (result is DoorAddParseResult.Error) {
             sender.sendMessage(Component.text(result.message, NamedTextColor.RED))
             return
@@ -577,7 +593,7 @@ class Zr2Command(
         val snapshot = root.blockOps.scanRegion(arena.world, door.region)
         root.snapshotStore.save(door.snapshotId!!, snapshot)
         root.arenaRepository.save(arena.copy(doors = arena.doors + door))
-        sender.sendMessage(Component.text("门 '${door.id}' (#${door.number}) 已添加，快照 ${snapshot.size} 个方块", NamedTextColor.GREEN))
+        sender.sendMessage(Component.text("门 '${door.id}' [${door.mode.name.lowercase()}] (#${door.number ?: "-"}) 已添加，快照 ${snapshot.size} 个方块", NamedTextColor.GREEN))
     }
 
     // ---------- button / respawn ----------
