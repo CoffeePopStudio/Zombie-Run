@@ -1,8 +1,7 @@
 # Zombie Run v2（重构分支）
 
 > ⚠️ 当前为 `v2` 重构分支：v1 稳定版在 `main` 分支。
-> 架构设计见 [docs/v2/ARCHITECTURE.md](docs/v2/ARCHITECTURE.md)，路线图见 [docs/v2/ROADMAP.md](docs/v2/ROADMAP.md)。
-> 命令参考见 [docs/v2/COMMANDS.md](docs/v2/COMMANDS.md)，升级指南见 [docs/v2/UPGRADE.md](docs/v2/UPGRADE.md)，发布说明见 [docs/v2/RELEASE.md](docs/v2/RELEASE.md)。
+> 内部设计/命令/升级文档仅保留在本地 `docs/v2/`，不随 GitHub 仓库公开。
 > 当前进度：**M0–M19 + 功能/安全补全：门系统/游戏流程/体力/武器/经济/等级/GUI/PAPI/迁移/特殊门/任务系统/MapFlow 流程框架/地图编辑命令/任务&称号 GUI/GitHub Actions/v1 玩家数据+门快照迁移/出生点与母体机制定稿/Y 轴门与极端测试/全局 listener 世界隔离/名牌/开局效果/转账/排行榜/武器预购/8 类任务/称号解锁/管理命令补全**。
 
 非对称 PvP 小游戏插件 —— 人类通过层层大门逃生，僵尸全力感染。
@@ -33,7 +32,7 @@
 以及世界级占位符：`%zombierun_human_count%`, `%zombierun_zombie_count%`, `%zombierun_time_left%`, `%zombierun_progress%`, `%zombierun_team%`, `%zombierun_stamina%` 等。
 兼容别名：`%zombierun_level%`, `%zombierun_money%`, `%zombierun_kills%` 等。
 
-完整命令/占位符见 [docs/v2/COMMANDS.md](docs/v2/COMMANDS.md)。配置迁移见 `/zr2 v1 migrate`。
+完整命令/占位符见本地 `docs/v2/COMMANDS.md`。配置迁移见 `/zr2 v1 migrate`。
 
 ## 游戏机制
 
@@ -48,7 +47,7 @@
 
 1. 下载 `zombie-run-v2-all.jar` 放入 `plugins/`
 2. 重启服务器，自动生成 `plugins/zombie-run-v2/` 配置
-3. 从 v1 迁移请见 [docs/v2/UPGRADE.md](docs/v2/UPGRADE.md)
+3. 从 v1 迁移请见本地 `docs/v2/UPGRADE.md`
 4. `/zr2 reload` 热重载
 
 **依赖：** Paper / Folia · 可选 [PlaceholderAPI](https://www.spigotmc.org/resources/placeholderapi.6245/)

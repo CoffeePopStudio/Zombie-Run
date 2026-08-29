@@ -84,3 +84,8 @@ run/
 .kotlin/
 .opencode/
 docs/superpowers
+
+# 内部文档/分析报告，不推送到 GitHub
+docs/v2/
+v1_subagent_report.md
+v2_subagent_report.md
