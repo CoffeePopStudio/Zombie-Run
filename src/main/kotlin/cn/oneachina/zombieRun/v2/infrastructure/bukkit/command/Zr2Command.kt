@@ -527,7 +527,8 @@ class Zr2Command(
             listOf(a.blockX, a.blockY, a.blockZ, b.blockX, b.blockY, b.blockZ).map { it.toString() } + parsed.positional
         }
 
-        // 懒人模式：没写 axis/front 时，根据 postool 选区和玩家朝向自动推断
+        // 懒人模式：没写 axis/front 时，根据 postool 选区和玩家所站位置自动推断
+        // 约定：你站在“玩家等门的那一侧”（你叫的正面），插件把 front 设为另一侧（终点侧）
         var finalPositional = positional
         if (finalPositional.size < 8) {
             val p = sender as? Player
@@ -544,12 +545,18 @@ class Zr2Command(
                 else -> null
             }
             if (axis == null) {
-                sender.sendMessage(Component.text("选区不是平面门（需要 x 相同、z 相同或 y 相同）", NamedTextColor.RED))
+                sender.sendMessage(Component.text("选区不是平面门（两个角需要落在同一面墙上，即 x 相同、z 相同或 y 相同）", NamedTextColor.RED))
                 return
             }
-            val front = autoFront(p, axis)
+            val plane = when (axis) {
+                "x" -> a.blockX.toDouble()
+                "z" -> a.blockZ.toDouble()
+                else -> a.blockY.toDouble()
+            }
+            // front = 玩家所站位置的另一侧（终点侧）
+            val front = oppositeSideByPosition(p, axis, plane)
             finalPositional = finalPositional + listOf(axis, front)
-            sender.sendMessage(Component.text("已自动推断：axis=$axis front=$front（如需手动指定，可继续加 axis/front 参数）", NamedTextColor.GREEN))
+            sender.sendMessage(Component.text("已自动推断：axis=$axis front=$front（你站在起点侧，front 是终点侧；玩家从起点侧穿到终点侧才算通过）", NamedTextColor.GREEN))
         }
 
         val doorId = "door_${System.currentTimeMillis()}"
@@ -1510,13 +1517,15 @@ class Zr2Command(
         return root.arenaRepository.byWorld(player.world.name).firstOrNull()
     }
 
-    /** 根据玩家面朝方向推断 front。 */
-    private fun autoFront(player: Player, axis: String): String {
-        val dir = player.location.direction
+    /**
+     * 根据玩家所站位置推断 front。
+     * 约定：玩家站在“起点侧”（等门那一侧），front 取另一侧（终点侧）。
+     */
+    private fun oppositeSideByPosition(player: Player, axis: String, plane: Double): String {
         return when (axis) {
-            "x" -> if (dir.x >= 0) "positive" else "negative"
-            "z" -> if (dir.z >= 0) "positive" else "negative"
-            "y" -> if (player.location.pitch < 0) "positive" else "negative"
+            "x" -> if (player.location.x >= plane) "negative" else "positive"
+            "z" -> if (player.location.z >= plane) "negative" else "positive"
+            "y" -> if (player.location.y >= plane) "negative" else "positive"
             else -> "positive"
         }
     }
