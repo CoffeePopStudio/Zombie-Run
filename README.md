@@ -3,38 +3,37 @@
 > ⚠️ 当前为 `v2` 重构分支：v1 稳定版在 `main` 分支。
 > 架构设计见 [docs/v2/ARCHITECTURE.md](docs/v2/ARCHITECTURE.md)，路线图见 [docs/v2/ROADMAP.md](docs/v2/ROADMAP.md)。
 > 命令参考见 [docs/v2/COMMANDS.md](docs/v2/COMMANDS.md)，升级指南见 [docs/v2/UPGRADE.md](docs/v2/UPGRADE.md)，发布说明见 [docs/v2/RELEASE.md](docs/v2/RELEASE.md)。
-> 当前进度：**M0–M19：门系统/游戏流程/体力/武器/经济/等级/GUI/PAPI/迁移/特殊门/任务系统/MapFlow 流程框架/地图编辑命令/任务&称号 GUI/GitHub Actions/v1 玩家数据+门快照迁移/出生点与母体机制定稿/Y 轴门与极端测试**。
+> 当前进度：**M0–M19 + 功能/安全补全：门系统/游戏流程/体力/武器/经济/等级/GUI/PAPI/迁移/特殊门/任务系统/MapFlow 流程框架/地图编辑命令/任务&称号 GUI/GitHub Actions/v1 玩家数据+门快照迁移/出生点与母体机制定稿/Y 轴门与极端测试/全局 listener 世界隔离/名牌/开局效果/转账/排行榜/武器预购/8 类任务/称号解锁/管理命令补全**。
 
 非对称 PvP 小游戏插件 —— 人类通过层层大门逃生，僵尸全力感染。
 
 > 适用于 Paper / Folia，Kotlin 开发。
 
-## v2 当前可用命令（垂直切片）
+## v2 当前可用命令
 
 ```bash
-/zr2 arena create <名称> [世界]
-/zr2 door add --arena <名称> <x1> <y1> <z1> <x2> <y2> <z2> <axis:x|z> <front:positive|negative>
-/zr2 button add --arena <名称> <x> <y> <z> normal <门号>
-/zr2 respawn add --arena <名称> door_player <x> <y> <z> <门号>
-/zr2 door trigger <门号>
-/zr2 door test <门id>
+/zr2 arena create <名称> [世界] | list | info <名称> | remove <名称>
+/zr2 door add --arena <名称> <x1> <y1> <z1> <x2> <y2> <z2> <axis:x|y|z> <front:positive|negative>
+/zr2 door list | info <id> | test <id> | trigger <门号> | remove <id> | edit <id> | behavior ...
+/zr2 button add --arena <名称> <x> <y> <z> <normal|escape> [门号...] | remove <id> | list
+/zr2 respawn add --arena <名称> <type> <x> <y> <z> [door-number] [yaw] [pitch] | remove <id> | list
 /zr2 game list | status <世界> | start <世界> | end <世界> <human|zombie> | reset <世界>
-/zr2 weapon list | info <id> | add <id> <type> <category> <price> [name] | remove <id> | give <id> | random [category]
-/zr2 profile [玩家] | coins add|give|spend | xp add | title set|clear
+/zr2 weapon list | info <id> | add <id> <type> <category> <price> [name] | remove <id> | give <id> | random [category] | select <id> | unselect
+/zr2 profile [玩家] | coins add|give|remove|set|get|spend|transfer|top | xp add|set | level set | reset <玩家> | title set|clear
 /zr2 menu profile|shop|tasks|titles
 /zr2 task list|claim <任务id>
 /zr2 mapflow list|info|init|set|stage|finish|remove
-/zr2 v1 migrate
-/zr2 v1 migrate-data [--overwrite]
+/zr2 v1 migrate | v1 migrate-data [--overwrite]
 /zr2 reload
 ```
 
 ### PlaceholderAPI
 
 `%zombierun_profile_level%`, `%zombierun_profile_xp%`, `%zombierun_profile_coins%`, `%zombierun_profile_title%`, `%zombierun_profile_kills%`, `%zombierun_profile_doors%`, `%zombierun_game_phase%`
+以及世界级占位符：`%zombierun_human_count%`, `%zombierun_zombie_count%`, `%zombierun_time_left%`, `%zombierun_progress%`, `%zombierun_team%`, `%zombierun_stamina%` 等。
 兼容别名：`%zombierun_level%`, `%zombierun_money%`, `%zombierun_kills%` 等。
 
-其余 v1 功能（任务模板等）将在后续里程碑迁移，v1 稳定版仍可切回 `main` 分支使用。配置迁移见 `/zr2 v1 migrate`。
+完整命令/占位符见 [docs/v2/COMMANDS.md](docs/v2/COMMANDS.md)。配置迁移见 `/zr2 v1 migrate`。
 
 ## 游戏机制
 

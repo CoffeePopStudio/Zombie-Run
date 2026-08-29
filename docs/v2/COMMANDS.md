@@ -20,13 +20,20 @@
 | --- | --- |
 | `/zr2 arena list` | 列出竞技场 |
 | `/zr2 arena create <id> <world>` | 创建竞技场 |
-| `/zr2 arena setspawn <type> [door-number]` | 设置脚下当前位置为重生点 |
 | `/zr2 door add --arena <名称> <x1> <y1> <z1> <x2> <y2> <z2> <axis> <front> [--number N]` | 添加门；axis 支持 `x`/`y`/`z`（`y`=水平地板/天花板门），front 支持 positive/negative |
-| `/zr2 door list` | 列出门 |
+| `/zr2 door list [世界]` | 列出门 |
+| `/zr2 door info <id>` / `/zr2 door test <id>` | 查看/测试门 |
+| `/zr2 door trigger <门号>` | 触发门 |
 | `/zr2 door remove <id>` | 删除门 |
-| `/zr2 button add normal <doorNumber>` | 设置脚下为开门按钮 |
-| `/zr2 button add escape` | 设置脚下为撤离按钮 |
-| `/zr2 respawn list` | 列出重生点 |
+| `/zr2 door edit <id> [--open N] [--close N] [--group G] [--mode MODE] [--number N]` | 编辑门参数 |
+| `/zr2 door reset` | 重新加载全部门/arena 配置 |
+| `/zr2 door behavior info <id>` / `set <id> <type> ...` / `remove <id>` | 查看/设置/移除特殊门行为 |
+| `/zr2 button add --arena <名称> <x> <y> <z> <normal\|escape> [门号...]` | 添加普通/撤离按钮 |
+| `/zr2 button remove <id>` | 删除按钮 |
+| `/zr2 button list [世界]` | 列出按钮 |
+| `/zr2 respawn add --arena <名称> <type> <x> <y> <z> [door-number] [yaw] [pitch]` | 添加重生点 |
+| `/zr2 respawn remove <id>` | 删除重生点 |
+| `/zr2 respawn list [世界]` | 列出重生点 |
 
 ## 对局
 
@@ -45,18 +52,28 @@
 | `/zr2 weapon info <id>` | 查看武器信息 |
 | `/zr2 weapon add <id> <type> <category> <price> [name]` | 添加武器 |
 | `/zr2 weapon remove <id>` | 删除武器 |
-| `/zr2 weapon give <id>` | 给予自己武器 |
+| `/zr2 weapon give <id>` | 给予自己武器（自动补 1 个弹匣） |
 | `/zr2 weapon random [category]` | 随机武器 |
+| `/zr2 weapon select <id>` | 预选武器，开局自动扣款购买并发放 |
+| `/zr2 weapon unselect` | 取消预选武器 |
 
 ## 玩家数据
 
 | 命令 | 说明 |
 | --- | --- |
-| `/zr2 profile [玩家]` | 查看资料（等级/经验/硬币/称号/门数/击杀） |
+| `/zr2 profile [玩家]` | 查看资料（等级/经验/硬币/称号/门数/击杀/感染/场次/胜场/解锁称号） |
 | `/zr2 coins add <数量>` | 给自己加硬币 |
 | `/zr2 coins give <玩家> <数量>` | 给玩家硬币 |
+| `/zr2 coins remove <玩家> <数量>` | 扣除玩家硬币 |
+| `/zr2 coins set <玩家> <数量>` | 设置玩家硬币 |
+| `/zr2 coins get <玩家>` | 查看玩家硬币 |
 | `/zr2 coins spend <数量>` | 花费硬币 |
+| `/zr2 coins transfer <玩家> <数量>` | 转账给玩家 |
+| `/zr2 coins top [数量]` | 查看金币排行榜 |
 | `/zr2 xp add <玩家> <数量>` | 加经验（可升级） |
+| `/zr2 xp set <玩家> <数量>` | 设置经验 |
+| `/zr2 level set <玩家> <等级>` | 设置等级 |
+| `/zr2 reset <玩家>` | 重置玩家数据 |
 | `/zr2 title set <玩家> [称号]` | 设置称号 |
 | `/zr2 title clear <玩家>` | 清除称号 |
 
@@ -94,7 +111,7 @@
 | `/zr2 task list` | 查看每日/每周任务进度 |
 | `/zr2 task claim <任务id>` | 领取已完成任务奖励 |
 
-任务定义在 `plugins/zombie-run-v2/config/tasks.yml`：
+任务定义在 `plugins/zombie-run-v2/config/tasks.yml`；未配置时也会启用内置每日/每周固定+随机任务池。
 ```yaml
 tasks:
   daily_doors:
@@ -106,6 +123,8 @@ tasks:
     period: DAILY
 ```
 
+支持的任务类型：`DOOR_PASSES`、`ZOMBIE_KILLS`、`KILL_ALPHA`、`INFECT_HUMAN`、`PLAY_GAME`、`HUMAN_WIN`、`SURVIVE_TIME`、`DEAL_DAMAGE`。
+
 ## PlaceholderAPI
 
 前缀 `zombierun`，示例：
@@ -116,6 +135,14 @@ tasks:
 - `%zombierun_profile_title%`
 - `%zombierun_profile_kills%`
 - `%zombierun_profile_doors%`
-- `%zombierun_game_phase%`
+- `%zombierun_total_kills%` / `%zombierun_total_infections%`
+- `%zombierun_games_played%` / `%zombierun_human_wins%`
+- `%zombierun_human_count%` / `%zombierun_zombie_count%`
+- `%zombierun_alpha_zombie_name%`
+- `%zombierun_game_phase%` / `%zombierun_game_state%`
+- `%zombierun_time_left%` / `%zombierun_progress%` / `%zombierun_bossbar%`
+- `%zombierun_min_players%` / `%zombierun_max_players%` / `%zombierun_online_players%`
+- `%zombierun_team%` / `%zombierun_room%` / `%zombierun_selected_weapon%`
+- `%zombierun_stamina%` / `%zombierun_stamina_bar%` / `%zombierun_max_stamina%` / `%zombierun_stamina_state%`
 
 兼容 v1 常用别名：`%zombierun_level%`, `%zombierun_xp%`, `%zombierun_money%`, `%zombierun_kills%`, `%zombierun_doors%`, `%zombierun_phase%`。

@@ -109,11 +109,11 @@
 
 ## M3：体力/生命/战斗/感染
 
-- [ ] 生命系统：自定义生命值、伤害流（击杀统计已实现；自定义生命值与伤害规则待 M4 武器伤害联调）
+- [x] 生命系统：自定义生命值、伤害流（`CombatHealthService` + 原子读写；伤害规则可配置）
 - [x] 感染逻辑：近战感染、母体/普通僵尸区分（僵尸濒死攻击转感染，人类濒死不感染）
 - [x] 体力系统：消耗/恢复/疲劳（`StaminaState` + `StaminaService` + 疾跑监听，settings.yml 可配）
 - [x] 战斗监听迁移为 application 用例（感染/击杀统计走 `GameFlowService`）
-- [ ] 黑羊毛等地图机关保留（待地图机关里程碑）
+- [x] 黑羊毛等地图机关保留（`V2HazardListener`）
 
 **验收**：
 - [x] 人类被感染后阵营同步正确（单测覆盖）
@@ -128,8 +128,8 @@
 - [x] QualityArmory 适配器（`WeaponIntegrationPort` + `QaWeaponIntegrationPort`）
 - [x] 选枪/随机枪用例（`WeaponService`：add/give/random/remove/reload）
 - [x] `/zr2 weapon list|info|add|remove|give|random` 管理命令
-- [ ] 武器购买结算（价格字段已定义，扣款/购买界面待 M5 经济）
-- [ ] 武器伤害与战斗系统解耦（伤害数值仍由 QualityArmory 负责，事件接入待 M5）
+- [x] 武器购买结算（商店扣款/退款/补弹；开局预选武器自动购买发放）
+- [x] 武器伤害与战斗系统解耦（QA 伤害事件接入自定义血量 + `PlayerDamageDealtEvent`）
 
 **验收**：
 - [x] v2 weapons.yml 配置可加载（默认 3 把武器），QA 缺失时 `give` 返回失败并提示
@@ -161,8 +161,8 @@
 - [x] 菜单框架：菜单 ID + session 注册（Holder + ConcurrentHashMap 点击回调）
 - [x] 商店 GUI（点击购买武器，扣硬币 + 发枪）
 - [x] 个人资料 GUI（等级/经验/硬币/称号/门数/击杀）
-- [ ] 任务 GUI（任务模板待 M5 扩展后接入）
-- [ ] 称号 GUI（命令已支持 set/clear，选择界面待接入）
+- [x] 任务 GUI（支持 8 类任务 + 固定/随机任务池）
+- [x] 称号 GUI（等级解锁 + 选择/清除）
 - [x] GUI 权限与点击安全（点击取消搬运，关闭清理 session）
 
 **验收**：
@@ -184,7 +184,7 @@
 **验收**：
 - [x] 样例 v1 config 迁移成功：doors=1 buttons=2 respawns=1（含 ELEVATOR 行为，Paper 实测）
 - [x] PAPI 占位符兼容 v1 主要名称（level/xp/coins/kills/doors/phase 别名）
-- [ ] v1 全套 config 迁移报告含需人工确认项（方块快照待扩展）
+- [x] v1 全套 config 迁移报告含需人工确认项（方块快照自动导入/关联已落地）
 
 ---
 
