@@ -1,6 +1,10 @@
 package cn.oneachina.zombierun.v2.application.task
 
 import cn.oneachina.zombierun.v2.application.event.ApplicationEventBus
+import cn.oneachina.zombierun.v2.application.event.GameEndedEvent
+import cn.oneachina.zombierun.v2.application.event.GameStartedEvent
+import cn.oneachina.zombierun.v2.application.event.InfectHumanEvent
+import cn.oneachina.zombierun.v2.application.event.PlayerDamageDealtEvent
 import cn.oneachina.zombierun.v2.application.event.PlayerPassedDoorEvent
 import cn.oneachina.zombierun.v2.application.event.ZombieKilledEvent
 import cn.oneachina.zombierun.v2.application.player.PlayerDataService
@@ -54,28 +58,31 @@ class TaskServiceTest {
         val playerData: PlayerDataService,
     )
 
-    private fun fixture(dir: File): Fixture {
+    private fun fixture(dir: File): Fixture = fixture(
+        dir,
+        """
+        tasks:
+          daily_doors:
+            description: 通过5扇门
+            type: DOOR_PASSES
+            target: 5
+            reward-coins: 50
+            reward-xp: 10
+            period: DAILY
+          weekly_kills:
+            description: 击杀3只僵尸
+            type: ZOMBIE_KILLS
+            target: 3
+            reward-coins: 100
+            reward-xp: 30
+            period: WEEKLY
+        """.trimIndent(),
+    )
+
+    private fun fixture(dir: File, tasksYamlContent: String): Fixture {
         val tasksYaml = File(dir, "config/tasks.yml")
         tasksYaml.parentFile.mkdirs()
-        tasksYaml.writeText(
-            """
-            tasks:
-              daily_doors:
-                description: 通过5扇门
-                type: DOOR_PASSES
-                target: 5
-                reward-coins: 50
-                reward-xp: 10
-                period: DAILY
-              weekly_kills:
-                description: 击杀3只僵尸
-                type: ZOMBIE_KILLS
-                target: 3
-                reward-coins: 100
-                reward-xp: 30
-                period: WEEKLY
-            """.trimIndent(),
-        )
+        tasksYaml.writeText(tasksYamlContent)
         val bus = ApplicationEventBus()
         val taskStorage = FakeTaskStorage()
         val dataStorage = FakeDataStorage()
@@ -150,5 +157,67 @@ class TaskServiceTest {
 
         // 领取走的是当前周期判定，不能凭旧周期的 claimed 直接领取
         assertEquals("任务尚未完成", f.service.claim(id, "daily_doors"))
+    }
+
+    @Test
+    fun `expanded task types increment from events`() {
+        val f = fixture(
+            createTempDirectory("zr2-task-expanded").toFile(),
+            """
+            tasks:
+              daily_alpha:
+                description: 击杀母体
+                type: KILL_ALPHA
+                target: 1
+                reward-coins: 120
+                reward-xp: 30
+                period: DAILY
+              daily_infect:
+                description: 感染人类
+                type: INFECT_HUMAN
+                target: 2
+                reward-coins: 80
+                reward-xp: 20
+                period: DAILY
+              weekly_play:
+                description: 参与对局
+                type: PLAY_GAME
+                target: 3
+                reward-coins: 200
+                reward-xp: 50
+                period: WEEKLY
+              weekly_win:
+                description: 人类胜利
+                type: HUMAN_WIN
+                target: 2
+                reward-coins: 250
+                reward-xp: 60
+                period: WEEKLY
+              daily_damage:
+                description: 造成伤害
+                type: DEAL_DAMAGE
+                target: 100
+                reward-coins: 100
+                reward-xp: 30
+                period: DAILY
+            """.trimIndent(),
+        )
+        val id = UUID.randomUUID()
+        val victim = UUID.randomUUID()
+
+        f.bus.publish(ZombieKilledEvent("w", id, victim, "ZOMBIE_MAIN"))
+        f.bus.publish(InfectHumanEvent(id, victim))
+        f.bus.publish(GameStartedEvent("w", mapOf(id to "HUMAN")))
+        f.bus.publish(GameEndedEvent("w", "HUMAN", setOf(id)))
+        repeat(2) {
+            f.bus.publish(PlayerDamageDealtEvent(id, victim, 50.0))
+        }
+
+        val tasks = f.service.progressOf(id).associate { it.first.id to it.second }
+        assertEquals(1, tasks["daily_alpha"]?.progress)
+        assertEquals(1, tasks["daily_infect"]?.progress)
+        assertEquals(1, tasks["weekly_play"]?.progress)
+        assertEquals(1, tasks["weekly_win"]?.progress)
+        assertEquals(100, tasks["daily_damage"]?.progress)
     }
 }

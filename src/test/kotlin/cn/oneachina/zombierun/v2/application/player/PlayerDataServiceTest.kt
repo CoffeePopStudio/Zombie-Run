@@ -1,6 +1,9 @@
 package cn.oneachina.zombierun.v2.application.player
 
 import cn.oneachina.zombierun.v2.application.event.ApplicationEventBus
+import cn.oneachina.zombierun.v2.application.event.GameEndedEvent
+import cn.oneachina.zombierun.v2.application.event.GameStartedEvent
+import cn.oneachina.zombierun.v2.application.event.InfectHumanEvent
 import cn.oneachina.zombierun.v2.application.event.PlayerPassedDoorEvent
 import cn.oneachina.zombierun.v2.application.event.ZombieKilledEvent
 import cn.oneachina.zombierun.v2.domain.player.PlayerProfile
@@ -12,6 +15,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Logger
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class PlayerDataServiceTest {
 
@@ -55,5 +60,40 @@ class PlayerDataServiceTest {
         val service = PlayerDataService(storage, FakeMessages(), V2Logger(Logger.getLogger("test")), bus)
         val id = UUID.randomUUID()
         assertEquals(null, service.spendCoins(id, 10))
+    }
+
+    @Test
+    fun `infection game and win events update extended stats`() {
+        val storage = FakeStorage()
+        val bus = ApplicationEventBus()
+        val service = PlayerDataService(storage, FakeMessages(), V2Logger(Logger.getLogger("test")), bus)
+        val id = UUID.randomUUID()
+        val victim = UUID.randomUUID()
+
+        bus.publish(InfectHumanEvent(id, victim))
+        bus.publish(GameStartedEvent("w", mapOf(id to "HUMAN")))
+        bus.publish(GameEndedEvent("w", "HUMAN", setOf(id)))
+
+        val profile = service.profileOf(id)
+        assertEquals(1, profile.totalInfections)
+        assertEquals(1, profile.gamesPlayed)
+        assertEquals(1, profile.humanWins)
+    }
+
+    @Test
+    fun `transfer moves coins atomically`() {
+        val storage = FakeStorage()
+        val bus = ApplicationEventBus()
+        val service = PlayerDataService(storage, FakeMessages(), V2Logger(Logger.getLogger("test")), bus)
+        val from = UUID.randomUUID()
+        val to = UUID.randomUUID()
+        service.addCoins(from, 100)
+
+        assertTrue(service.transferCoins(from, to, 40))
+        assertEquals(60, service.profileOf(from).coins)
+        assertEquals(40, service.profileOf(to).coins)
+        assertFalse(service.transferCoins(from, to, 100))
+        assertEquals(60, service.profileOf(from).coins)
+        assertEquals(40, service.profileOf(to).coins)
     }
 }
