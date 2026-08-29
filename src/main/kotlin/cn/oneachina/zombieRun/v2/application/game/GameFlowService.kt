@@ -37,7 +37,7 @@ import kotlin.random.Random
  * 通过 [GameContextPort] 供门系统查询队伍与推进房间。
  */
 class GameFlowService(
-    private val settings: V2Settings,
+    private var settings: V2Settings,
     private val arenaRepository: ArenaYamlRepository,
     private val worldAccess: WorldAccessPort,
     private val scheduler: SchedulerPort,
@@ -81,6 +81,11 @@ class GameFlowService(
         }
     }
 
+    fun updateSettings(newSettings: V2Settings) {
+        settings = newSettings
+        logger.info("game settings updated")
+    }
+
     fun start() {
         stopAutoTick()
         val handle = scheduler.globalTimer(20L, 20L) { autoTick() }
@@ -110,6 +115,9 @@ class GameFlowService(
     }
 
     fun gameWorlds(): Set<String> = arenaRepository.all().map { it.world }.toSet()
+
+    /** 是否为已配置 arena 的世界；所有全局副作用 listener 都应先用它过滤。 */
+    fun isArenaWorld(worldName: String): Boolean = worldName in gameWorlds()
 
     fun instance(worldName: String): GameInstance? = games[worldName]
 
@@ -171,10 +179,11 @@ class GameFlowService(
         if (game.humanIds().isEmpty()) return false
 
         cancelEscape(worldName)
-        val timer = EscapeCountdown(ESCAPE_SECONDS)
+        val countdownSeconds = settings.helicopterCountdownSec
+        val timer = EscapeCountdown(countdownSeconds)
         escapeCountdowns[worldName] = timer
         worldAccess.playersIn(worldName).forEach {
-            messages.chat(it.id, "${operator ?: "玩家"} 启动了直升机撤离！${ESCAPE_SECONDS} 秒后人类获胜")
+            messages.chat(it.id, "${operator ?: "玩家"} 启动了直升机撤离！$countdownSeconds 秒后人类获胜")
         }
 
         val handle = scheduler.globalTimer(1L, 20L) { taskHandle ->
@@ -193,6 +202,8 @@ class GameFlowService(
             } else {
                 escapeCountdowns.remove(worldName, timer)
                 taskHandle.cancel()
+                // 撤离成功：同步 MapFlow 状态（HUMAN_WIN），再统一结算
+                mapFlows[worldName]?.onExtraction()
                 endGame(worldName, game, GameTeam.HUMAN, "直升机撤离成功，人类获胜")
             }
         }
@@ -283,6 +294,7 @@ class GameFlowService(
         }
 
         val startToken = System.currentTimeMillis()
+        gameStartTimes[worldName] = startToken
         val assignments = game.start(playerIds, alphaIndex = Random.nextInt(playerIds.size))
         val alphaId = game.alphaId()
 
@@ -292,9 +304,34 @@ class GameFlowService(
                 teleportTo(worldName, assignment.playerId, spawn)
             }
             if (assignment.team == GameTeam.HUMAN) {
-                mapFlowDef(worldName)?.starterWeaponId?.let { weaponId ->
-                    // 开局发枪 + 自动补满弹药（不扣款）
-                    weaponService?.giveStarter(assignment.playerId, weaponId)
+                val ws = weaponService
+                val starter = mapFlowDef(worldName)?.starterWeaponId
+                val selected = ws?.selectedWeaponId(assignment.playerId)
+                if (ws != null && selected != null) {
+                    val weapon = ws.byId(selected)
+                    if (weapon != null && weapon.enabled) {
+                        val price = weapon.price.toInt()
+                        val afterSpend = playerData?.spendCoins(assignment.playerId, price)
+                        if (afterSpend != null) {
+                            val ok = ws.giveWeaponWithAmmo(assignment.playerId, selected)
+                            if (ok) {
+                                messages.chat(assignment.playerId, "已购买预选武器：${weapon.displayName}（-$price 硬币）")
+                            } else {
+                                playerData?.addCoins(assignment.playerId, price)
+                                messages.chat(assignment.playerId, "预选武器发放失败，已退款；改发默认武器")
+                                starter?.let { ws.giveStarter(assignment.playerId, it) }
+                            }
+                        } else {
+                            messages.chat(assignment.playerId, "预选武器余额不足，改发默认武器")
+                            starter?.let { ws.giveStarter(assignment.playerId, it) }
+                        }
+                    } else {
+                        starter?.let { ws.giveStarter(assignment.playerId, it) }
+                    }
+                    ws.clearSelected(assignment.playerId)
+                } else {
+                    // 开局默认武器（不扣款）
+                    starter?.let { ws?.giveStarter(assignment.playerId, it) }
                 }
             } else if (assignment.team == GameTeam.ZOMBIE_MAIN) {
                 val releaseDelay = mapFlowDef(worldName)?.motherReleaseDelaySeconds ?: 0
@@ -313,6 +350,9 @@ class GameFlowService(
             messages.chat(p.id, "对局开始！你是 $teamName，母体：$alphaName")
         }
         messages.soundBell(worldName)
+        if (settings.startEffects.isNotEmpty()) {
+            startEffectExecutor?.invoke(worldName)
+        }
         logger.info("[$worldName] game started: ${playerIds.size} players, alpha=$alphaName")
 
         eventBus.publish(
@@ -337,6 +377,7 @@ class GameFlowService(
         val durationTicks = rules(worldName).maxDurationSeconds * 20L
         val handle = scheduler.globalLater(durationTicks) {
             if (game.phaseSnapshot() == GamePhase.RUNNING) {
+                mapFlows[worldName]?.onTimeUp()
                 endGame(worldName, game, GameTeam.HUMAN, "时间耗尽，人类获胜")
             }
         }
@@ -426,6 +467,42 @@ class GameFlowService(
     fun currentStageLabel(worldName: String): String? =
         mapFlows[worldName]?.currentStage()?.label
 
+    // ---------- PAPI / 展示辅助 ----------
+
+    fun humanCount(worldName: String): Int = instance(worldName)?.humanIds()?.size ?: 0
+
+    fun zombieCount(worldName: String): Int = instance(worldName)?.zombieIds()?.size ?: 0
+
+    fun alphaName(worldName: String): String =
+        instance(worldName)?.alphaId()?.let { worldAccess.player(it)?.name } ?: ""
+
+    fun gameStateFormatted(worldName: String): String =
+        phaseOf(worldName)?.name?.lowercase() ?: "none"
+
+    fun timeLeftSeconds(worldName: String): Int {
+        val game = instance(worldName) ?: return 0
+        if (game.phaseSnapshot() != GamePhase.RUNNING) return 0
+        val start = gameStartTimes[worldName] ?: return 0
+        val maxSeconds = rules(worldName).maxDurationSeconds
+        return ((start + maxSeconds * 1000L - System.currentTimeMillis()) / 1000L).toInt().coerceAtLeast(0)
+    }
+
+    fun progressPercent(worldName: String): Double {
+        val machine = mapFlows[worldName] ?: return 0.0
+        val total = machine.definition.stages.size
+        if (total == 0) return 0.0
+        return machine.passedStages().size.toDouble() / total
+    }
+
+    fun minPlayers(worldName: String): Int = rules(worldName).minPlayers
+
+    fun maxPlayers(worldName: String): Int = settings.maxPlayers
+
+    fun onlinePlayers(worldName: String): Int = worldAccess.playersIn(worldName).size
+
+    fun roomOf(worldName: String, playerId: UUID): Int =
+        instance(worldName)?.roomOf(playerId) ?: 0
+
     override fun isDoorUnlocked(worldName: String, doorNumber: Int): Boolean {
         val machine = mapFlows[worldName] ?: return true
         if (machine.phaseSnapshot() != MapFlowPhase.RUNNING) return false
@@ -489,6 +566,8 @@ class GameFlowService(
     private fun handlePlayerGone(worldName: String, playerId: UUID) {
         val game = games[worldName] ?: return
         val removedTeam = game.removePlayer(playerId) ?: return
+        // 离开对局世界/退出时清理保护状态，避免跨世界残留无敌
+        protectedUntil.remove(playerId)
         if (game.phaseSnapshot() != GamePhase.RUNNING) return
 
         if (removedTeam == GameTeam.ZOMBIE_MAIN) {
@@ -533,7 +612,7 @@ class GameFlowService(
 
         val spawn = spawnForTeam(worldName, GameTeam.ZOMBIE)
         if (spawn != null) {
-            protect(victimId, 3)
+            protect(victimId, settings.infectCountdownSec)
             val handle = scheduler.globalLater(20L) { teleportTo(worldName, victimId, spawn) }
             taskRegistry.register(handle)
         }
@@ -610,13 +689,15 @@ class GameFlowService(
         scheduleZombieRespawn(worldName, playerId, "你已复活为僵尸！")
     }
 
-    /** 延迟复活僵尸：传送布防 + 僵尸增益 + 消息。 */
+    /** 延迟复活僵尸/母体：传送布防 + 僵尸增益 + 消息。 */
     private fun scheduleZombieRespawn(worldName: String, playerId: UUID, message: String) {
-        val handle = scheduler.globalLater(RESPAWN_DELAY_TICKS) {
+        val handle = scheduler.globalLater(settings.respawnDelayTicks) {
             val game = games[worldName] ?: return@globalLater
             if (game.phaseSnapshot() != GamePhase.RUNNING) return@globalLater
-            if (game.teamOf(playerId) != GameTeam.ZOMBIE) return@globalLater
-            val spawn = spawnForTeam(worldName, GameTeam.ZOMBIE)
+            val team = game.teamOf(playerId) ?: return@globalLater
+            if (team != GameTeam.ZOMBIE && team != GameTeam.ZOMBIE_MAIN) return@globalLater
+            val spawnTeam = if (team == GameTeam.ZOMBIE_MAIN) GameTeam.ZOMBIE_MAIN else GameTeam.ZOMBIE
+            val spawn = spawnForTeam(worldName, spawnTeam)
             if (spawn != null) teleportTo(worldName, playerId, spawn)
             zombieBuffApplier?.invoke(playerId)
             worldAccess.player(playerId)?.let { messages.chat(it.id, message) }
@@ -632,6 +713,9 @@ class GameFlowService(
 
     /** 自动开门钩子：由装配点注入（DoorApplicationService.triggerAutoDoors）。 */
     var doorAutoOpener: ((worldName: String, mode: String) -> Unit)? = null
+
+    /** 开局效果钩子：由装配点注入（执行 settings.start-effects 控制台命令）。 */
+    var startEffectExecutor: ((worldName: String) -> Unit)? = null
 
     private fun autoOpenDoors(worldName: String, mode: String) {
         doorAutoOpener?.invoke(worldName, mode)
@@ -659,7 +743,7 @@ class GameFlowService(
         if (game.phaseSnapshot() != GamePhase.RUNNING) return
         if (game.teamOf(victimId) != GameTeam.ZOMBIE && game.teamOf(victimId) != GameTeam.ZOMBIE_MAIN) return
         zombieKills.merge(killerId, 1, Int::plus)
-        eventBus.publish(ZombieKilledEvent(worldName, killerId, victimId))
+        eventBus.publish(ZombieKilledEvent(worldName, killerId, victimId, game.teamOf(victimId)?.name))
         val killerName = worldAccess.player(killerId)?.name ?: killerId.toString()
         val victimName = worldAccess.player(victimId)?.name ?: victimId.toString()
         worldAccess.playersIn(worldName).forEach {
@@ -674,7 +758,7 @@ class GameFlowService(
         if (team == GameTeam.SPECTATOR) return
         val spawn = spawnForTeam(worldName, team)
         if (spawn != null) {
-            protect(playerId, 3)
+            protect(playerId, settings.infectCountdownSec)
             val handle = scheduler.globalLater(2L) { teleportTo(worldName, playerId, spawn) }
             taskRegistry.register(handle)
         }
@@ -741,7 +825,12 @@ class GameFlowService(
         awardRankRewards(worldName, game)
         awardMapFlowRewards(worldName, game, winner)
         logger.info("[$worldName] game ended: winner=$winner - $message")
-        eventBus.publish(GameEndedEvent(worldName, winner.name))
+        val winnerPlayerIds = when (winner) {
+            GameTeam.HUMAN -> game.humanIds()
+            GameTeam.ZOMBIE, GameTeam.ZOMBIE_MAIN -> game.zombieIds()
+            else -> emptySet()
+        }
+        eventBus.publish(GameEndedEvent(worldName, winner.name, winnerPlayerIds))
 
         // 完整流程：5 秒后自动回到等待阶段，准备下一局
         val resetHandle = scheduler.globalLater(100L) {

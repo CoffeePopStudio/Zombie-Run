@@ -35,6 +35,7 @@ class SqlitePlayerDataRepository(
         }
         dataSource = HikariDataSource(config)
         createTable()
+        migrateColumns()
         logger.info("SQLite player data initialized: $dbFile")
     }
 
@@ -50,7 +51,11 @@ class SqlitePlayerDataRepository(
                         level INTEGER NOT NULL DEFAULT 1,
                         title TEXT,
                         zombie_kills INTEGER NOT NULL DEFAULT 0,
-                        door_passes INTEGER NOT NULL DEFAULT 0
+                        door_passes INTEGER NOT NULL DEFAULT 0,
+                        total_infections INTEGER NOT NULL DEFAULT 0,
+                        games_played INTEGER NOT NULL DEFAULT 0,
+                        human_wins INTEGER NOT NULL DEFAULT 0,
+                        unlocked_titles TEXT NOT NULL DEFAULT ''
                     )
                     """.trimIndent()
                 )
@@ -58,10 +63,35 @@ class SqlitePlayerDataRepository(
         }
     }
 
+    private fun migrateColumns() {
+        dataSource.connection.use { conn ->
+            val columns = mutableSetOf<String>()
+            conn.createStatement().use { st ->
+                st.executeQuery("PRAGMA table_info(player_data_v2)").use { rs ->
+                    while (rs.next()) columns.add(rs.getString("name"))
+                }
+            }
+            val additions = mapOf(
+                "total_infections" to "INTEGER NOT NULL DEFAULT 0",
+                "games_played" to "INTEGER NOT NULL DEFAULT 0",
+                "human_wins" to "INTEGER NOT NULL DEFAULT 0",
+                "unlocked_titles" to "TEXT NOT NULL DEFAULT ''",
+            )
+            additions.forEach { (column, definition) ->
+                if (column !in columns) {
+                    conn.createStatement().use { st ->
+                        st.executeUpdate("ALTER TABLE player_data_v2 ADD COLUMN $column $definition")
+                    }
+                    logger.info("SQLite player data column added: $column")
+                }
+            }
+        }
+    }
+
     override fun load(playerId: UUID): PlayerProfile? {
         dataSource.connection.use { conn ->
             conn.prepareStatement(
-                "SELECT player_id, coins, xp, level, title, zombie_kills, door_passes FROM player_data_v2 WHERE player_id = ?"
+                "SELECT player_id, coins, xp, level, title, zombie_kills, door_passes, total_infections, games_played, human_wins, unlocked_titles FROM player_data_v2 WHERE player_id = ?"
             ).use { ps ->
                 ps.setString(1, playerId.toString())
                 ps.executeQuery().use { rs ->
@@ -76,15 +106,22 @@ class SqlitePlayerDataRepository(
         dataSource.connection.use { conn ->
             conn.prepareStatement(
                 """
-                INSERT INTO player_data_v2 (player_id, coins, xp, level, title, zombie_kills, door_passes)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO player_data_v2 (
+                    player_id, coins, xp, level, title, zombie_kills, door_passes,
+                    total_infections, games_played, human_wins, unlocked_titles
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(player_id) DO UPDATE SET
                     coins = excluded.coins,
                     xp = excluded.xp,
                     level = excluded.level,
                     title = excluded.title,
                     zombie_kills = excluded.zombie_kills,
-                    door_passes = excluded.door_passes
+                    door_passes = excluded.door_passes,
+                    total_infections = excluded.total_infections,
+                    games_played = excluded.games_played,
+                    human_wins = excluded.human_wins,
+                    unlocked_titles = excluded.unlocked_titles
                 """.trimIndent()
             ).use { ps ->
                 ps.setString(1, profile.playerId.toString())
@@ -94,7 +131,30 @@ class SqlitePlayerDataRepository(
                 ps.setString(5, profile.title)
                 ps.setInt(6, profile.zombieKills)
                 ps.setInt(7, profile.doorPasses)
+                ps.setInt(8, profile.totalInfections)
+                ps.setInt(9, profile.gamesPlayed)
+                ps.setInt(10, profile.humanWins)
+                ps.setString(11, profile.unlockedTitles.joinToString(","))
                 ps.executeUpdate()
+            }
+        }
+    }
+
+    override fun topCoins(limit: Int): List<Pair<UUID, Int>> {
+        val safeLimit = limit.coerceIn(1, 100)
+        dataSource.connection.use { conn ->
+            conn.prepareStatement(
+                "SELECT player_id, coins FROM player_data_v2 ORDER BY coins DESC LIMIT ?"
+            ).use { ps ->
+                ps.setInt(1, safeLimit)
+                ps.executeQuery().use { rs ->
+                    val result = ArrayList<Pair<UUID, Int>>(safeLimit)
+                    while (rs.next()) {
+                        val id = runCatching { UUID.fromString(rs.getString("player_id")) }.getOrNull() ?: continue
+                        result += id to rs.getInt("coins")
+                    }
+                    return result
+                }
             }
         }
     }
@@ -113,5 +173,13 @@ class SqlitePlayerDataRepository(
             title = getString("title"),
             zombieKills = getInt("zombie_kills"),
             doorPasses = getInt("door_passes"),
+            totalInfections = getInt("total_infections"),
+            gamesPlayed = getInt("games_played"),
+            humanWins = getInt("human_wins"),
+            unlockedTitles = getString("unlocked_titles")
+                ?.split(',')
+                ?.filter { it.isNotBlank() }
+                ?.toSet()
+                ?: emptySet(),
         )
 }

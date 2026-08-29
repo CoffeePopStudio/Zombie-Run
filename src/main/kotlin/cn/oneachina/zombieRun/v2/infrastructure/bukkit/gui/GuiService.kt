@@ -104,6 +104,10 @@ class GuiService(
                     "称号: ${profile.title ?: "无"}",
                     "门数: ${profile.doorPasses}",
                     "击杀: ${profile.zombieKills}",
+                    "感染: ${profile.totalInfections}",
+                    "场次: ${profile.gamesPlayed}",
+                    "人类胜利: ${profile.humanWins}",
+                    "已解锁称号: ${profile.unlockedTitles.size}",
                 ),
             ),
         )
@@ -283,6 +287,7 @@ class GuiService(
     }
 
     fun openTitles(player: Player) {
+        val profile = playerData.profileOf(player.uniqueId)
         val list = titleCatalog()
         val holder = Holder("titles")
         val rows = ((list.size + 8) / 9).coerceAtMost(6).coerceAtLeast(1)
@@ -290,23 +295,41 @@ class GuiService(
         holder.backingInventory = inv
         val actions = mutableMapOf<Int, (Player, InventoryClickEvent) -> Unit>()
 
-        list.forEachIndexed { index, title ->
+        list.forEachIndexed { index, def ->
             val slot = index
             if (slot >= rows * 9) return@forEachIndexed
-            val current = playerData.profileOf(player.uniqueId).title
-            val selected = current == title
+            val current = profile.title
+            val selected = current == def.name
+            val unlocked = profile.isTitleUnlocked(def.name) || profile.level >= def.level
             inv.setItem(
                 slot,
                 icon(
-                    if (selected) Material.NAME_TAG else Material.PAPER,
-                    title,
-                    listOf(if (selected) "§a当前称号" else "§e点击使用"),
+                    when {
+                        selected -> Material.NAME_TAG
+                        unlocked -> Material.PAPER
+                        else -> Material.GRAY_DYE
+                    },
+                    def.name,
+                    listOf(
+                        "需要等级: ${def.level}",
+                        when {
+                            selected -> "§a当前称号"
+                            unlocked -> "§e点击使用"
+                            else -> "§c未解锁"
+                        },
+                    ),
                 ),
             )
             actions[slot] = { p, _ ->
-                playerData.setTitle(p.uniqueId, title)
-                p.sendMessage(Component.text("已设置称号：$title", NamedTextColor.GREEN))
-                p.closeInventory()
+                if (unlocked) {
+                    // 确保解锁状态已持久化
+                    playerData.unlockTitle(p.uniqueId, def.name)
+                    playerData.setTitle(p.uniqueId, def.name)
+                    p.sendMessage(Component.text("已设置称号：${def.name}", NamedTextColor.GREEN))
+                    p.closeInventory()
+                } else {
+                    p.sendMessage(Component.text("需要达到等级 ${def.level} 才能解锁该称号", NamedTextColor.RED))
+                }
             }
         }
 
@@ -321,15 +344,17 @@ class GuiService(
         register(player, inv, "titles", actions)
     }
 
-    /** 可配置称号目录；后续可改为读取 config/titles.yml。 */
-    private fun titleCatalog(): List<String> = listOf(
-        "新人",
-        "跑酷者",
-        "门之守护者",
-        "僵尸杀手",
-        "逃生专家",
-        "金色传说",
+    /** 称号目录（含解锁等级，与 PlayerDataService.TITLE_LEVELS 保持一致）。 */
+    private fun titleCatalog(): List<TitleDef> = listOf(
+        TitleDef("新人", 1),
+        TitleDef("跑酷者", 5),
+        TitleDef("门之守护者", 10),
+        TitleDef("僵尸杀手", 15),
+        TitleDef("逃生专家", 20),
+        TitleDef("金色传说", 30),
     )
+
+    private data class TitleDef(val name: String, val level: Int)
 
     private fun register(player: Player, inv: Inventory, menuId: String, actions: Map<Int, (Player, InventoryClickEvent) -> Unit>) {
         slots[player.uniqueId] = actions

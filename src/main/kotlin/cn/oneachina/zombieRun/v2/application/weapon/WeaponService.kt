@@ -18,6 +18,27 @@ class WeaponService(
     private val messages: PlayerMessagePort,
     private val logger: V2Logger,
 ) {
+    /** 玩家预选武器（内存态，对齐 v1 /zr select）。 */
+    private val selectedWeapon = java.util.concurrent.ConcurrentHashMap<UUID, String>()
+
+    fun selectWeapon(playerId: UUID, weaponId: String): Boolean {
+        val weapon = repository.byId(weaponId) ?: return false
+        if (!weapon.enabled) return false
+        selectedWeapon[playerId] = weaponId
+        messages.chat(playerId, "已预选武器：${weapon.displayName}，开局自动购买发放")
+        return true
+    }
+
+    fun unselectWeapon(playerId: UUID) {
+        selectedWeapon.remove(playerId)
+        messages.chat(playerId, "已取消预选武器")
+    }
+
+    fun selectedWeaponId(playerId: UUID): String? = selectedWeapon[playerId]
+
+    fun clearSelected(playerId: UUID) {
+        selectedWeapon.remove(playerId)
+    }
     fun reload() {
         repository.loadAll()
     }
@@ -47,7 +68,7 @@ class WeaponService(
     fun giveRandom(playerId: UUID, category: WeaponCategory?): WeaponDefinition? {
         val candidates = repository.all().filter { it.enabled && (category == null || it.category == category) }
         val weapon = candidates.randomOrNull() ?: return null
-        val ok = integration.giveWeapon(playerId, weapon.displayName)
+        val ok = integration.giveWeapon(playerId, weapon.type)
         if (ok) {
             messages.chat(playerId, "随机武器：${weapon.displayName}")
         } else {
@@ -68,6 +89,18 @@ class WeaponService(
             return false
         }
         integration.refillAmmo(playerId, weapon.type, STARTER_MAGAZINES)
+        return true
+    }
+
+    /** 主动发枪（命令/商店），成功即补 1 个弹匣，保证能直接开火。 */
+    fun giveWeaponWithAmmo(playerId: UUID, weaponId: String): Boolean {
+        val weapon = repository.byId(weaponId) ?: return false
+        val ok = integration.giveWeapon(playerId, weapon.type)
+        if (!ok) {
+            messages.chat(playerId, "武器 ${weapon.displayName} 发放失败（外部武器系统不可用）")
+            return false
+        }
+        integration.refillAmmo(playerId, weapon.type, 1)
         return true
     }
 

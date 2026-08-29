@@ -6,6 +6,7 @@ import java.util.UUID
  * 玩家持久化进度聚合（纯 Kotlin）。
  *
  * [level] 由累计经验决定；[title] 为玩家当前称号（null 表示未设置）。
+ * [unlockedTitles] 为已解锁称号集合（等级达到后自动解锁）。
  */
 data class PlayerProfile(
     val playerId: UUID,
@@ -15,6 +16,10 @@ data class PlayerProfile(
     val title: String? = null,
     val zombieKills: Int = 0,
     val doorPasses: Int = 0,
+    val totalInfections: Int = 0,
+    val gamesPlayed: Int = 0,
+    val humanWins: Int = 0,
+    val unlockedTitles: Set<String> = emptySet(),
 ) {
     fun addCoins(amount: Int): PlayerProfile =
         copy(coins = coins + amount)
@@ -43,6 +48,20 @@ data class PlayerProfile(
 
     fun addDoorPass(): PlayerProfile =
         copy(doorPasses = doorPasses + 1)
+
+    fun addInfection(): PlayerProfile =
+        copy(totalInfections = totalInfections + 1)
+
+    fun addGamePlayed(): PlayerProfile =
+        copy(gamesPlayed = gamesPlayed + 1)
+
+    fun addHumanWin(): PlayerProfile =
+        copy(humanWins = humanWins + 1)
+
+    fun unlockTitle(newTitle: String): PlayerProfile =
+        if (newTitle in unlockedTitles) this else copy(unlockedTitles = unlockedTitles + newTitle)
+
+    fun isTitleUnlocked(title: String): Boolean = title in unlockedTitles
 
     fun nextLevelXp(): Int = 100 * level
 

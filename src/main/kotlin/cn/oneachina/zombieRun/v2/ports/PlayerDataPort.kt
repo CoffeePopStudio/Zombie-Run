@@ -10,4 +10,7 @@ interface PlayerDataPort {
     fun load(playerId: UUID): PlayerProfile?
     fun save(profile: PlayerProfile)
     fun close()
+
+    /** 按硬币余额倒序返回 Top-N；默认空列表便于测试替身，正式存储应覆盖。 */
+    fun topCoins(limit: Int): List<Pair<UUID, Int>> = emptyList()
 }

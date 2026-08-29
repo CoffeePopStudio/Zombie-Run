@@ -15,6 +15,15 @@ data class V2Settings(
     val staminaSprintDrain: Double,
     val staminaRegen: Double,
     val staminaExhaustDelayTicks: Int,
+    val startEffects: List<String> = emptyList(),
+    val maxPlayers: Int = 0,
+    val doorOpenCooldownMs: Long = 0,
+    val transferCountdownSec: Int = 10,
+    val helicopterCountdownSec: Int = 30,
+    val infectCountdownSec: Int = 3,
+    val respawnDelayTicks: Long = 100,
+    val adsSpeedMultiplier: Double = 1.0,
+    val defaultMoveSpeed: Double = 0.2,
     val economy: cn.oneachina.zombierun.v2.domain.combat.EconomyRules,
 )
 
@@ -39,10 +48,19 @@ class V2SettingsLoader(
             startDelaySeconds = yaml.getInt("game.start-delay", 30),
             minPlayers = yaml.getInt("game.min-players", 8),
             maxDurationSeconds = yaml.getInt("game.max-duration", 1800),
+            maxPlayers = yaml.getInt("game.max-players", 0),
             staminaMax = yaml.getDouble("stamina.max", 20.0),
             staminaSprintDrain = yaml.getDouble("stamina.sprint-drain", 0.25),
             staminaRegen = yaml.getDouble("stamina.regen", 0.08),
             staminaExhaustDelayTicks = yaml.getInt("stamina.exhaust-delay-ticks", 40),
+            startEffects = yaml.getStringList("start-effects"),
+            doorOpenCooldownMs = yaml.getLong("balance.door-open-cooldown-ms", 0),
+            transferCountdownSec = yaml.getInt("balance.transfer-countdown-sec", 10),
+            helicopterCountdownSec = yaml.getInt("balance.helicopter-countdown-sec", 30),
+            infectCountdownSec = yaml.getInt("balance.infect-countdown-sec", 3),
+            respawnDelayTicks = yaml.getLong("balance.respawn-delay-ticks", 100),
+            adsSpeedMultiplier = yaml.getDouble("balance.ads-speed-multiplier", 1.0),
+            defaultMoveSpeed = yaml.getDouble("balance.default-move-speed", 0.2),
             economy = cn.oneachina.zombierun.v2.domain.combat.EconomyRules(
                 killZombieCoins = yaml.getInt("economy.kill-zombie-coins", 50),
                 killZombieXp = yaml.getInt("economy.kill-zombie-xp", 30),
@@ -68,12 +86,22 @@ class V2SettingsLoader(
               default-world: world
               start-delay: 30
               min-players: 8
+              max-players: 0
               max-duration: 1800
             stamina:
               max: 20.0
               sprint-drain: 0.25
               regen: 0.08
               exhaust-delay-ticks: 40
+            start-effects: []
+            balance:
+              door-open-cooldown-ms: 0
+              transfer-countdown-sec: 10
+              helicopter-countdown-sec: 30
+              infect-countdown-sec: 3
+              respawn-delay-ticks: 100
+              ads-speed-multiplier: 1.0
+              default-move-speed: 0.2
             economy:
               kill-zombie-coins: 50
               kill-zombie-xp: 30

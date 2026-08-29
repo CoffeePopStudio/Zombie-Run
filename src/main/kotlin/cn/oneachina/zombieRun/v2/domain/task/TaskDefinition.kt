@@ -1,6 +1,15 @@
 package cn.oneachina.zombierun.v2.domain.task
 
-enum class TaskType { DOOR_PASSES, ZOMBIE_KILLS }
+enum class TaskType {
+    DOOR_PASSES,
+    ZOMBIE_KILLS,
+    KILL_ALPHA,
+    INFECT_HUMAN,
+    PLAY_GAME,
+    HUMAN_WIN,
+    SURVIVE_TIME,
+    DEAL_DAMAGE,
+}
 
 enum class TaskPeriod { DAILY, WEEKLY }
 
