@@ -175,7 +175,7 @@ class Zr2Command(
         sender.sendMessage(Component.text("/zr2 version", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 arena list | info <名称> | create <名称> [世界] | remove <名称>", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 door list [世界] | info <id> | test <id> | trigger <门号>", NamedTextColor.YELLOW))
-        sender.sendMessage(Component.text("/zr2 door add [--arena <名称>] [坐标6个] <axis> <front> [--number N] [--group G] [--open N] [--close N]（省略 --arena 自动使用当前世界；/zr2 postool 选区后可省略坐标）", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 door add [--arena <名称>] [坐标6个] [axis] [front] [--number N] [--group G] [--open N] [--close N]（省略 --arena 自动使用当前世界；用 postool 选区后可省略坐标并自动推断 axis/front）", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 postool - 切换选区工具（木棍左键=pos1 右键=pos2）", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 lobby - 返回当前世界等待大厅", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 debug - 切换 debug 日志（管理员）", NamedTextColor.YELLOW))
@@ -527,8 +527,33 @@ class Zr2Command(
             listOf(a.blockX, a.blockY, a.blockZ, b.blockX, b.blockY, b.blockZ).map { it.toString() } + parsed.positional
         }
 
+        // 懒人模式：没写 axis/front 时，根据 postool 选区和玩家朝向自动推断
+        var finalPositional = positional
+        if (finalPositional.size < 8) {
+            val p = sender as? Player
+            val a = p?.let { pos1[it.uniqueId] }
+            val b = p?.let { pos2[it.uniqueId] }
+            if (p == null || a == null || b == null) {
+                sender.sendMessage(Component.text("自动推断需要玩家使用 /zr2 postool 选区，或手动提供 axis/front", NamedTextColor.RED))
+                return
+            }
+            val axis = when {
+                a.blockX == b.blockX -> "x"
+                a.blockZ == b.blockZ -> "z"
+                a.blockY == b.blockY -> "y"
+                else -> null
+            }
+            if (axis == null) {
+                sender.sendMessage(Component.text("选区不是平面门（需要 x 相同、z 相同或 y 相同）", NamedTextColor.RED))
+                return
+            }
+            val front = autoFront(p, axis)
+            finalPositional = finalPositional + listOf(axis, front)
+            sender.sendMessage(Component.text("已自动推断：axis=$axis front=$front（如需手动指定，可继续加 axis/front 参数）", NamedTextColor.GREEN))
+        }
+
         val doorId = "door_${System.currentTimeMillis()}"
-        val result = parseDoorAdd(arena, doorId, parsed.options, positional)
+        val result = parseDoorAdd(arena, doorId, parsed.options, finalPositional)
         if (result is DoorAddParseResult.Error) {
             sender.sendMessage(Component.text(result.message, NamedTextColor.RED))
             return
@@ -1483,6 +1508,17 @@ class Zr2Command(
         if (arenaName != null) return root.arenaRepository.byName(arenaName)
         val player = sender as? Player ?: return null
         return root.arenaRepository.byWorld(player.world.name).firstOrNull()
+    }
+
+    /** 根据玩家面朝方向推断 front。 */
+    private fun autoFront(player: Player, axis: String): String {
+        val dir = player.location.direction
+        return when (axis) {
+            "x" -> if (dir.x >= 0) "positive" else "negative"
+            "z" -> if (dir.z >= 0) "positive" else "negative"
+            "y" -> if (player.location.pitch < 0) "positive" else "negative"
+            else -> "positive"
+        }
     }
 
     private fun noPermission(sender: CommandSender) {
