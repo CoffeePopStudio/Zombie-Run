@@ -175,12 +175,12 @@ class Zr2Command(
         sender.sendMessage(Component.text("/zr2 version", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 arena list | info <名称> | create <名称> [世界] | remove <名称>", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 door list [世界] | info <id> | test <id> | trigger <门号>", NamedTextColor.YELLOW))
-        sender.sendMessage(Component.text("/zr2 door add --arena <名称> [坐标6个] <axis> <front> [--number N] [--group G] [--open N] [--close N]（/zr2 postool 选区后可省略坐标）", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 door add [--arena <名称>] [坐标6个] <axis> <front> [--number N] [--group G] [--open N] [--close N]（省略 --arena 自动使用当前世界；/zr2 postool 选区后可省略坐标）", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 postool - 切换选区工具（木棍左键=pos1 右键=pos2）", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 lobby - 返回当前世界等待大厅", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 debug - 切换 debug 日志（管理员）", NamedTextColor.YELLOW))
-        sender.sendMessage(Component.text("/zr2 button add --arena <名称> <x> <y> <z> normal <门号>", NamedTextColor.YELLOW))
-        sender.sendMessage(Component.text("/zr2 respawn add --arena <名称> <type> <x> <y> <z> [door-number] [yaw] [pitch]", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 button add [--arena <名称>] <x> <y> <z> normal <门号>（省略 --arena 自动使用当前世界）", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 respawn add [--arena <名称>] <type> <x> <y> <z> [door-number] [yaw] [pitch]（省略 --arena 自动使用当前世界）", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 game list | status <世界> | start <世界> | end <世界> <human|zombie> | reset <世界>", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 weapon list | info <id> | add <id> <type> <category> <price> [name] | remove <id> | give <id> | random [category] | select <id> | unselect", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 profile [玩家] | coins add|give|remove|set|get|spend|transfer|top | xp add|set | level set | reset <玩家> | title set|clear", NamedTextColor.YELLOW))
@@ -495,7 +495,7 @@ class Zr2Command(
             pos1.remove(id); pos2.remove(id)
             sender.inventory.addItem(org.bukkit.inventory.ItemStack(org.bukkit.Material.STICK))
             sender.sendMessage(Component.text("已给你一根选区棒！左键方块=pos1，右键方块=pos2", NamedTextColor.GREEN))
-            sender.sendMessage(Component.text("之后可用 /zr2 door add --arena <名称> <axis> <front> 省略坐标", NamedTextColor.GRAY))
+            sender.sendMessage(Component.text("之后可用 /zr2 door add <axis> <front> 省略坐标和 --arena（自动使用当前世界）", NamedTextColor.GRAY))
         } else {
             sender.sendMessage(Component.text("postool 已关闭", NamedTextColor.YELLOW))
         }
@@ -507,10 +507,9 @@ class Zr2Command(
             return
         }
         val parsed = parseArgs(args)
-        val arenaName = parsed.options["arena"]
-        val arena = arenaName?.let { root.arenaRepository.byName(it) }
+        val arena = resolveArena(sender, parsed.options["arena"])
         if (arena == null) {
-            sender.sendMessage(Component.text("用法: /zr2 door add --arena <名称> <坐标6个|省略> <axis> <front>（/zr2 postool 选区后可省略坐标）", NamedTextColor.RED))
+            sender.sendMessage(Component.text("用法: /zr2 door add [--arena <名称>] <坐标6个|省略> <axis> <front>（省略 --arena 时自动使用当前世界 arena；/zr2 postool 选区后可省略坐标）", NamedTextColor.RED))
             return
         }
 
@@ -585,9 +584,9 @@ class Zr2Command(
 
     private fun addButton(sender: CommandSender, args: List<String>) {
         val (options, positional) = parseArgs(args)
-        val arena = options["arena"]?.let { root.arenaRepository.byName(it) }
+        val arena = resolveArena(sender, options["arena"])
         if (arena == null || positional.size < 4) {
-            sender.sendMessage(Component.text("用法: /zr2 button add --arena <名称> <x> <y> <z> <normal|escape> [门号...]", NamedTextColor.RED))
+            sender.sendMessage(Component.text("用法: /zr2 button add [--arena <名称>] <x> <y> <z> <normal|escape> [门号...]（省略 --arena 时自动使用当前世界 arena）", NamedTextColor.RED))
             return
         }
         val coords = positional.take(3).map { it.toIntOrNull() }
@@ -653,9 +652,9 @@ class Zr2Command(
 
     private fun addRespawn(sender: CommandSender, args: List<String>) {
         val (options, positional) = parseArgs(args)
-        val arena = options["arena"]?.let { root.arenaRepository.byName(it) }
+        val arena = resolveArena(sender, options["arena"])
         if (arena == null || positional.size < 4) {
-            sender.sendMessage(Component.text("用法: /zr2 respawn add --arena <名称> <type> <x> <y> <z> [door-number] [yaw] [pitch]", NamedTextColor.RED))
+            sender.sendMessage(Component.text("用法: /zr2 respawn add [--arena <名称>] <type> <x> <y> <z> [door-number] [yaw] [pitch]（省略 --arena 时自动使用当前世界 arena）", NamedTextColor.RED))
             return
         }
         val type = RespawnType.entries.firstOrNull { it.name.equals(positional[0], ignoreCase = true) }
@@ -1478,6 +1477,13 @@ class Zr2Command(
 
     private fun arenaNames(prefix: String): List<String> =
         root.arenaRepository.all().map { it.name }.filter { it.startsWith(prefix, true) }
+
+    /** 解析 arena：显式 --arena 优先；省略时按玩家当前世界智能推断。 */
+    private fun resolveArena(sender: CommandSender, arenaName: String?): ArenaDefinition? {
+        if (arenaName != null) return root.arenaRepository.byName(arenaName)
+        val player = sender as? Player ?: return null
+        return root.arenaRepository.byWorld(player.world.name).firstOrNull()
+    }
 
     private fun noPermission(sender: CommandSender) {
         sender.sendMessage(Component.text("你没有权限执行此命令", NamedTextColor.RED))
