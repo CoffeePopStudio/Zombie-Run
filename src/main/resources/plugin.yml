@@ -16,6 +16,10 @@ commands:
     description: ZombieRun v2 命令
     usage: /zr2 <help>
     aliases: [zombierun2]
+  zr:
+    description: ZombieRun v2 v1 兼容命令
+    usage: /zr <help>
+    aliases: [zombierun]
 
 permissions:
   zombie.run.v2.admin:

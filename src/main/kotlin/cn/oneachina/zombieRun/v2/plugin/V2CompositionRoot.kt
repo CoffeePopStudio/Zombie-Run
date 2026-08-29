@@ -237,6 +237,8 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         val command = Zr2Command(this, settings.defaultWorld, plugin)
         plugin.getCommand("zr2")?.setExecutor(command)
         plugin.getCommand("zr2")?.tabCompleter = command
+        plugin.getCommand("zr")?.setExecutor(command)
+        plugin.getCommand("zr")?.tabCompleter = command
         plugin.server.pluginManager.registerEvents(command, plugin)
     }
 

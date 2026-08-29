@@ -74,6 +74,10 @@ class Zr2Command(
             help(sender)
             return true
         }
+        val translated = translateV1Command(sender, args)
+        if (translated != null) {
+            return handleCommand(sender, translated)
+        }
         when (args[0].lowercase()) {
             "help" -> help(sender)
             "version" -> version(sender)
@@ -102,6 +106,54 @@ class Zr2Command(
             }
         }
         return true
+    }
+
+    /** v1 命令 → v2 命令兼容映射；返回 null 表示本身就是 v2 命令。 */
+    private fun translateV1Command(sender: CommandSender, args: Array<out String>): Array<out String>? {
+        val head = args[0].lowercase()
+        val rest = args.drop(1)
+        fun playerWorld(): String = (sender as? Player)?.world?.name ?: defaultWorld
+        fun firstArena(): String? = root.arenaRepository.byWorld(playerWorld()).firstOrNull()?.name
+            ?: root.arenaRepository.all().firstOrNull()?.name
+        return when (head) {
+            "doors" -> arrayOf("door") + rest
+            "buttons" -> arrayOf("button") + rest
+            "spawn" -> {
+                val sub = rest.firstOrNull()?.lowercase()
+                when (sub) {
+                    "list" -> arrayOf("respawn", "list") + rest.drop(1)
+                    "remove" -> arrayOf("respawn", "remove") + rest.drop(1)
+                    "wait", "player", "zombie", "alpha", "door-player", "door-zombie" -> {
+                        val type = when (sub) {
+                            "wait" -> "WAIT"
+                            "player" -> "PLAYER"
+                            "zombie" -> "ZOMBIE"
+                            "alpha" -> "ZOMBIE_MAIN"
+                            "door-player" -> "DOOR_PLAYER"
+                            "door-zombie" -> "DOOR_ZOMBIE"
+                            else -> "WAIT"
+                        }
+                        val player = sender as? Player
+                        val arena = firstArena() ?: return arrayOf("respawn", "list")
+                        if (player == null) return arrayOf("respawn", "add", "--arena", arena, type, "0", "0", "0")
+                        val doorNumber = rest.getOrNull(1) ?: "0"
+                        arrayOf("respawn", "add", "--arena", arena, type, player.location.blockX.toString(), player.location.blockY.toString(), player.location.blockZ.toString(), doorNumber)
+                    }
+                    else -> arrayOf("respawn") + rest
+                }
+            }
+            "start" -> arrayOf("game", "start") + if (rest.isEmpty()) listOf(playerWorld()) else rest
+            "shop" -> arrayOf("menu", "shop")
+            "quest" -> arrayOf("task", "list")
+            "randomgun" -> arrayOf("weapon", "random")
+            "select" -> arrayOf("weapon", "select") + rest
+            "unselect" -> arrayOf("weapon", "unselect")
+            "transfer" -> arrayOf("coins", "transfer") + rest
+            "migrate" -> arrayOf("v1", "migrate")
+            "open" -> arrayOf("door", "trigger") + rest
+            "close" -> arrayOf("door", "trigger") + rest
+            else -> null
+        }
     }
 
     // ---------- 基础 ----------
@@ -137,6 +189,7 @@ class Zr2Command(
         sender.sendMessage(Component.text("/zr2 mapflow list|info|init|set|stage|finish|remove", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 v1 migrate", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 reload", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("v1 兼容：/zr doors|buttons|spawn|start|shop|quest|randomgun|select|unselect|transfer|migrate", NamedTextColor.GRAY))
     }
 
     // ---------- arena ----------
