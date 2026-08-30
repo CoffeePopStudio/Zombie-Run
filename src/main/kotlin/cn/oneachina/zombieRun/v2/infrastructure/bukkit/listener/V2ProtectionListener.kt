@@ -118,12 +118,12 @@ class V2ProtectionListener(
         event.isCancelled = true
         val raw = PlainTextComponentSerializer.plainText().serialize(event.message()).replace("&", "")
         val team = gameFlow.teamOf(world, player.uniqueId)
-        val prefix = when (team) {
-            GameTeam.HUMAN -> Component.text("[人类] ", NamedTextColor.AQUA)
-            GameTeam.ZOMBIE -> Component.text("[僵尸] ", NamedTextColor.DARK_GREEN)
-            GameTeam.ZOMBIE_MAIN -> Component.text("[母体] ", NamedTextColor.LIGHT_PURPLE)
-            GameTeam.SPECTATOR -> Component.text("[观战] ", NamedTextColor.GRAY)
-            null -> Component.text("[等待] ", NamedTextColor.GRAY)
+        val prefix = when {
+            team == GameTeam.HUMAN -> Component.text("[人类] ", NamedTextColor.AQUA)
+            team == GameTeam.ZOMBIE -> Component.text("[僵尸] ", NamedTextColor.DARK_GREEN)
+            team == GameTeam.ZOMBIE_MAIN -> Component.text("[母体] ", NamedTextColor.LIGHT_PURPLE)
+            team == GameTeam.SPECTATOR -> Component.text("[观战] ", NamedTextColor.GRAY)
+            else -> Component.text("[等待] ", NamedTextColor.GRAY)
         }
         val message = Component.text()
             .append(prefix)
