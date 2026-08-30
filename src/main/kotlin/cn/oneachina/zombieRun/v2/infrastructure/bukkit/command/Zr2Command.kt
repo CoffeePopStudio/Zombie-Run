@@ -143,6 +143,7 @@ class Zr2Command(
                 }
             }
             "start" -> arrayOf("game", "start") + if (rest.isEmpty()) listOf(playerWorld()) else rest
+            "end" -> arrayOf("game", "end") + if (rest.isEmpty()) listOf("zombie") else rest
             "shop" -> arrayOf("menu", "shop")
             "quest" -> arrayOf("task", "list")
             "randomgun" -> arrayOf("weapon", "random")
@@ -181,7 +182,7 @@ class Zr2Command(
         sender.sendMessage(Component.text("/zr2 debug - 切换 debug 日志（管理员）", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 button add [--arena <名称>] <x> <y> <z> normal <门号>（省略 --arena 自动使用当前世界）", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 respawn add [--arena <名称>] <type> <x> <y> <z> [door-number] [yaw] [pitch]（省略 --arena 自动使用当前世界）", NamedTextColor.YELLOW))
-        sender.sendMessage(Component.text("/zr2 game list | status <世界> | start <世界> | end <世界> <human|zombie> | reset <世界>", NamedTextColor.YELLOW))
+        sender.sendMessage(Component.text("/zr2 game list | status <世界> | start <世界> | end [世界] <human|zombie> | reset <世界>（省略世界用当前世界）", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 weapon list | info <id> | add <id> <type> <category> <price> [name] | remove <id> | give <id> | random [category] | select <id> | unselect", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 profile [玩家] | coins add|give|remove|set|get|spend|transfer|top | xp add|set | level set | reset <玩家> | title set|clear", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("/zr2 menu profile|shop|tasks|titles", NamedTextColor.YELLOW))
@@ -793,18 +794,29 @@ class Zr2Command(
                     noPermission(sender)
                     return
                 }
-                val winner = when (args.getOrNull(2)?.lowercase()) {
+                val first = args.getOrNull(1)?.lowercase()
+                val winnerArg = if (first == "human" || first == "zombie") {
+                    first
+                } else {
+                    args.getOrNull(2)?.lowercase()
+                }
+                val endWorld = if (first == "human" || first == "zombie") {
+                    (sender as? Player)?.world?.name ?: defaultWorld
+                } else {
+                    world
+                }
+                val winner = when (winnerArg) {
                     "human" -> cn.oneachina.zombierun.v2.domain.game.GameTeam.HUMAN
                     "zombie" -> cn.oneachina.zombierun.v2.domain.game.GameTeam.ZOMBIE_MAIN
                     else -> {
-                        sender.sendMessage(Component.text("用法: /zr2 game end <世界> <human|zombie>", NamedTextColor.RED))
+                        sender.sendMessage(Component.text("用法: /zr2 game end [世界] <human|zombie>（也可 /zr2 game end human 使用当前世界）", NamedTextColor.RED))
                         return
                     }
                 }
-                if (root.gameFlow.endGame(world, winner)) {
+                if (root.gameFlow.endGame(endWorld, winner)) {
                     sender.sendMessage(Component.text("对局已结束（$winner）", NamedTextColor.GREEN))
                 } else {
-                    sender.sendMessage(Component.text("世界 $world 没有对局实例", NamedTextColor.RED))
+                    sender.sendMessage(Component.text("世界 $endWorld 没有对局实例", NamedTextColor.RED))
                 }
             }
             "reset" -> {
@@ -1487,7 +1499,8 @@ class Zr2Command(
             "game" -> when (args.size) {
                 2 -> listOf("list", "status", "start", "end", "reset").filter { it.startsWith(args[1].lowercase()) }
                 3 -> when (args[1].lowercase()) {
-                    "status", "start", "end", "reset" -> root.gameFlow.gameWorlds().filter { it.startsWith(args[2], true) }
+                    "status", "start", "reset" -> root.gameFlow.gameWorlds().filter { it.startsWith(args[2], true) }
+                    "end" -> listOf("human", "zombie").filter { it.startsWith(args[2].lowercase()) }
                     else -> emptyList()
                 }
                 4 -> if (args[1].equals("end", true)) listOf("human", "zombie").filter { it.startsWith(args[3].lowercase()) } else emptyList()
