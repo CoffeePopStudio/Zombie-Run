@@ -74,12 +74,21 @@ class V2BattleListener(
         if (!gameFlow.isArenaWorld(world)) return
 
         if (!settings.debug) {
-            if (gameFlow.phaseOf(world) != GamePhase.RUNNING) return
+            if (gameFlow.phaseOf(world) != GamePhase.RUNNING) {
+                event.isCancelled = true
+                return
+            }
             val shooterTeam = gameFlow.teamOf(world, shooter.uniqueId)
             val victimTeam = gameFlow.teamOf(world, victim.uniqueId)
-            if (shooterTeam != GameTeam.HUMAN || victimTeam !in setOf(GameTeam.ZOMBIE, GameTeam.ZOMBIE_MAIN)) return
+            if (shooterTeam != GameTeam.HUMAN || victimTeam !in setOf(GameTeam.ZOMBIE, GameTeam.ZOMBIE_MAIN)) {
+                event.isCancelled = true
+                return
+            }
         }
-        if (gameFlow.isProtected(victim.uniqueId)) return
+        if (gameFlow.isProtected(victim.uniqueId)) {
+            event.isCancelled = true
+            return
+        }
 
         // 取消 QA 原版伤害，改走自定义血量
         event.isCancelled = true
@@ -249,6 +258,12 @@ class V2BattleListener(
     }
 
     private fun infectHuman(attacker: Player, victim: Player, world: String) {
+        // 感染转化：清状态、进入观战等待复活部署
+        victim.inventory.clear()
+        victim.gameMode = GameMode.SPECTATOR
+        victim.activePotionEffects.forEach { victim.removePotionEffect(it.type) }
+        victim.health = 20.0
+        healthService.resetForTeam(victim.uniqueId, GameTeam.ZOMBIE)
         if (!gameFlow.onCombatInfection(world, attacker.uniqueId, victim.uniqueId)) return
         playerData?.addCoins(attacker.uniqueId, economy.infectHumanCoins)
         playerData?.addXp(attacker.uniqueId, economy.infectHumanXp)

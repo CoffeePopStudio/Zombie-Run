@@ -7,6 +7,7 @@ import cn.oneachina.zombierun.v2.domain.arena.ArenaDefinition
 import cn.oneachina.zombierun.v2.domain.arena.ButtonDefinition
 import cn.oneachina.zombierun.v2.domain.arena.ButtonMode
 import cn.oneachina.zombierun.v2.domain.door.Vec3
+import cn.oneachina.zombierun.v2.domain.game.GameTeam
 import cn.oneachina.zombierun.v2.infrastructure.config.ArenaYamlRepository
 import org.bukkit.Location
 import org.bukkit.Material
@@ -90,6 +91,7 @@ class V2DoorListenerTest {
             buttons = listOf(ButtonDefinition("b1", "w", 12, 64, 12, ButtonMode.NORMAL, listOf(3))),
         )
         whenever(arenaRepository.byWorld("w")).thenReturn(listOf(arena))
+        whenever(gameFlow.teamOf("w", id)).thenReturn(GameTeam.HUMAN)
         whenever(doorService.triggerDoor("w", 3, "Steve")).thenReturn(TriggerResult(true, "ok"))
 
         val event = mock<PlayerInteractEvent>()
@@ -118,6 +120,7 @@ class V2DoorListenerTest {
             buttons = listOf(ButtonDefinition("esc", "w", 5, 64, 5, ButtonMode.ESCAPE, emptyList())),
         )
         whenever(arenaRepository.byWorld("w")).thenReturn(listOf(arena))
+        whenever(gameFlow.teamOf("w", id)).thenReturn(GameTeam.HUMAN)
         whenever(gameFlow.triggerEscape("w", "Steve")).thenReturn(true)
 
         val event = mock<PlayerInteractEvent>()

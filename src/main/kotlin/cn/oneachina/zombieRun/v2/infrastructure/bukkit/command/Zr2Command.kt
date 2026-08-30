@@ -1167,7 +1167,8 @@ class Zr2Command(
                         else -> "${progress.progress}/${task.target}"
                     }
                     sender.sendMessage(
-                        Component.text("[${task.period.name.lowercase()}] ${task.description} - $status（奖励 ${task.rewardCoins} 币/${task.rewardXp} 经验）"),
+                        net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacySection()
+                            .deserialize("[${task.period.name.lowercase()}] ${task.description} - $status（奖励 ${task.rewardCoins} 币/${task.rewardXp} 经验）"),
                     )
                 }
             }
@@ -1509,6 +1510,7 @@ class Zr2Command(
             }
             "title" -> when (args.size) {
                 2 -> listOf("set", "clear").filter { it.startsWith(args[1].lowercase()) }
+                3 -> if (args[1] in listOf("set", "clear")) Bukkit.getOnlinePlayers().map { it.name }.filter { it.startsWith(args[2], true) } else emptyList()
                 else -> emptyList()
             }
             "xp" -> when (args.size) {
@@ -1524,7 +1526,7 @@ class Zr2Command(
                 2 -> listOf("list", "info", "init", "set", "stage", "finish", "remove").filter { it.startsWith(args[1].lowercase()) }
                 3 -> if (args[1] in listOf("info", "init", "set", "stage", "finish", "remove")) arenaNames(args[2]) else emptyList()
                 4 -> if (args[1].equals("set", true)) listOf("min-players", "start-delay-seconds", "max-duration-seconds", "mother-release-delay-seconds", "reward-coins-human", "reward-xp-human", "reward-coins-zombie", "reward-xp-zombie", "starter-weapon").filter { it.startsWith(args[3].lowercase()) } else if (args[1].equals("finish", true)) listOf("door", "extraction").filter { it.startsWith(args[3].lowercase()) } else emptyList()
-                5 -> if (args[1].equals("stage", true)) listOf("add", "set", "next", "remove").filter { it.startsWith(args[3].lowercase()) } else emptyList()
+                5 -> if (args[1].equals("stage", true)) listOf("add", "set", "next", "remove").filter { it.startsWith(args[2].lowercase()) } else emptyList()
                 else -> emptyList()
             }
             "v1" -> if (args.size == 2 || (args.size == 3 && args[2].equals("--overwrite", true))) listOf("migrate", "migrate-data").filter { it.startsWith(args[1].lowercase()) } else emptyList()

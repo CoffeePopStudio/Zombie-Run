@@ -312,6 +312,7 @@ class GameFlowService(
         gameStartTimes[worldName] = startToken
         val assignments = game.start(playerIds, alphaIndex = Random.nextInt(playerIds.size))
         val alphaId = game.alphaId()
+        val motherReleaseDelay = mapFlowDef(worldName)?.motherReleaseDelaySeconds ?: 6
 
         assignments.forEach { assignment ->
             // 必须先清状态/背包，再发武器，避免 onGameStarted 异步清理清掉刚发的枪
@@ -358,10 +359,8 @@ class GameFlowService(
                     }
                 }
             } else if (assignment.team == GameTeam.ZOMBIE_MAIN) {
-                val releaseDelay = mapFlowDef(worldName)?.motherReleaseDelaySeconds ?: 0
-                protect(assignment.playerId, releaseDelay)
-                scheduleMotherRelease(worldName, releaseDelay)
-                messages.title(assignment.playerId, "你被选为母体！", "6秒后容器破裂")
+                protect(assignment.playerId, motherReleaseDelay)
+                scheduleMotherRelease(worldName, motherReleaseDelay)
             }
         }
 
@@ -375,6 +374,10 @@ class GameFlowService(
             // 对齐 v1：开局大标题 + 队伍信息
             messages.title(p.id, "警告！", "收容装置发生破裂！请尽全力逃出！")
             messages.chat(p.id, "对局开始！你是 $teamName，母体：$alphaName")
+        }
+        // 母体专属 Title 放在全局 Title 之后发送，避免被覆盖；文案使用实际释放秒数
+        alphaId?.let {
+            messages.title(it, "你被选为母体！", "$motherReleaseDelay 秒后容器破裂")
         }
         messages.soundBell(worldName)
         if (settings.startEffects.isNotEmpty()) {
@@ -448,6 +451,15 @@ class GameFlowService(
         val alphaId = games[worldName]?.alphaId() ?: return
         if (delaySeconds <= 0) {
             motherReleasedWorlds[worldName] = true
+            worldAccess.player(alphaId)?.let {
+                messages.title(it.id, "母体已释放！", "狩猎开始！")
+                messages.chat(it.id, "母体已释放，狩猎开始！")
+                motherReleaseStateSync?.invoke(alphaId)
+            }
+            worldAccess.playersIn(worldName).forEach { p ->
+                messages.title(p.id, "母体已释放！", "逃吧！")
+                messages.chat(p.id, "母体已释放！")
+            }
             return
         }
         var remaining = delaySeconds
@@ -576,6 +588,7 @@ class GameFlowService(
         when (game.phaseSnapshot()) {
             GamePhase.RUNNING -> {
                 messages.chat(playerId, "对局进行中，你以僵尸身份加入")
+                messages.chat(playerId, "你是僵尸，去感染人类！")
                 playerStatePreparer?.invoke(playerId, GameTeam.ZOMBIE)
                 zombieBuffApplier?.invoke(playerId)
                 val spawn = spawnForTeam(canonical, GameTeam.ZOMBIE)
@@ -583,6 +596,10 @@ class GameFlowService(
             }
             GamePhase.WAITING, GamePhase.STARTING -> {
                 messages.chat(playerId, "你以观战身份等待对局")
+                val current = worldAccess.playersIn(canonical).size
+                val need = (rules(canonical).minPlayers - current).coerceAtLeast(0)
+                messages.chat(playerId, "还差 $need 人开始（当前 $current 人）")
+                messages.chat(playerId, "输入 /zr2 menu 查看商店/任务/称号")
                 playerStatePreparer?.invoke(playerId, GameTeam.SPECTATOR)
                 val waitSpawn = arenaRepository.byWorld(canonical)
                     .flatMap { it.respawns }
@@ -638,8 +655,13 @@ class GameFlowService(
             motherReleaseStateSync?.invoke(replacement)
             zombieBuffApplier?.invoke(replacement)
             worldAccess.player(replacement)?.let {
+                messages.title(it.id, "你成为新的母体！", "狩猎开始！")
                 messages.chat(it.id, "原母体已离开，你成为新的母体僵尸")
                 logger.info("[$worldName] ${it.name} promoted to alpha")
+            }
+            worldAccess.playersIn(worldName).forEach { p ->
+                val name = worldAccess.player(replacement)?.name ?: "?"
+                messages.title(p.id, "母体已更换", "新的母体是 $name")
             }
         }
     }
@@ -751,6 +773,8 @@ class GameFlowService(
             val spawnTeam = if (team == GameTeam.ZOMBIE_MAIN) GameTeam.ZOMBIE_MAIN else GameTeam.ZOMBIE
             val spawn = spawnForTeam(worldName, spawnTeam)
             if (spawn != null) teleportTo(worldName, playerId, spawn)
+            // 复活时切回 ADVENTURE、清状态、重置自定义血量，避免玩家卡在 SPECTATOR
+            playerStatePreparer?.invoke(playerId, spawnTeam)
             zombieBuffApplier?.invoke(playerId)
             worldAccess.player(playerId)?.let { messages.chat(it.id, message) }
         }
@@ -879,6 +903,13 @@ class GameFlowService(
         maxDurationTasks.remove(worldName)?.cancel()
         zombieDoorTasks.remove(worldName)?.cancel()
         worldAccess.playersIn(worldName).forEach { messages.chat(it.id, message) }
+        val (winTitle, winSubtitle) = if (winner == GameTeam.HUMAN) {
+            "人类胜利" to "成功逃生！"
+        } else {
+            "僵尸胜利" to "人类已被感染殆尽"
+        }
+        worldAccess.playersIn(worldName).forEach { messages.title(it.id, winTitle, winSubtitle) }
+        messages.soundBell(worldName)
         awardParticipationXp(worldName, game)
         awardHumanWinXp(worldName, game, winner)
         awardSurviveReward(worldName, game, winner)
@@ -925,9 +956,12 @@ class GameFlowService(
         game.playerIds().forEach { zombieKills.remove(it); infectCount.remove(it) }
         val fresh = GameInstance(worldName, rules(worldName))
         games[worldName] = fresh
-        // 对局结束会把玩家设为 SPECTATOR；重置后恢复等待状态
+        // 对局结束会把玩家设为 SPECTATOR；重置后恢复等待状态并传送回等待大厅
+        val waitSpawn = arenaRepository.byWorld(worldName).flatMap { it.respawns }
+            .firstOrNull { it.type == RespawnType.WAIT }
         worldAccess.playersIn(worldName).forEach {
             playerStatePreparer?.invoke(it.id, GameTeam.SPECTATOR)
+            if (waitSpawn != null) teleportTo(worldName, it.id, waitSpawn)
         }
         logger.info("[$worldName] game reset to WAITING")
         return true

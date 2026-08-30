@@ -308,6 +308,7 @@ class DoorApplicationService(
         val (tx, ty, tz) = target
         if (tx == null || ty == null || tz == null) {
             logger.warn("[${session.worldName}] door behavior ${behavior.type} missing target for team ${team.name}")
+            messages.chat(playerId, "传送目标未配置，请联系管理员")
             return
         }
 

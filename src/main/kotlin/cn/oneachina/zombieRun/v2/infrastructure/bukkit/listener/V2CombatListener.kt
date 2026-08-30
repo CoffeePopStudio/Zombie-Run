@@ -52,7 +52,9 @@ class V2CombatListener(
                     return@forEach
                 }
             }
+            val beforeStatus = stamina.stateOf(player.uniqueId).status
             val newlyExhausted = stamina.update(player.uniqueId, player.isSprinting)
+            val afterStatus = stamina.stateOf(player.uniqueId).status
             val action = {
                 if (newlyExhausted && player.isSprinting) {
                     player.isSprinting = false
@@ -60,8 +62,14 @@ class V2CombatListener(
                     player.addPotionEffect(org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.WEAKNESS, 60, 0, false, false, false))
                     player.addPotionEffect(org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.GLOWING, 60, 0, false, false, false))
                     player.sendActionBar(net.kyori.adventure.text.Component.text("体力耗尽！"))
+                } else if (beforeStatus != StaminaStatus.NORMAL && afterStatus == StaminaStatus.NORMAL) {
+                    player.sendActionBar(net.kyori.adventure.text.Component.text("体力已完全恢复，可以跑跳了！"))
+                } else {
+                    val pct = (stamina.fraction(player.uniqueId) * 100).toInt().coerceIn(0, 100)
+                    val filled = (pct / 10).coerceIn(0, 10)
+                    val bar = "█".repeat(filled) + "░".repeat(10 - filled)
+                    player.sendActionBar(net.kyori.adventure.text.Component.text("体力 $bar $pct%"))
                 }
-                player.sendActionBar(net.kyori.adventure.text.Component.text("体力 ${(stamina.fraction(player.uniqueId) * 100).toInt()}%"))
             }
             val p = plugin
             if (p != null) {

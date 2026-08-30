@@ -216,6 +216,8 @@ class GameFlowServiceTest {
         f.eventBus.subscribe(GameEndedEvent::class.java) { ended.add(it) }
 
         f.service.forceStart("w")
+        // 母体默认 6 秒释放；跑 7 次定时器让母体进入可攻击状态
+        repeat(7) { f.scheduler.tickTimers() }
         val instance = f.service.instance("w")!!
         val alpha = instance.alphaId()!!
         val human = f.world.playersIn("w").map { it.id }.first { it != alpha }

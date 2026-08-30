@@ -1,12 +1,15 @@
 package cn.oneachina.zombierun.v2.infrastructure.bukkit.gui
 
+import cn.oneachina.zombierun.v2.application.game.GameFlowService
 import cn.oneachina.zombierun.v2.application.player.PlayerDataService
 import cn.oneachina.zombierun.v2.application.task.TaskService
 import cn.oneachina.zombierun.v2.application.weapon.WeaponService
+import cn.oneachina.zombierun.v2.domain.game.GameTeam
 import cn.oneachina.zombierun.v2.domain.weapon.WeaponCategory
 import cn.oneachina.zombierun.v2.support.V2Logger
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.entity.Player
@@ -37,13 +40,20 @@ class GuiService(
             val item = ItemStack(material)
             val meta = item.itemMeta
             if (meta != null) {
-                meta.displayName(Component.text(name))
-                meta.lore(lore.map { Component.text(it) })
+                meta.displayName(LegacyComponentSerializer.legacySection().deserialize(name))
+                meta.lore(lore.map { LegacyComponentSerializer.legacySection().deserialize(it) })
                 item.itemMeta = meta
             }
             item
         },
 ) : Listener {
+
+    private var gameFlow: GameFlowService? = null
+
+    /** 组合根在创建 GameFlowService 后注入，供商店判断等待期预选模式。 */
+    fun bindGameFlow(gf: GameFlowService) {
+        gameFlow = gf
+    }
 
     companion object {
         /** 商店总行数 6（5 行武器区 + 1 行操作栏） */
@@ -144,6 +154,14 @@ class GuiService(
             actions[slot] = { p, _ ->
                 if (!weapon.enabled) {
                     p.sendMessage(Component.text("该武器不可购买", NamedTextColor.RED))
+                } else if (gameFlow?.teamOf(p.world.name, p.uniqueId) == GameTeam.SPECTATOR) {
+                    // 等待期：预选模式，开局自动扣款发放，避免买完被清背包
+                    if (weapons.selectWeapon(p.uniqueId, weapon.id)) {
+                        p.sendMessage(Component.text("已预选 ${weapon.displayName}，开局自动扣款发放", NamedTextColor.GREEN))
+                        p.closeInventory()
+                    } else {
+                        p.sendMessage(Component.text("预选失败，武器可能未启用", NamedTextColor.RED))
+                    }
                 } else {
                     val price = weapon.price.toInt()
                     val afterSpend = playerData.spendCoins(p.uniqueId, price)
@@ -367,4 +385,7 @@ class GuiService(
 
     private fun icon(material: Material, name: String, lore: List<String>): ItemStack =
         iconFactory(material, name, lore)
+
+    private fun legacy(text: String): Component =
+        LegacyComponentSerializer.legacySection().deserialize(text)
 }

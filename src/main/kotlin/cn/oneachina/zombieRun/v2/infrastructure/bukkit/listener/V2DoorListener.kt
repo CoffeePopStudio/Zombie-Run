@@ -4,6 +4,7 @@ import cn.oneachina.zombierun.v2.application.door.DoorApplicationService
 import cn.oneachina.zombierun.v2.application.game.GameFlowService
 import cn.oneachina.zombierun.v2.domain.arena.ButtonMode
 import cn.oneachina.zombierun.v2.domain.door.Vec3
+import cn.oneachina.zombierun.v2.domain.game.GameTeam
 import cn.oneachina.zombierun.v2.infrastructure.config.ArenaYamlRepository
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -62,6 +63,12 @@ class V2DoorListener(
 
         if (button == null) return
         event.isCancelled = true
+
+        // 只有人类可以操作按钮（普通门/撤离），僵尸和观战不能开门或启动撤离
+        if (gameFlow.teamOf(player.world.name, player.uniqueId) != GameTeam.HUMAN) {
+            player.sendMessage(Component.text("只有人类可以操作按钮！", NamedTextColor.RED))
+            return
+        }
 
         when (button.mode) {
             ButtonMode.NORMAL -> {

@@ -180,6 +180,7 @@ class V2CompositionRoot(private val plugin: ZombieRunV2Plugin) {
         )
         services.register(GameFlowService::class, gameFlow)
         services.register(DoorApplicationService::class, doorService)
+        guiService.bindGameFlow(gameFlow)
         gameFlow.startEffectExecutor = { worldName ->
             currentSettings?.startEffects.orEmpty().forEach { command ->
                 val resolved = command.replace("{world}", worldName).replace("{arena}", worldName)

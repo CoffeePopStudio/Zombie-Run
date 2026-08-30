@@ -86,8 +86,8 @@ class V2GameListener(
         val world = player.world.name
         val team = gameFlow.teamOf(world, player.uniqueId) ?: return
         val phase = gameFlow.phaseOf(world)
-        val canOpen = team == GameTeam.HUMAN &&
-            (phase == GamePhase.RUNNING || phase == GamePhase.WAITING)
+        val canOpen = (team == GameTeam.HUMAN && phase == GamePhase.RUNNING) ||
+            (team == GameTeam.SPECTATOR && (phase == GamePhase.WAITING || phase == GamePhase.STARTING))
         if (player.isSneaking && canOpen) {
             event.isCancelled = true
             gui.openShop(player)
