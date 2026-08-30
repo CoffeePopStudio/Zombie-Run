@@ -1458,9 +1458,19 @@ class Zr2Command(
                     "info", "test", "remove", "edit" -> root.arenaRepository.all().flatMap { it.doors }.map { it.id }.filter { it.startsWith(args[2], true) }
                     "trigger" -> root.doorService.doorsInWorld((sender as? Player)?.world?.name ?: defaultWorld).mapNotNull { it.number?.toString() }.filter { it.startsWith(args[2]) }
                     "behavior" -> listOf("info", "set", "remove").filter { it.startsWith(args[2].lowercase()) }
+                    "add" -> listOf("normal", "player", "zombie", "start", "--arena", "--mode", "--group", "--open", "--close", "--number").filter { it.startsWith(args[2].lowercase()) }
                     else -> emptyList()
                 }
-                4 -> if (args[1].equals("behavior", true)) root.arenaRepository.all().flatMap { it.doors }.map { it.id }.filter { it.startsWith(args[3], true) } else emptyList()
+                4 -> when (args[1].lowercase()) {
+                    "behavior" -> root.arenaRepository.all().flatMap { it.doors }.map { it.id }.filter { it.startsWith(args[3], true) }
+                    "add" -> when {
+                        args[2].equals("--arena", true) -> arenaNames(args[3])
+                        args[2].equals("--mode", true) -> listOf("normal", "player", "zombie", "start").filter { it.startsWith(args[3].lowercase()) }
+                        args[3].startsWith("--") -> listOf("--arena", "--mode", "--group", "--open", "--close", "--number").filter { it.startsWith(args[3].lowercase()) }
+                        else -> emptyList()
+                    }
+                    else -> emptyList()
+                }
                 else -> emptyList()
             }
             "button" -> when (args.size) {
