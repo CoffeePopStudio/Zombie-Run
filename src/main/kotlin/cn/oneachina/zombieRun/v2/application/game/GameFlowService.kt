@@ -361,6 +361,7 @@ class GameFlowService(
                 val releaseDelay = mapFlowDef(worldName)?.motherReleaseDelaySeconds ?: 0
                 protect(assignment.playerId, releaseDelay)
                 scheduleMotherRelease(worldName, releaseDelay)
+                messages.title(assignment.playerId, "你被选为母体！", "6秒后容器破裂")
             }
         }
 
@@ -371,6 +372,8 @@ class GameFlowService(
                 GameTeam.HUMAN -> "人类"
                 else -> "未知"
             }
+            // 对齐 v1：开局大标题 + 队伍信息
+            messages.title(p.id, "警告！", "收容装置发生破裂！请尽全力逃出！")
             messages.chat(p.id, "对局开始！你是 $teamName，母体：$alphaName")
         }
         messages.soundBell(worldName)
@@ -460,10 +463,12 @@ class GameFlowService(
             } else {
                 motherReleasedWorlds[worldName] = true
                 worldAccess.player(alphaId)?.let {
+                    messages.title(it.id, "母体已释放！", "狩猎开始！")
                     messages.chat(it.id, "母体已释放，狩猎开始！")
                     motherReleaseStateSync?.invoke(alphaId)
                 }
                 worldAccess.playersIn(worldName).forEach { p ->
+                    messages.title(p.id, "母体已释放！", "逃吧！")
                     messages.chat(p.id, "母体已释放！")
                 }
                 motherReleaseTasks.remove(worldName)

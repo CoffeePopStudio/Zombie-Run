@@ -200,8 +200,18 @@ class DoorApplicationService(
         session.remainingSeconds = session.doors.first().closeSeconds
 
         val label = doorLabel(session.doors)
+        val behavior = session.doors.firstNotNullOfOrNull { it.behavior }
+        val (openTitle, openSubtitle) = when (behavior?.type) {
+            cn.oneachina.zombierun.v2.domain.door.DoorBehaviorType.SUBWAY ->
+                "${behavior.lineName ?: label} 进站" to "请立即上车"
+            cn.oneachina.zombierun.v2.domain.door.DoorBehaviorType.ELEVATOR ->
+                "电梯已到达" to "请进入电梯"
+            cn.oneachina.zombierun.v2.domain.door.DoorBehaviorType.AIRPORT ->
+                "专线已进站" to "请立即登机"
+            else -> "$label 已开启" to "请穿过门洞"
+        }
         worldAccess.playersIn(session.worldName).forEach { p ->
-            messages.title(p.id, "$label 已开启", "请穿过门洞")
+            messages.title(p.id, openTitle, openSubtitle)
         }
         messages.soundBell(session.worldName)
         logger.info("[${session.worldName}] $label opened")
@@ -303,41 +313,57 @@ class DoorApplicationService(
 
         behaviorTasks.remove(playerId)?.cancel()
         val line = behavior.lineName
+        val label = doorLabel(session.doors)
         behavior.departureMessage
             ?.replace("{line}", line ?: "")
             ?.let { messages.chat(playerId, it) }
-        var remaining = behavior.countdown
-        val label = doorLabel(session.doors)
-        val startCountdown = {
-            val handle = scheduler.globalTimer(1L, 20L) { taskHandle ->
-                if (remaining > 0) {
-                    messages.title(playerId, "$remaining", "$label 传送倒计时")
-                    remaining--
-                } else {
-                    teleporter.teleport(
-                        playerId = playerId,
-                        worldName = session.worldName,
-                        x = tx,
-                        y = ty,
-                        z = tz,
-                        yaw = 0f,
-                        pitch = 0f,
-                    )
-                    behavior.arrivalMessage
-                        ?.replace("{line}", line ?: "")
-                        ?.let { messages.chat(playerId, it) }
-                    logger.info("[${session.worldName}] player $playerId teleported by ${behavior.type}")
-                    behaviorTasks.remove(playerId)
-                    taskHandle.cancel()
-                }
-            }
-            behaviorTasks[playerId] = handle
+
+        fun arrival() {
+            teleporter.teleport(
+                playerId = playerId,
+                worldName = session.worldName,
+                x = tx,
+                y = ty,
+                z = tz,
+                yaw = 0f,
+                pitch = 0f,
+            )
+            behavior.arrivalMessage
+                ?.replace("{line}", line ?: "")
+                ?.let { messages.title(playerId, it, "") }
+                ?: messages.title(playerId, "传送完成", "")
+            logger.info("[${session.worldName}] player $playerId teleported by ${behavior.type}")
+            behaviorTasks.remove(playerId)
         }
-        if (behavior.delayTicks > 0) {
-            val delayHandle = scheduler.globalLater(behavior.delayTicks) { startCountdown() }
-            behaviorTasks[playerId] = delayHandle
-        } else {
-            startCountdown()
+
+        when (behavior.type) {
+            // v1 逻辑：地铁关门后立即传送 + 到站 Title
+            cn.oneachina.zombierun.v2.domain.door.DoorBehaviorType.SUBWAY -> {
+                arrival()
+            }
+            // 电梯：倒计时后传送 + 到站 Title
+            cn.oneachina.zombierun.v2.domain.door.DoorBehaviorType.ELEVATOR -> {
+                var remaining = behavior.countdown
+                val handle = scheduler.globalTimer(1L, 20L) { taskHandle ->
+                    if (remaining > 0) {
+                        val subtitle = behavior.departureMessage
+                            ?.replace("{line}", line ?: "")
+                            ?: "$label 传送倒计时"
+                        messages.title(playerId, "$remaining", subtitle)
+                        remaining--
+                    } else {
+                        taskHandle.cancel()
+                        arrival()
+                    }
+                }
+                behaviorTasks[playerId] = handle
+            }
+            // 机场：延迟 delayTicks 后传送 + 到站 Title
+            cn.oneachina.zombierun.v2.domain.door.DoorBehaviorType.AIRPORT -> {
+                val delay = behavior.delayTicks
+                val handle = scheduler.globalLater(delay) { arrival() }
+                behaviorTasks[playerId] = handle
+            }
         }
     }
 
@@ -353,7 +379,16 @@ class DoorApplicationService(
     }
 
     private fun broadcastCountdown(session: RuntimeSession, remaining: Int, opening: Boolean) {
-        val subtitle = if (opening) "${doorLabel(session.doors)}即将开启" else "${doorLabel(session.doors)}即将关闭"
+        val behavior = session.doors.firstNotNullOfOrNull { it.behavior }
+        val line = behavior?.lineName
+        val subtitle = when {
+            opening -> "${doorLabel(session.doors)}即将开启"
+            behavior?.type == cn.oneachina.zombierun.v2.domain.door.DoorBehaviorType.SUBWAY ->
+                if (line != null) "$line 即将发车，请立即上车" else "${doorLabel(session.doors)}即将关闭"
+            behavior?.type == cn.oneachina.zombierun.v2.domain.door.DoorBehaviorType.ELEVATOR -> "电梯即将到达"
+            behavior?.type == cn.oneachina.zombierun.v2.domain.door.DoorBehaviorType.AIRPORT -> "专线即将发车"
+            else -> "${doorLabel(session.doors)}即将关闭"
+        }
         worldAccess.playersIn(session.worldName).forEach { p ->
             messages.title(p.id, "$remaining", subtitle)
         }
