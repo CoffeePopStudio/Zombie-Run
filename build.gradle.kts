@@ -6,17 +6,7 @@ plugins {
 
 group = "cn.oneachina"
 
-version = run {
-    fun exec(cmd: List<String>) = try {
-        ProcessBuilder(cmd).directory(rootProject.projectDir)
-            .start().inputStream.bufferedReader().readText().trim()
-    } catch (_: Exception) { "" }
-    val year = exec(listOf("powershell", "-c", "(Get-Date).Year.toString().substring(2)"))
-    val month = exec(listOf("powershell", "-c", "(Get-Date).Month"))
-    val count = exec(listOf("git", "rev-list", "--count", "HEAD")).ifEmpty { "0" }
-    val hash = exec(listOf("git", "rev-parse", "--short=7", "HEAD")).ifEmpty { "unknown" }
-    "$year.$month.$count-$hash"
-}
+version = "26.8.31"
 
 repositories {
     mavenCentral()
@@ -30,7 +20,7 @@ repositories {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:26.1.2.build.+")
     compileOnly("me.clip:placeholderapi:2.12.2")
-    compileOnly("me.zombie_striker:QualityArmory:2.1.3")
+    compileOnly("me.zombie_striker:QualityArmory:2.1.4")
     implementation(kotlin("stdlib-jdk8"))
     implementation("com.zaxxer:HikariCP:7.0.2")
 }
