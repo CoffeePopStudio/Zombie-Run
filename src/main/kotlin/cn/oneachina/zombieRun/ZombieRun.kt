@@ -75,6 +75,7 @@ class ZombieRun : JavaPlugin() {
         pm.registerEvents(questGUI, this)
         pm.registerEvents(titleGUI, this)
         pm.registerEvents(miscManager, this)
+        gameListener.startBlackWoolTask()
 
         val zrCommand = ZombieRunCommand(this)
         getCommand("zr")?.setExecutor(zrCommand)
@@ -91,12 +92,12 @@ class ZombieRun : JavaPlugin() {
             player.clearActivePotionEffects()
         }
         coinManager.close()
+        progressionManager.close()
         databaseManager.close()
         doorManager.reset()
         respawnManager.clear()
         gameManager.clear()
         staminaManager.clear()
-        progressionManager.close()
         buttonManager.clear()
         nametagManager.clearAll()
         healthManager.clearAll()

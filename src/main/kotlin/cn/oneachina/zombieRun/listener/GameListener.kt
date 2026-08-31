@@ -91,28 +91,57 @@ class GameListener(
         val to = event.to
         val player = event.player
         if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return
+        if (player.gameMode == GameMode.SPECTATOR) return
         val team = plugin.gameManager.getPlayerTeam(player)
         if (team == GameManager.Team.SPECTATOR) return
         plugin.doorManager.tryRecordPlayerCrossing(player, event.from, to)
-        // 同格微动（转圈/蹲起/被挤）不重复判定黑羊毛伤害
-        if (event.from.blockX != to.blockX || event.from.blockY != to.blockY || event.from.blockZ != to.blockZ) {
-            handleBlackWoolDamage(player)
-        }
+        checkBlackWool(player)
     }
 
-    private fun handleBlackWoolDamage(player: Player) {
+    /**
+     * 传送只更新门侧边状态，不记为“穿越”。
+     * 这样可以避免系统传送/命令传送被采样兜底误判成通过门。
+     */
+    @EventHandler(ignoreCancelled = true)
+    fun onPlayerTeleport(event: PlayerTeleportEvent) {
+        val to = event.to
+        val player = event.player
+        if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return
+        if (player.gameMode == GameMode.SPECTATOR) return
+        val team = plugin.gameManager.getPlayerTeam(player)
+        if (team == GameManager.Team.SPECTATOR) return
+        plugin.doorManager.updatePlayerSideAfterTeleport(player, to)
+    }
+
+    /** 定期兜底检测黑色羊毛，防止 Move 事件漏触发或玩家站着不动 */
+    fun startBlackWoolTask() {
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { _ ->
+            if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return@runAtFixedRate
+            Bukkit.getOnlinePlayers().forEach { p ->
+                // 死亡等待复活/旁观中的玩家 gameMode 是 SPECTATOR，不能触发黑羊毛
+                if (p.gameMode == GameMode.SPECTATOR) return@forEach
+                val team = plugin.gameManager.getPlayerTeam(p)
+                if (team == GameManager.Team.SPECTATOR) return@forEach
+                checkBlackWool(p)
+            }
+        }, 1L, 4L)
+    }
+
+    private fun checkBlackWool(player: Player) {
+        // 旁观/死亡等待复活中的玩家不触发
+        if (player.gameMode == GameMode.SPECTATOR) return
         val loc = player.location
+        // 完整方块铺在地面时，玩家脚下、脚下方块、以及脚底略微嵌入的位置都要检查
         val woolBlocks = listOf(
             loc.block,
             loc.clone().subtract(0.0, 1.0, 0.0).block,
-            loc.clone().subtract(0.0, 0.5, 0.0).block
+            loc.clone().subtract(0.0, 0.5, 0.0).block,
+            loc.clone().subtract(0.0, 0.1, 0.0).block
         )
         for (block in woolBlocks) {
             if (block.type == Material.BLACK_WOOL) {
-                // 仅人类受黑羊毛伤害；走自定义生命系统以保留击杀/统计/死亡流程
-                if (plugin.gameManager.getPlayerTeam(player) == GameManager.Team.HUMAN) {
-                    plugin.healthManager.damage(player, 10000.0)
-                }
+                // 人类和僵尸都杀
+                plugin.healthManager.damage(player, 10000.0)
                 return
             }
         }
