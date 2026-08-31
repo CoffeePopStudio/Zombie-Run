@@ -152,7 +152,12 @@ class CombatListener(
         val attackerTeam = plugin.gameManager.getPlayerTeam(attacker)
         val victimTeam = plugin.gameManager.getPlayerTeam(victim)
 
-        if (attackerTeam == victimTeam) {
+        // 同一阵营：人类不能打人类，僵尸（含母体）不能打僵尸
+        val sameTeam = attackerTeam == victimTeam ||
+            (attackerTeam in setOf(GameManager.Team.ZOMBIE, GameManager.Team.ZOMBIE_MAIN) &&
+                victimTeam in setOf(GameManager.Team.ZOMBIE, GameManager.Team.ZOMBIE_MAIN))
+
+        if (sameTeam) {
             event.isCancelled = true
             return
         }
@@ -180,6 +185,14 @@ class CombatListener(
             // 取消原版伤害，避免与自定义伤害叠加造成双倍伤害
             event.isCancelled = true
             plugin.healthManager.damage(victim, zombieDamage, attacker)
+
+            // 僵尸/母体近战击退
+            val knockback = plugin.configManager.getConfig().getDouble("misc.zombie-knockback-force", 0.8)
+            val dir = victim.location.toVector().subtract(attacker.location.toVector())
+            if (dir.lengthSquared() > 0.0001) {
+                victim.velocity = victim.velocity.add(dir.normalize().multiply(knockback))
+            }
+
             DebugLogger.damage("${attacker.name}(${attackerTeam}) → ${victim.name}(人类) ${String.format("%.1f", zombieDamage)}伤害 [HP:${String.format("%.1f", plugin.healthManager.getHealth(victim))}]")
         }
     }
@@ -314,6 +327,8 @@ class CombatListener(
                 return@runDelayed
             }
             victim.gameMode = GameMode.ADVENTURE
+            // 僵尸死亡复活后必须重新初始化自定义血量，否则会卡在 0 血异常状态
+            plugin.healthManager.initPlayerHealth(victim, plugin.gameManager.getPlayerTeam(victim))
             plugin.staminaManager.applyZombieEffects(victim)
             // 僵尸死亡：布防复活到人类前方更远的僵尸点
             plugin.respawnManager.teleportZombieByProgress(

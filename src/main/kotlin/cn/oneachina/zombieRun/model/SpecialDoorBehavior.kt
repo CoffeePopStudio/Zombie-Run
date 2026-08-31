@@ -73,11 +73,18 @@ sealed class SpecialDoorBehavior {
                     remaining--
                 } else {
                     context.players.forEach { p ->
-                        val hY = humanTargetY.toDouble()
-                        val zY = zombieTargetY?.toDouble() ?: hY
-                        val targetY = if (context.plugin.gameManager.getPlayerTeam(p) == GameManager.Team.HUMAN) hY else zY
-                        p.teleportAsync(Location(context.world, p.location.x, targetY, p.location.z))
-                        p.showTitle(Title.title(mm.deserialize(arrivalMsg), Component.empty()))
+                        if (context.plugin.gameManager.getPlayerTeam(p) == GameManager.Team.HUMAN) {
+                            val targetY = humanTargetY.toDouble()
+                            p.teleportAsync(Location(context.world, p.location.x, targetY, p.location.z))
+                            p.showTitle(Title.title(mm.deserialize(arrivalMsg), Component.empty()))
+                        } else {
+                            // 电梯不给僵尸进：把僵尸踢回对应僵尸点
+                            context.plugin.respawnManager.teleportZombieSpecial(p, context.door.doorNumber)
+                            p.showTitle(Title.title(
+                                Component.text("电梯已出发", NamedTextColor.RED),
+                                Component.text("僵尸无法乘坐电梯", NamedTextColor.DARK_RED)
+                            ))
+                        }
                     }
                     schedTask.cancel()
                 }
@@ -138,12 +145,21 @@ sealed class SpecialDoorBehavior {
             val task = Bukkit.getGlobalRegionScheduler().runDelayed(context.plugin, { _ ->
                 context.players.forEach { p ->
                     val isHuman = context.plugin.gameManager.getPlayerTeam(p) == GameManager.Team.HUMAN
-                    val tx = if (isHuman) humanTargetX else (zombieTargetX ?: humanTargetX)
-                    val ty = if (isHuman) humanTargetY else (zombieTargetY ?: humanTargetY)
-                    val tz = if (isHuman) humanTargetZ else (zombieTargetZ ?: humanTargetZ)
-                    p.teleportAsync(Location(context.world, tx + 0.5, ty.toDouble(), tz + 0.5))
-                    // 到达后显示到站提示
-                    p.showTitle(Title.title(mm.deserialize(arrivalMsg), Component.empty()))
+                    if (isHuman) {
+                        val tx = humanTargetX
+                        val ty = humanTargetY
+                        val tz = humanTargetZ
+                        p.teleportAsync(Location(context.world, tx + 0.5, ty.toDouble(), tz + 0.5))
+                        // 到达后显示到站提示
+                        p.showTitle(Title.title(mm.deserialize(arrivalMsg), Component.empty()))
+                    } else {
+                        // 机场不给僵尸进：把僵尸踢回对应僵尸点
+                        context.plugin.respawnManager.teleportZombieSpecial(p, context.door.doorNumber)
+                        p.showTitle(Title.title(
+                            Component.text("航班已起飞", NamedTextColor.RED),
+                            Component.text("僵尸无法登机", NamedTextColor.DARK_RED)
+                        ))
+                    }
                 }
             }, delayTicks)
             return task
