@@ -4,10 +4,6 @@ plugins {
     id("xyz.jpenilla.run-paper") version "2.3.1"
 }
 
-group = "cn.oneachina"
-
-version = "26.8.31"
-
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/") {
