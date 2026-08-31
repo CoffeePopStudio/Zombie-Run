@@ -40,11 +40,11 @@ class DoorManager(private val plugin: ZombieRun) {
     private class Session(
         val doors: List<Door>,
         var countdown: Double,  // >0 = opening, <0 = closing (abs = seconds)
-        var phase: Phase = Phase.OPENING
+        @Volatile var phase: Phase = Phase.OPENING
     ) {
         enum class Phase { OPENING, CLOSING }
-        /** 开门期间穿越过门的玩家 */
-        val crossedPlayers: MutableSet<UUID> = mutableSetOf()
+        /** 每个玩家相对每扇门最后一次已知的侧边状态 */
+        val lastSides: ConcurrentHashMap<UUID, ConcurrentHashMap<String, Door.Side>> = ConcurrentHashMap()
     }
 
     // ==================== 数据加载 ====================
@@ -166,6 +166,8 @@ class DoorManager(private val plugin: ZombieRun) {
                     session.doors.forEach { d -> openDoorBlocks(d) }
                     session.countdown = -(session.doors.first().closeTime.toDouble())
                     session.phase = Session.Phase.CLOSING
+                    initializeSessionSides(session)
+                    startSideSampler(session)
                 }
             } else {
                 // 关门倒计时（countdown < 0）
@@ -192,7 +194,7 @@ class DoorManager(private val plugin: ZombieRun) {
 
                         Bukkit.getOnlinePlayers().forEach { p ->
                             val room = plugin.gameManager.getPlayerRoom(p)
-                            val inFront = session.doors.any { it.isPlayerPastDoor(p.location) }
+                            val inFront = isPlayerOnFrontSide(session, p)
                             val title = if (!inFront) {
                                 Title.title(
                                     Component.text("$current", NamedTextColor.RED),
@@ -226,6 +228,50 @@ class DoorManager(private val plugin: ZombieRun) {
             }
         }, 1L, 20L)
         doorTasks.add(task)
+    }
+
+    // ==================== 侧边状态跟踪 ====================
+
+    /** 开门瞬间记录每个玩家相对每扇门的初始侧边，避免把本来就站在门前的人误判为“通过” */
+    private fun initializeSessionSides(session: Session) {
+        session.lastSides.clear()
+        Bukkit.getOnlinePlayers().forEach { p ->
+            val sides = session.lastSides.computeIfAbsent(p.uniqueId) { ConcurrentHashMap() }
+            session.doors.forEach { door ->
+                sides.putIfAbsent(door.name, door.sideOf(p.location))
+            }
+        }
+    }
+
+    /** Folia/卡顿兜底：定期采样侧边状态，补上 PlayerMoveEvent 可能漏掉的状态翻转 */
+    private fun startSideSampler(session: Session) {
+        val task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { schedTask ->
+            if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING ||
+                activeSession !== session ||
+                session.phase != Session.Phase.CLOSING
+            ) {
+                schedTask.cancel()
+                return@runAtFixedRate
+            }
+
+            Bukkit.getOnlinePlayers().forEach { p ->
+                val sides = session.lastSides.computeIfAbsent(p.uniqueId) { ConcurrentHashMap() }
+                for (door in session.doors) {
+                    val old = sides[door.name] ?: door.sideOf(p.location)
+                    val new = door.sideOf(p.location)
+                    if (new != Door.Side.ON_PLANE) {
+                        sides[door.name] = new
+                    }
+                }
+            }
+        }, 1L, 5L)
+        doorTasks.add(task)
+    }
+
+    /** 玩家当前是否处于该会话任意一扇门的前侧（用于通过判定和 title 提示） */
+    private fun isPlayerOnFrontSide(session: Session, player: Player): Boolean {
+        // 直接按当前实时位置判断，避免 lastSides 的滞回区间导致“已穿过但 close/title 仍认为落后”
+        return session.doors.any { it.isPlayerPastDoor(player.location) }
     }
 
     // ==================== 开门 ====================
@@ -293,15 +339,13 @@ class DoorManager(private val plugin: ZombieRun) {
         world.playSound(soundLoc, Sound.BLOCK_ANVIL_LAND, 1f, 0.5f)
         world.playSound(soundLoc, Sound.ENTITY_ZOMBIE_ATTACK_IRON_DOOR, 1f, 1f)
 
-        // 判定玩家是否通过：记录过穿越，或当前已站在门前侧区域（兜底开门瞬间被挤到内侧/漏记的情况）
+        // 判定玩家是否通过：按当前侧边状态，退回来就会变成未通过
         val passedPlayers = mutableListOf<Player>()
         val behindPlayers = mutableListOf<Player>()
 
         Bukkit.getOnlinePlayers().forEach { p ->
             if (plugin.gameManager.getPlayerTeam(p) == GameManager.Team.SPECTATOR) return@forEach
-            val crossed = session.crossedPlayers.contains(p.uniqueId)
-            val pastDoor = session.doors.any { it.isPlayerPastDoor(p.location) }
-            if (crossed || pastDoor) {
+            if (isPlayerOnFrontSide(session, p)) {
                 passedPlayers.add(p)
             } else {
                 behindPlayers.add(p)
@@ -434,11 +478,39 @@ class DoorManager(private val plugin: ZombieRun) {
         if (plugin.gameManager.getGameStatus() != GameManager.GameStatus.RUNNING) return
         val session = activeSession ?: return
         if (session.phase != Session.Phase.CLOSING) return
-        if (session.crossedPlayers.contains(player.uniqueId)) return
 
-        session.doors.firstOrNull { it.crossedBy(from, to) }?.let { door ->
-            session.crossedPlayers.add(player.uniqueId)
-            DebugLogger.door("${player.name} 穿越了 ${door.doorNumber} 号门")
+        // 第一层：精确几何判定（线段与门洞矩形求交），只用于日志/调试，不再作为永久标记
+        if (session.doors.any { it.crossedBy(from, to) }) {
+            DebugLogger.door("${player.name} 穿越了门（几何判定）")
+        }
+
+        // 始终更新侧边状态：玩家可以再走回来，状态必须跟随当前位置
+        val sides = session.lastSides.computeIfAbsent(player.uniqueId) { ConcurrentHashMap() }
+        for (door in session.doors) {
+            val old = sides[door.name] ?: door.sideOf(from)
+            val new = door.sideOf(to)
+            if (old == Door.Side.BEHIND && new == Door.Side.FRONT && door.isNearOpening(to)) {
+                DebugLogger.door("${player.name} 穿越了门（侧边翻转判定）")
+            }
+            if (new != Door.Side.ON_PLANE) {
+                sides[door.name] = new
+            }
+        }
+    }
+
+    /**
+     * 传送后只同步侧边状态，不标记穿越。
+     * 这样采样兜底不会把系统传送/命令传送误判成“通过门”。
+     */
+    fun updatePlayerSideAfterTeleport(player: Player, to: org.bukkit.Location) {
+        val session = activeSession ?: return
+        if (session.phase != Session.Phase.CLOSING) return
+        val sides = session.lastSides.computeIfAbsent(player.uniqueId) { ConcurrentHashMap() }
+        for (door in session.doors) {
+            val new = door.sideOf(to)
+            if (new != Door.Side.ON_PLANE) {
+                sides[door.name] = new
+            }
         }
     }
 

@@ -38,6 +38,9 @@ class Door(
         }
     }
 
+    /** 玩家相对于门平面的侧边 */
+    enum class Side { BEHIND, FRONT, ON_PLANE }
+
     var isOpen: Boolean = false
     var isActive: Boolean = false
 
@@ -110,6 +113,8 @@ class Door(
         }
     }
 
+    // ==================== 门穿越检测（新方案） ====================
+
     /** 穿越轴：'x' 或 'z'（短边方向） */
     fun crossingAxis(): Char {
         val xLen = maxX - minX
@@ -117,29 +122,96 @@ class Door(
         return if (xLen > zLen) 'z' else 'x'
     }
 
-    /** 判断玩家是否从上一位置到当前位置穿过门平面 */
-    fun crossedBy(from: Location, to: Location, axisTolerance: Double = 0.5, heightTolerance: Double = 1.0): Boolean {
+    /** 门平面坐标（穿越轴的中点） */
+    fun planeCoord(): Double {
+        val axis = crossingAxis()
+        return if (axis == 'z') (minZ + maxZ) / 2.0 else (minX + maxX) / 2.0
+    }
+
+    /**
+     * 判断玩家相对于门平面的侧边。
+     * @param hysteresis 避免平面附近抖动的最小距离
+     */
+    fun sideOf(location: Location, hysteresis: Double = 0.3): Side {
+        val axis = crossingAxis()
+        val v = if (axis == 'z') location.z else location.x
+        val plane = planeCoord()
+        val diff = v - plane
+        val forwardPositive = !reverseDirection
+
+        val front = if (forwardPositive) diff > hysteresis else diff < -hysteresis
+        val behind = if (forwardPositive) diff < -hysteresis else diff > hysteresis
+
+        return when {
+            front -> Side.FRONT
+            behind -> Side.BEHIND
+            else -> Side.ON_PLANE
+        }
+    }
+
+    /**
+     * 玩家当前坐标是否在门洞附近（用于侧边翻转兜底判定）。
+     */
+    fun isNearOpening(
+        location: Location,
+        transverseTolerance: Double = 1.0,
+        footTolerance: Double = 1.0,
+        headTolerance: Double = 2.0
+    ): Boolean {
+        val axis = crossingAxis()
+        val transCoord = if (axis == 'z') location.x else location.z
+        val transMin = if (axis == 'z') minX.toDouble() else minZ.toDouble()
+        val transMax = if (axis == 'z') maxX.toDouble() else maxZ.toDouble()
+        return transCoord in (transMin - transverseTolerance)..(transMax + transverseTolerance) &&
+               location.y in (minY - footTolerance)..(maxY + headTolerance)
+    }
+
+    /**
+     * 判断玩家从 from 移动到 to 是否穿过门平面（线段与门洞矩形求交）。
+     * 这是主要的几何判定方法，不受步长限制，对角线也能准确检测。
+     *
+     * @param transverseTolerance 横向容差（默认 0.6 ≈ 玩家半宽）
+     * @param footTolerance       脚底容差（默认 1.0）
+     * @param headTolerance       头顶容差（默认 2.0，覆盖玩家身高）
+     */
+    fun crossedBy(
+        from: Location,
+        to: Location,
+        transverseTolerance: Double = 0.6,
+        footTolerance: Double = 1.0,
+        headTolerance: Double = 2.0
+    ): Boolean {
         if (from.world != to.world) return false
 
         val axis = crossingAxis()
+        val plane = planeCoord()
         val fromAxis = if (axis == 'z') from.z else from.x
         val toAxis = if (axis == 'z') to.z else to.x
-        val center = if (axis == 'z') (minZ + maxZ) / 2.0 else (minX + maxX) / 2.0
-        val axisDelta = kotlin.math.abs(toAxis - fromAxis)
-        if (axisDelta > 2.5) return false
 
-        val crossed = if (!reverseDirection) {
-            fromAxis < center && toAxis >= center
-        } else {
-            fromAxis > center && toAxis <= center
-        }
-        if (!crossed) return false
+        if (fromAxis == toAxis) return false
 
-        val transverse = if (axis == 'z') to.x else to.z
-        val transverseMin = if (axis == 'z') minX else minZ
-        val transverseMax = if (axis == 'z') maxX else maxZ
-        if (transverse < transverseMin - axisTolerance || transverse > transverseMax + axisTolerance) return false
-        return to.y >= minY - heightTolerance && to.y <= maxY + heightTolerance
+        // 方向判定：只认可从门后到门前
+        val forwardPositive = !reverseDirection
+        val fromBehind = if (forwardPositive) fromAxis < plane else fromAxis > plane
+        val toFront = if (forwardPositive) toAxis >= plane else toAxis <= plane
+        if (!fromBehind || !toFront) return false
+
+        // 线段与平面相交参数 t
+        val t = (plane - fromAxis) / (toAxis - fromAxis)
+        if (t !in 0.0..1.0) return false
+
+        // 交点在三维空间中的坐标
+        val x = from.x + (to.x - from.x) * t
+        val z = from.z + (to.z - from.z) * t
+        val y = from.y + (to.y - from.y) * t
+
+        // 横向是否在门洞内
+        val transCoord = if (axis == 'z') x else z
+        val transMin = if (axis == 'z') minX.toDouble() else minZ.toDouble()
+        val transMax = if (axis == 'z') maxX.toDouble() else maxZ.toDouble()
+
+        return transCoord in (transMin - transverseTolerance)..(transMax + transverseTolerance) &&
+               y in (minY - footTolerance)..(maxY + headTolerance)
     }
 
     /** 关门时判断玩家是否已通过门（正坐标方向为"前方"，reverseDirection=true 则反转） */
@@ -168,7 +240,8 @@ class Door(
         openTime: Int = this.openTime,
         closeTime: Int = this.closeTime,
         doorNumber: Int = this.doorNumber,
-        group: String? = this.group
+        group: String? = this.group,
+        reverseDirection: Boolean = this.reverseDirection
     ) = Door(name, minX, minY, minZ, maxX, maxY, maxZ, openTime, closeTime, doorNumber, material, specialBehavior, mode, useScanData, blocks, group, reverseDirection)
 
     override fun toString(): String {

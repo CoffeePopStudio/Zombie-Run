@@ -384,8 +384,9 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
 
     private fun handleDoorsAdd(sender: CommandSender, args: Array<out String>) {
         if (args.isEmpty()) {
-            sender.sendMessage(Component.text("用法: /zr doors add <mode> [-g <组名>]", NamedTextColor.RED))
+            sender.sendMessage(Component.text("用法: /zr doors add <mode> [-g <组名>] [-r]", NamedTextColor.RED))
             sender.sendMessage(Component.text("mode: normal, player, zombie, start", NamedTextColor.RED))
+            sender.sendMessage(Component.text("-r: 反转穿越方向（正常路线是从高坐标往低坐标走时使用）", NamedTextColor.YELLOW))
             sender.sendMessage(Component.text("使用 /zr postool 选区后可直接 /zr doors add normal", NamedTextColor.YELLOW))
             sender.sendMessage(Component.text("open-time/close-time 默认 15，用 /zr doors edit 修改", NamedTextColor.YELLOW))
             return
@@ -400,14 +401,19 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
 
         val doorMode = Door.DoorMode.fromString(mode)
 
-        // 解析可选参数: [-g 组名]
+        // 解析可选参数: [-g 组名] [-r]
         var group: String? = null
+        var reverseDirection = false
         var idx = 1
         while (idx < args.size) {
             when {
                 args[idx] == "-g" -> {
                     if (idx + 1 < args.size) { group = args[idx + 1]; idx += 2 }
                     else { sender.sendMessage(Component.text("-g 后需要组名！", NamedTextColor.RED)); return }
+                }
+                args[idx] == "-r" || args[idx] == "-reverse" || args[idx] == "--reverse" -> {
+                    reverseDirection = true
+                    idx++
                 }
                 else -> { sender.sendMessage(Component.text("未知参数: ${args[idx]}", NamedTextColor.RED)); return }
             }
@@ -482,20 +488,22 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
             mode = doorMode,
             useScanData = true,
             blocks = blocks,
-            group = group
+            group = group,
+            reverseDirection = reverseDirection
         )
         plugin.configManager.addDoorFull(door)
         plugin.doorManager.addDoor(door)
         val extra = buildString {
             if (group != null) append(" 组=$group")
             append(" 门号=$doorNumber open=${door.openTime}s close=${door.closeTime}s")
+            if (reverseDirection) append(" 反向穿越=是")
         }
         sender.sendMessage(Component.text("门 '$doorName' 添加成功！模式: $mode$extra", NamedTextColor.GREEN))
     }
 
     private fun handleDoorsEdit(sender: CommandSender, args: Array<out String>) {
         if (args.size < 3) {
-            sender.sendMessage(Component.text("用法: /zr doors edit <名称> open-time|close-time|door-number|group <值>", NamedTextColor.RED))
+            sender.sendMessage(Component.text("用法: /zr doors edit <名称> open-time|close-time|door-number|group|reverse-direction <值>", NamedTextColor.RED))
             return
         }
         val door = plugin.doorManager.getDoorByName(args[0])
@@ -544,6 +552,21 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
                 plugin.configManager.addDoorFull(newDoor)
                 sender.sendMessage(Component.text("${door.name} 组已更新为 $v", NamedTextColor.GREEN))
             }
+            "reverse-direction" -> {
+                val v = when (args[2].lowercase()) {
+                    "true", "1", "yes", "是" -> true
+                    "false", "0", "no", "否" -> false
+                    else -> {
+                        sender.sendMessage(Component.text("reverse-direction 必须是 true/false 或 1/0！", NamedTextColor.RED))
+                        return
+                    }
+                }
+                val newDoor = door.with(reverseDirection = v)
+                plugin.doorManager.removeDoor(door.name)
+                plugin.doorManager.addDoor(newDoor)
+                plugin.configManager.addDoorFull(newDoor)
+                sender.sendMessage(Component.text("${door.name} reverse-direction 已更新为 $v", NamedTextColor.GREEN))
+            }
             else -> sender.sendMessage(Component.text("未知字段: ${args[1]}", NamedTextColor.RED))
         }
     }
@@ -561,6 +584,10 @@ class ZombieRunCommand(private val plugin: ZombieRun) : CommandExecutor, TabComp
         sender.sendMessage(Component.text("===== ${door.name} =====", NamedTextColor.GREEN))
         sender.sendMessage(Component.text("模式: ${door.mode}  门号: ${door.doorNumber}  组: ${door.group ?: "-"}", NamedTextColor.GREEN))
         sender.sendMessage(Component.text("open: ${door.openTime}s  close: ${door.closeTime}s  坐标: (${door.minX},${door.minY},${door.minZ})-(${door.maxX},${door.maxY},${door.maxZ})", NamedTextColor.GREEN))
+        val axis = door.crossingAxis()
+        val plane = door.planeCoord()
+        val forward = if (door.reverseDirection) "-$axis" else "+$axis"
+        sender.sendMessage(Component.text("穿越轴: $axis | 门平面: $plane | 前方: $forward | reverse-direction: ${door.reverseDirection}", NamedTextColor.YELLOW))
         sender.sendMessage(Component.text("scanData: ${if (door.useScanData) "已记录 ${door.blocks.size} 方块" else "未使用"}", NamedTextColor.GREEN))
         val sb = door.specialBehavior
         if (sb != null) {
