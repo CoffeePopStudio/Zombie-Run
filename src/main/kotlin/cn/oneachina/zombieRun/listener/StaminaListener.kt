@@ -58,8 +58,7 @@ class StaminaListener(private val plugin: ZombieRun) : Listener {
             return
         }
 
-        val health = player.health
-        val cost = (3.0 - (health * 0.15)).coerceAtLeast(0.5)
+        val cost = 0.4
         plugin.staminaManager.deductStamina(player, cost)
     }
 }

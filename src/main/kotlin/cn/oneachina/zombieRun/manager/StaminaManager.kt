@@ -126,7 +126,7 @@ class StaminaManager(private val plugin: ZombieRun) {
                         // 体力耗尽时仍在疾跑：不扣除、不恢复，等待玩家停止疾跑
                         continue
                     } else {
-                        var regen = 1.0
+                        var regen = 2.0
                         if (!ps.isMoving) {
                             regen += 1.0
                         }
@@ -136,12 +136,12 @@ class StaminaManager(private val plugin: ZombieRun) {
                     if (ps.isSprinting) {
                         ps.sprintTicks += 1
                         if (ps.sprintTicks >= 2) {
-                            ps.deductStamina(1.0)
+                            ps.deductStamina(0.5)
                             ps.sprintTicks -= 2
                         }
                     } else {
                         ps.sprintTicks = 0
-                        var regen = 0.5
+                        var regen = 1.0
                         if (!ps.isMoving) {
                             regen += 0.5
                         }
