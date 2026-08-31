@@ -21,40 +21,74 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
 
     companion object {
         private const val GUI_TITLE = "枪械商店"
+        private const val WEAPONS_PER_PAGE = 45
+        private const val INVENTORY_SIZE = 54
+        private const val BAR_INDEX = 45
     }
 
     private val shopKey = NamespacedKey("zombie-run", "shop_weapon")
+    private val pageKey = NamespacedKey("zombie-run", "shop_page")
 
-    fun open(player: Player) {
-        val weapons = plugin.weaponManager.getWeaponIds()
-        val rows = ceil(weapons.size / 9.0).toInt().coerceAtLeast(1)
-        val totalRows = rows + 1
-        val size = totalRows * 9
+    fun open(player: Player, page: Int = 0) {
+        val items = plugin.weaponManager.getAllItemIds()
+        if (items.isEmpty()) {
+            player.sendMessage(Component.text("当前没有可用枪械/道具。", NamedTextColor.RED))
+            return
+        }
 
-        val inv = Bukkit.createInventory(null, size, Component.text(GUI_TITLE).color(NamedTextColor.GRAY))
+        val pageCount = ceil(items.size / WEAPONS_PER_PAGE.toDouble()).toInt().coerceAtLeast(1)
+        val currentPage = page.coerceIn(0, pageCount - 1)
+        val start = currentPage * WEAPONS_PER_PAGE
+        val end = minOf(start + WEAPONS_PER_PAGE, items.size)
+        val pageItems = items.subList(start, end)
 
-        weapons.forEachIndexed { index, weaponId ->
-            val gun = plugin.weaponManager.getGun(weaponId) ?: return@forEachIndexed
-            val item = QualityArmory.getCustomItemAsItemStack(gun)
+        val inv = Bukkit.createInventory(null, INVENTORY_SIZE, Component.text(GUI_TITLE).color(NamedTextColor.GRAY))
+
+        pageItems.forEachIndexed { index, itemId ->
+            val itemObj = plugin.weaponManager.getItem(itemId) ?: return@forEachIndexed
+            val item = QualityArmory.getCustomItemAsItemStack(itemObj) ?: return@forEachIndexed
             val meta = item.itemMeta ?: return@forEachIndexed
             val lore = (meta.lore() ?: emptyList()).toMutableList()
             lore.add(Component.empty())
             lore.add(Component.text("价格: ", NamedTextColor.YELLOW)
-                .append(Component.text("${gun.price.toInt()} 硬币", NamedTextColor.GOLD)))
-            lore.add(Component.text("伤害: ${gun.damage.toInt()} | 弹匣: ${gun.maxBullets} | 弹药: ${gun.ammoType?.name ?: "无"}", NamedTextColor.GRAY))
+                .append(Component.text("${plugin.weaponManager.getWeaponPrice(itemId).toInt()} 硬币", NamedTextColor.GOLD)))
+
+            val gun = plugin.weaponManager.getGun(itemId)
+            if (gun != null) {
+                lore.add(Component.text("伤害: ${gun.damage.toInt()} | 弹匣: ${gun.maxBullets} | 弹药: ${gun.ammoType?.name ?: "无"}", NamedTextColor.GRAY))
+            } else {
+                lore.add(Component.text("道具", NamedTextColor.GRAY))
+            }
 
             meta.lore(lore)
-            meta.persistentDataContainer.set(shopKey, PersistentDataType.STRING, weaponId)
+            meta.persistentDataContainer.set(shopKey, PersistentDataType.STRING, itemId)
             item.itemMeta = meta
             inv.setItem(index, item)
         }
 
-        val barIndex = rows * 9
+        if (currentPage > 0) {
+            val prev = ItemStack(Material.ARROW)
+            val prevMeta = prev.itemMeta ?: return
+            prevMeta.displayName(Component.text("上一页", NamedTextColor.YELLOW))
+            prevMeta.persistentDataContainer.set(pageKey, PersistentDataType.INTEGER, currentPage - 1)
+            prev.itemMeta = prevMeta
+            inv.setItem(BAR_INDEX, prev)
+        }
+
         val close = ItemStack(Material.BARRIER)
         val closeMeta = close.itemMeta ?: return
         closeMeta.displayName(Component.text("关闭商店", NamedTextColor.RED))
         close.itemMeta = closeMeta
-        inv.setItem(barIndex + 4, close)
+        inv.setItem(BAR_INDEX + 4, close)
+
+        if (currentPage < pageCount - 1) {
+            val next = ItemStack(Material.ARROW)
+            val nextMeta = next.itemMeta ?: return
+            nextMeta.displayName(Component.text("下一页", NamedTextColor.YELLOW))
+            nextMeta.persistentDataContainer.set(pageKey, PersistentDataType.INTEGER, currentPage + 1)
+            next.itemMeta = nextMeta
+            inv.setItem(BAR_INDEX + 8, next)
+        }
 
         player.openInventory(inv)
     }
@@ -81,6 +115,13 @@ class ShopGUI(private val plugin: ZombieRun) : Listener {
 
         val meta = clicked.itemMeta ?: return
         val pdc = meta.persistentDataContainer
+
+        val page = pdc.get(pageKey, PersistentDataType.INTEGER)
+        if (page != null) {
+            open(player, page)
+            return
+        }
+
         val weaponId = pdc.get(shopKey, PersistentDataType.STRING)
 
         if (weaponId != null) {

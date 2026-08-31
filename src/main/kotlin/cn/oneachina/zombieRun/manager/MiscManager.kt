@@ -23,7 +23,7 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
     private val lastHealth = ConcurrentHashMap<Player, Double>()
 
     fun getSelectableWeapons(): List<String> {
-        return plugin.weaponManager.getWeaponIds()
+        return plugin.weaponManager.getAllItemIds()
     }
 
     fun setSelectedWeapon(player: Player, weaponIndex: Int): Boolean {
@@ -50,36 +50,45 @@ class MiscManager(private val plugin: ZombieRun) : Listener {
     }
 
     fun giveRandomGun(player: Player) {
-        val weaponIds = plugin.weaponManager.getWeaponIds()
-        if (weaponIds.isEmpty()) {
-            player.sendMessage(Component.text("未找到可用枪械配置。", NamedTextColor.RED))
+        val itemIds = plugin.weaponManager.getAllItemIds()
+        if (itemIds.isEmpty()) {
+            player.sendMessage(Component.text("未找到可用枪械/道具配置。", NamedTextColor.RED))
             giveFallbackSword(player)
             return
         }
 
         val selected = selectedWeapon[player]
-        val weaponId = if (selected != null && weaponIds.contains(selected)) {
+        val itemId = if (selected != null && itemIds.contains(selected)) {
             val price = plugin.weaponManager.getWeaponPrice(selected).toInt()
             if (plugin.coinManager.takeCoins(player.uniqueId, price)) {
                 val remaining = plugin.coinManager.getCoins(player.uniqueId)
                 player.sendMessage(Component.text("购买成功！花费硬币: $price，剩余: $remaining", NamedTextColor.GREEN))
                 selected
             } else {
-                player.sendMessage(Component.text("硬币不足，已改为随机枪械。", NamedTextColor.RED))
-                weaponIds.random()
+                player.sendMessage(Component.text("硬币不足，已改为随机物品。", NamedTextColor.RED))
+                itemIds.random()
             }
         } else {
-            weaponIds.random()
+            itemIds.random()
         }
 
-        if (!plugin.weaponManager.giveWeapon(player, weaponId)) {
-            player.sendMessage(Component.text("发放枪械失败：$weaponId", NamedTextColor.RED))
+        val isGun = itemId in plugin.weaponManager.getWeaponIds()
+        val ok = if (isGun) {
+            plugin.weaponManager.giveWeapon(player, itemId)
+        } else {
+            plugin.weaponManager.giveGadget(player, itemId)
+        }
+
+        if (!ok) {
+            player.sendMessage(Component.text("发放物品失败：$itemId", NamedTextColor.RED))
             giveFallbackSword(player)
             return
         }
 
         giveFallbackSword(player)
-        plugin.weaponManager.giveAmmoRespectingMaxReserve(player, weaponId)
+        if (isGun) {
+            plugin.weaponManager.giveAmmoRespectingMaxReserve(player, itemId)
+        }
     }
 
     private fun giveFallbackSword(player: Player) {
