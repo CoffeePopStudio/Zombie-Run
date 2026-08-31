@@ -15,9 +15,11 @@ class WaitStartCountdownTask(
 ) {
 
     fun start(): ScheduledTask {
+        gameManager.waitStartCountdown = countdown
         return Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, { task ->
             if (gameManager.getGameStatus() != GameManager.GameStatus.WAITING) {
                 gameManager.cancelWaitStartTask()
+                gameManager.waitStartCountdown = 0
                 task.cancel()
                 return@runAtFixedRate
             }
@@ -26,12 +28,14 @@ class WaitStartCountdownTask(
             val minPlayers = plugin.configManager.getMinPlayers()
             if (onlineCount < minPlayers) {
                 gameManager.cancelWaitStartTask()
+                gameManager.waitStartCountdown = 0
                 task.cancel()
                 return@runAtFixedRate
             }
 
             if (countdown <= 0) {
                 gameManager.cancelWaitStartTask()
+                gameManager.waitStartCountdown = 0
                 gameManager.forceStartGame()
                 task.cancel()
                 return@runAtFixedRate
@@ -49,6 +53,7 @@ class WaitStartCountdownTask(
             }
 
             countdown--
+            gameManager.waitStartCountdown = countdown
         }, 1L, 20L)
     }
 }

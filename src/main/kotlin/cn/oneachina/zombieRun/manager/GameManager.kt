@@ -32,7 +32,7 @@ class GameManager(private val plugin: ZombieRun) {
     private val zombies = CopyOnWriteArrayList<Player>()
     private val zombieMains = CopyOnWriteArrayList<Player>()
 
-    private var waitStartCountdown: Int = 0
+    var waitStartCountdown: Int = 0
 
     var alphaZombie: Player? = null
     var isCountdownActive = false
@@ -54,11 +54,22 @@ class GameManager(private val plugin: ZombieRun) {
     }
 
     fun removePlayer(player: Player) {
+        val oldTeam = playerTeams[player]
         playerTeams.remove(player)
         playerRooms.remove(player)
         humans.remove(player)
         zombies.remove(player)
         zombieMains.remove(player)
+
+        // 母体中途掉线：从普通僵尸里随机提拔一个新的母体，避免游戏失去母体
+        if (status == GameStatus.RUNNING && oldTeam == Team.ZOMBIE_MAIN) {
+            val newMain = zombies.randomOrNull()
+            if (newMain != null) {
+                setPlayerTeam(newMain, Team.ZOMBIE_MAIN)
+                newMain.sendMessage(Component.text("你被选为新母体！", NamedTextColor.LIGHT_PURPLE))
+                plugin.staminaManager.applyZombieEffects(newMain)
+            }
+        }
 
         if (status == GameStatus.WAITING || status == GameStatus.STARTING) {
             checkAutoStartCondition()
@@ -240,6 +251,7 @@ class GameManager(private val plugin: ZombieRun) {
             }
             plugin.healthManager.clearAll()
             status = GameStatus.WAITING
+            Bukkit.broadcast(Component.text("下一局将在满足人数后自动开始", NamedTextColor.YELLOW))
         }, 80L)
     }
 
@@ -294,7 +306,7 @@ class GameManager(private val plugin: ZombieRun) {
                 .append(Component.text(medalText, medalColor))
                 .append(Component.text(" - ", NamedTextColor.GRAY))
                 .append(Component.text("[${player.name} $value]", NamedTextColor.WHITE))
-                .append(Component.text(" + ${rankRewards()[index]} 硬币!", NamedTextColor.GOLD))
+                .append(Component.text(" + ${rankRewards().getOrNull(index) ?: 0} 硬币!", NamedTextColor.GOLD))
                 .build()
         }
     }
@@ -358,6 +370,16 @@ class GameManager(private val plugin: ZombieRun) {
 
         val onlineCount = Bukkit.getOnlinePlayers().size
         val minPlayers = plugin.configManager.getMinPlayers()
+
+        // 等待大厅/准备阶段 ActionBar 信息
+        val lobbyInfo = when {
+            status == GameStatus.STARTING -> "开局倒计时: ${startCountdownTaskInstance?.getCountdown ?: 0}s"
+            waitStartTask != null -> "游戏将在 ${waitStartCountdown} 秒后开始 | 玩家 ${onlineCount}/${minPlayers}"
+            else -> "等待玩家 ${onlineCount}/${minPlayers}"
+        }
+        Bukkit.getOnlinePlayers().forEach { p ->
+            p.sendActionBar(Component.text(lobbyInfo, NamedTextColor.GOLD))
+        }
 
         when (status) {
             GameStatus.WAITING -> {

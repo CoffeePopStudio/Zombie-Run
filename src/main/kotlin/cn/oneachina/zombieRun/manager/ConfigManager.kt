@@ -480,7 +480,7 @@ class ConfigManager(private val plugin: ZombieRun) {
             killZombieMainCoins = cfg.getInt("kill-zombie-main-coins", 150),
             infectHumanCoins = cfg.getInt("infect-human-coins", 50),
             surviveHumanCoins = cfg.getInt("survive-human-coins", 200),
-            rankRewardCoins = cfg.getIntegerList("rank-reward-coins"),
+            rankRewardCoins = cfg.getIntegerList("rank-reward-coins").ifEmpty { listOf(200, 150, 100) },
             headshotXp = cfg.getInt("headshot-xp", 5),
             killZombieXp = cfg.getInt("kill-zombie-xp", 30),
             killZombieMainXp = cfg.getInt("kill-zombie-main-xp", 10),
