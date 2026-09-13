@@ -10,7 +10,7 @@ authors: [ oneachina ]
 
 commands:
   zr:
-    description: 僵尸跑快插件命令
+    description: 僵尸快跑插件命令
     usage: /zr <help>
   start:
     description: 开始游戏
