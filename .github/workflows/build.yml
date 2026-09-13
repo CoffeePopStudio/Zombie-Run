@@ -1,0 +1,46 @@
+name: Build
+
+on:
+  push:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build
+        run: ./gradlew build --no-daemon
+
+      - name: Clean extra jars
+        run: |
+          find build/libs -maxdepth 1 -name '*.jar' \
+            \( -name '*-sources.jar' -o -name '*-javadoc.jar' \) -delete
+          ls -l build/libs
+
+      - name: Get jar name
+        id: jar
+        run: |
+          jar=$(basename "$(ls build/libs/*.jar | head -n1)")
+          echo "name=${jar%.jar}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.jar.outputs.name }}
+          path: build/libs/*.jar
+          if-no-files-found: error
